@@ -21,7 +21,10 @@ export function StudentSeriesDetail({ series }: { series: StudentDashboardSeries
     <main className="student-app lb-motion-root" aria-label={`Vorlesungsreihe ${series.seriesTitle}`}>
       <header className="student-head lb-enter-row">
         <a className="student-brand" href="/student">
-          <span className="home-brand-mark" aria-hidden="true">LB</span>
+          <span className="home-brand-mark" aria-hidden="true">
+            <span className="brand-loop" />
+            <span className="brand-north-dot" />
+          </span>
           <strong>Zurück zum Dashboard</strong>
         </a>
       </header>

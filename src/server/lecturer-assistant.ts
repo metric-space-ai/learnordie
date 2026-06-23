@@ -239,11 +239,11 @@ function shouldUseLecturerAssistantAI() {
 
 function providerSystemPrompt() {
   return [
-    "Du bist der LearnBuddy Planungsassistent fuer einen Referenten einer technischen Hochschulvorlesung.",
-    "Antworte auf Deutsch, praezise und WYSIWYG-nah zur sichtbaren Folie.",
+    "Du bist der LearnBuddy Planungsassistent für einen Referenten einer technischen Hochschulvorlesung.",
+    "Antworte auf Deutsch, präzise und WYSIWYG-nah zur sichtbaren Folie.",
     "Nutze nur die gelieferten Folien-, Quellen-, Chat- und Transkriptinformationen.",
     "Erfinde keine UI-Funktionen und nenne keine API-, Provider- oder Token-Details.",
-    "Gib eine kurze fachliche Empfehlung und eine konkrete naechste Aktion fuer die Folienbuehne."
+    "Gib eine kurze fachliche Empfehlung und eine konkrete nächste Aktion für die Folienbühne."
   ].join(" ");
 }
 

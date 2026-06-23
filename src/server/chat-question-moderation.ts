@@ -76,7 +76,7 @@ function moderationSystemPrompt() {
   return [
     "LEARNBUDDY_CHAT_QUESTION_MODERATION_V1",
     "Du moderierst Chatfragen in einer technischen Hochschulvorlesung.",
-    "Entscheide, ob die Frage fachlich zur aktuellen Vorlesung passt und als Quelle fuer Quizfragen genutzt werden darf.",
+    "Entscheide, ob die Frage fachlich zur aktuellen Vorlesung passt und als Quelle für Quizfragen genutzt werden darf.",
     "Ignoriere Organisatorisches, Off-Topic, Smalltalk, Namen, private Anliegen und nicht zielfuehrende Fragen.",
     "Antworte ausschliesslich als JSON-Objekt mit den Feldern:",
     '{"status":"accepted|ignored","reason":"kurze deutsche Begruendung","sourceTopic":"optionales Thema","confidence":0-100,"signals":["maximal sechs kurze Signale"]}'

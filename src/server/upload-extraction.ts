@@ -262,7 +262,7 @@ function extractImageReferencesFromSlideXml(xml: string, relationships: Map<stri
     } else if (target) {
       references.push({
         target,
-        description: `Bildbasierte PPTX-Inhalte erkannt: ${path.posix.basename(target)} ohne Alt-Text. Fuer nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich.`,
+        description: `Bildbasierte PPTX-Inhalte erkannt: ${path.posix.basename(target)} ohne Alt-Text. Für nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich.`,
         ...(placement ? { placement } : {}),
         ...(visualLine ? { visualLine } : {})
       });
@@ -739,7 +739,7 @@ function extractPdfContent(buffer: Buffer): ExtractedUploadContent {
   ]);
 
   if (imageCount > 0) {
-    parts.push(`Bildbasierte PDF-Inhalte erkannt: ${imageCount} eingebettete Bilder. Fuer nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich.`);
+    parts.push(`Bildbasierte PDF-Inhalte erkannt: ${imageCount} eingebettete Bilder. Für nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich.`);
   }
 
   return {
