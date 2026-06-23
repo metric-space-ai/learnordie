@@ -1,0 +1,1 @@
+ALTER TABLE "lectures" ADD COLUMN "leaderboard_enabled" boolean DEFAULT true NOT NULL;

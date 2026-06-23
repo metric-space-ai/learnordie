@@ -1,0 +1,117 @@
+name: E2E Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  production-smoke:
+    name: Production smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CI: "true"
+      E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/learnbuddy_e2e_smoke
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Audit
+        run: npm audit --audit-level=moderate
+
+      - name: Script syntax
+        run: npm run scripts:check
+
+      - name: Motion design contract
+        run: npm run motion:contract
+
+      - name: Backup restore config
+        run: npm run smoke:backup-restore -- --config-only
+
+      - name: Release gate contract
+        run: npm run release:gate -- --mode preview-baseline --environment development --url http://127.0.0.1:3070 --lecture-token gleitlagerung-demo --skip-e2e --skip-readiness --skip-preflight --skip-provider --skip-live --skip-worker --timeout-ms 180000
+
+      - name: Provider smoke
+        run: npm run provider:smoke -- --profile production --mock --only ai,lecturer_assistant,chat_moderation,question_generator,embedding,ocr,storage,mail,stt
+
+      - name: CTOX Responses provider smoke
+        run: npm run provider:smoke -- --profile production --mock --only ai,lecturer_assistant,chat_moderation,question_generator
+        env:
+          LEARNBUDDY_AI_PROVIDER: ctox-responses
+
+      - name: Production smoke
+        run: npm run test:e2e
+
+      - name: Production preflight
+        run: npm run admin -- preflight --profile production
+        env:
+          DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
+          LEARNBUDDY_DEPLOYMENT_ENV: production
+          NEXT_PUBLIC_APP_URL: "https://learnbuddy-ci.learnbuddy.cloud"
+          AUTH_SECRET: "learnbuddy-production-secret-with-more-than-32-characters"
+          LEARNBUDDY_MAIL_PROVIDER: resend
+          RESEND_API_KEY: "re_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          EMAIL_FROM: "LearnBuddy <noreply@learnbuddy.cloud>"
+          LEARNBUDDY_JOB_PROVIDER: database
+          LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters"
+          CRON_SECRET: "cron-secret-with-more-than-32-characters"
+          LEARNBUDDY_STORAGE_PROVIDER: http
+          LEARNBUDDY_STORAGE_ENDPOINT: "https://storage.learnbuddy.cloud"
+          LEARNBUDDY_STORAGE_API_KEY: "storage_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_AI_PROVIDER: ctox-responses
+          LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: ai
+          LEARNBUDDY_CHAT_MODERATION_PROVIDER: ai
+          LEARNBUDDY_QUESTION_GENERATOR: ai
+          LEARNBUDDY_EMBEDDING_PROVIDER: openai-compatible
+          LEARNBUDDY_EMBEDDING_BASE_URL: "https://embedding.learnbuddy.cloud"
+          LEARNBUDDY_EMBEDDING_API_KEY: "emb_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_OCR_PROVIDER: http
+          LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnbuddy.cloud"
+          LEARNBUDDY_OCR_API_KEY: "ocr_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_OCR_MODEL: "learnbuddy-ocr"
+          LEARNBUDDY_STT_PROVIDER: mistral-voxtral
+          LEARNBUDDY_STT_MODEL: voxtral-mini-latest
+          LEARNBUDDY_STT_LANGUAGE: de
+          MISTRAL_API_KEY: "mistral_live_like_abcdefghijklmnopqrstuvwxyz123456"

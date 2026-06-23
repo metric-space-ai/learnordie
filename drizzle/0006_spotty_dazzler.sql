@@ -1,0 +1,2 @@
+ALTER TABLE "lectures" ADD COLUMN "ai_daily_limit" integer DEFAULT 20 NOT NULL;--> statement-breakpoint
+ALTER TABLE "lectures" ADD COLUMN "ai_daily_token_limit" integer DEFAULT 12000 NOT NULL;

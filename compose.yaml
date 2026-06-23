@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: learnbuddy
+      POSTGRES_PASSWORD: learnbuddy
+      POSTGRES_DB: learnbuddy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U learnbuddy -d learnbuddy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      LEARNBUDDY_DEPLOYMENT_ENV: local
+      AUTH_SECRET: learnbuddy-self-host-local-secret-change-before-use
+      DATABASE_URL: postgres://learnbuddy:learnbuddy@postgres:5432/learnbuddy
+      LEARNBUDDY_REPOSITORY: postgres
+      LEARNBUDDY_MAIL_PROVIDER: console
+      LEARNBUDDY_STORAGE_PROVIDER: local
+      LEARNBUDDY_STORAGE_DIR: /data/artifacts
+      LEARNBUDDY_JOB_PROVIDER: database
+      LEARNBUDDY_WORKER_SECRET: learnbuddy-self-host-worker-secret-change-before-use
+      CRON_SECRET: learnbuddy-self-host-cron-secret-change-before-use
+      LEARNBUDDY_CHAT_MODERATION_PROVIDER: local
+      LEARNBUDDY_STT_PROVIDER: local
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - app-data:/data
+
+volumes:
+  postgres-data:
+  app-data:

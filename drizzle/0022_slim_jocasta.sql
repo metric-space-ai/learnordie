@@ -1,0 +1,1 @@
+ALTER TABLE "lectures" ADD COLUMN "learn_question_density" integer DEFAULT 4 NOT NULL;
