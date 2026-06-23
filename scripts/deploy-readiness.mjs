@@ -1038,8 +1038,8 @@ function providerModeRules() {
     },
     {
       name: "LEARNBUDDY_EMBEDDING_PROVIDER",
-      allowed: ["openai-compatible", "http"],
-      reason: "Material retrieval in preview/production needs an external embedding provider."
+      allowed: ["openai-compatible", "http", "learnbuddy-local-hash-v1", "local-hash", "deterministic"],
+      reason: "Material retrieval in preview/production needs a configured embedding provider."
     },
     {
       name: "LEARNBUDDY_OCR_PROVIDER",
