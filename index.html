@@ -1,0 +1,1319 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LearnBuddy Mockup</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --slide: oklch(98.5% 0.005 230);
+      --ink: oklch(18% 0.035 235);
+      --muted: oklch(47% 0.034 235);
+      --line: oklch(82% 0.024 230);
+      --panel: oklch(98.8% 0.006 230);
+      --panel-soft: oklch(92.8% 0.017 230);
+      --stage: oklch(13% 0.03 236);
+      --accent: oklch(62% 0.14 72);
+      --accent-soft: oklch(90% 0.06 74);
+      --green: oklch(58% 0.13 150);
+      --green-soft: oklch(91% 0.06 150);
+      --red: oklch(57% 0.145 25);
+      --red-soft: oklch(91% 0.055 25);
+      --shadow: 0 22px 70px oklch(5% 0.02 236 / 0.34);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+    }
+
+    body {
+      overflow: hidden;
+      background: var(--stage);
+      color: var(--ink);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .view {
+      display: none;
+      min-height: 100svh;
+    }
+
+    body[data-view="select"] .select-view,
+    body[data-view="lecturer"] .lecture-view,
+    body[data-view="live"] .live-view,
+    body[data-view="learn"] .learn-view {
+      display: grid;
+    }
+
+    .select-view {
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 24% 12%, oklch(30% 0.05 232), transparent 34%),
+        linear-gradient(155deg, oklch(12% 0.03 236), oklch(18% 0.032 226));
+    }
+
+    .mode-card {
+      width: min(720px, 100%);
+      padding: clamp(24px, 5vw, 48px);
+      border: 1px solid oklch(96% 0.004 230 / 0.16);
+      border-radius: 18px;
+      background: oklch(98.8% 0.006 230);
+      box-shadow: var(--shadow);
+    }
+
+    .mode-card h1 {
+      margin: 0 0 10px;
+      font-size: clamp(30px, 5vw, 52px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .mode-card p {
+      max-width: 56ch;
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.45;
+    }
+
+    .mode-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mode-list button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 64px;
+      padding: 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 800;
+      text-align: left;
+    }
+
+    .mode-list button span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .slide-screen {
+      position: relative;
+      width: 100vw;
+      height: 100svh;
+      min-height: 540px;
+      background: var(--slide);
+      overflow: hidden;
+    }
+
+    .slide {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      width: 100%;
+      height: 100%;
+      padding: clamp(34px, 5.5vw, 86px);
+    }
+
+    .slide-meta,
+    .slide-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .slide h1 {
+      max-width: 860px;
+      margin: 14px 0 0;
+      font-size: clamp(34px, 5vw, 68px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    .slide-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(250px, 34%);
+      align-items: center;
+      gap: clamp(32px, 6vw, 84px);
+      min-height: 0;
+    }
+
+    .slide-copy {
+      display: grid;
+      gap: 20px;
+      max-width: 760px;
+      font-size: clamp(20px, 1.8vw, 30px);
+      line-height: 1.34;
+    }
+
+    .slide-copy p {
+      margin: 0;
+    }
+
+    .diagram {
+      display: grid;
+      place-items: center;
+    }
+
+    .diagram svg {
+      width: 100%;
+      max-width: 380px;
+      height: auto;
+    }
+
+    .slide-nav {
+      position: absolute;
+      left: 18px;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px;
+      border-radius: 10px;
+      background: oklch(12% 0.028 236 / 0.72);
+      backdrop-filter: blur(14px);
+      z-index: 8;
+    }
+
+    .slide-nav button {
+      width: 34px;
+      min-height: 32px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: oklch(94% 0.008 230);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .slide-count {
+      min-width: 48px;
+      color: oklch(94% 0.008 230);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .action-stack {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: none;
+      gap: 8px;
+      z-index: 9;
+    }
+
+    body:not([data-view="select"]) .action-stack {
+      display: flex;
+    }
+
+    body[data-view="lecturer"] .board-action {
+      display: none;
+    }
+
+    .icon-action {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      border: 1px solid oklch(20% 0.03 236 / 0.22);
+      border-radius: 10px;
+      background: oklch(98% 0.006 230 / 0.92);
+      color: var(--ink);
+      box-shadow: 0 12px 34px oklch(15% 0.04 235 / 0.2);
+      backdrop-filter: blur(14px);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .question-drawer {
+      position: fixed;
+      left: 50%;
+      bottom: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 92px;
+      gap: 12px;
+      width: min(900px, calc(100vw - 28px));
+      height: min(40svh, 320px);
+      min-height: 238px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      transform: translate(-50%, calc(100% + 24px));
+      transition: transform 180ms cubic-bezier(.2, .8, .2, 1);
+      z-index: 12;
+    }
+
+    body[data-question="open"][data-view="lecturer"] .question-drawer,
+    body[data-question="open"][data-view="live"] .question-drawer,
+    body[data-question="open"][data-view="learn"] .question-drawer {
+      transform: translate(-50%, 0);
+    }
+
+    body[data-view="lecturer"] .question-drawer {
+      grid-template-columns: 1fr;
+      width: min(780px, calc(100vw - 28px));
+      height: auto;
+      min-height: 0;
+    }
+
+    body[data-view="lecturer"] .timer,
+    body[data-view="lecturer"] .levels {
+      display: none;
+    }
+
+    .drawer-main {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+      overflow: auto;
+    }
+
+    .question-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .ai-link {
+      display: none;
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 780;
+      white-space: nowrap;
+    }
+
+    body[data-view="learn"] .ai-link {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .levels {
+      display: flex;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel-soft);
+    }
+
+    .levels button {
+      min-width: 42px;
+      height: 28px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    .levels button[aria-pressed="true"] {
+      border-color: oklch(75% 0.07 74);
+      background: var(--accent-soft);
+      color: oklch(35% 0.09 72);
+    }
+
+    .question {
+      margin: 0;
+      font-size: clamp(18px, 1.5vw, 22px);
+      line-height: 1.28;
+      font-weight: 820;
+    }
+
+    .answers {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    body[data-view="lecturer"] .answers {
+      grid-template-columns: 1fr;
+    }
+
+    .answer {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      align-items: center;
+      gap: 9px;
+      min-height: 48px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .letter {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    .answer span:last-child {
+      font-size: 13px;
+      line-height: 1.24;
+      font-weight: 680;
+    }
+
+    .answer.correct {
+      border-color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .answer.wrong {
+      border-color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .answer.correct .letter,
+    .answer.wrong .letter {
+      color: var(--panel);
+    }
+
+    .answer.correct .letter {
+      background: var(--green);
+    }
+
+    .answer.wrong .letter {
+      background: var(--red);
+    }
+
+    .lecturer-question {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+
+    .lecturer-question strong {
+      color: oklch(35% 0.09 72);
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .lecturer-question span {
+      font-size: 14px;
+      line-height: 1.34;
+      font-weight: 720;
+    }
+
+    .timer {
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 5px;
+      border-left: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      text-align: center;
+    }
+
+    .timer strong {
+      color: var(--ink);
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .learn-bar {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: oklch(98% 0.006 230 / 0.9);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      transform: translateX(-50%);
+      z-index: 8;
+    }
+
+    body[data-view="learn"] .learn-bar {
+      display: flex;
+    }
+
+    .learn-bar label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .learn-bar input {
+      width: 130px;
+      accent-color: var(--accent);
+    }
+
+    .learn-bar span {
+      min-width: 16px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 860;
+      text-align: center;
+    }
+
+    .learn-bar button {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 780;
+    }
+
+    .hotspots {
+      position: absolute;
+      inset: 0;
+      display: none;
+      pointer-events: none;
+      z-index: 7;
+    }
+
+    body[data-view="learn"] .hotspots {
+      display: block;
+    }
+
+    .hotspot {
+      position: absolute;
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border: 1px solid oklch(56% 0.11 236 / 0.34);
+      border-radius: 999px;
+      background: oklch(98% 0.006 230 / 0.9);
+      box-shadow: 0 10px 26px oklch(20% 0.04 235 / 0.18);
+      color: var(--ink);
+      font-size: 19px;
+      font-weight: 900;
+      pointer-events: auto;
+    }
+
+    .hotspot.one {
+      left: 44%;
+      top: 47%;
+    }
+
+    .hotspot.two {
+      right: 17%;
+      top: 52%;
+    }
+
+    .hotspot.three {
+      left: 24%;
+      top: 62%;
+    }
+
+    .hotspot.four {
+      left: 52%;
+      top: 66%;
+    }
+
+    .hotspot.five {
+      right: 25%;
+      top: 39%;
+    }
+
+    .hotspot.six {
+      left: 34%;
+      top: 78%;
+    }
+
+    .hotspot.seven {
+      right: 8%;
+      top: 69%;
+    }
+
+    .hotspot[hidden] {
+      display: none;
+    }
+
+    .chat-drawer {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      bottom: 18px;
+      width: min(390px, calc(100vw - 36px));
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(22px);
+      transition: opacity 180ms cubic-bezier(.2, .8, .2, 1), transform 180ms cubic-bezier(.2, .8, .2, 1);
+      z-index: 18;
+    }
+
+    body[data-chat="open"] .chat-drawer {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0);
+    }
+
+    .leaderboard-modal {
+      position: fixed;
+      right: 18px;
+      top: 18px;
+      width: min(340px, calc(100vw - 36px));
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-16px);
+      transition: opacity 180ms cubic-bezier(.2, .8, .2, 1), transform 180ms cubic-bezier(.2, .8, .2, 1);
+      z-index: 18;
+    }
+
+    body[data-board="open"] .leaderboard-modal {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    body[data-view="lecturer"] .leaderboard-modal {
+      display: none;
+    }
+
+    .leaderboard-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .leader-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 44px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--panel-soft);
+      font-weight: 760;
+    }
+
+    .leader-row.self {
+      background: var(--accent-soft);
+      color: oklch(35% 0.09 72);
+    }
+
+    @media (min-width: 1100px) {
+      body[data-view="learn"][data-chat="open"] .question-drawer {
+        left: calc((100vw - 426px) / 2);
+        width: min(900px, calc(100vw - 466px));
+      }
+    }
+
+    .chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .chat-head h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .chat-head button {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .chat-body {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      overflow: auto;
+    }
+
+    .chat-message {
+      padding: 10px;
+      border-radius: 10px;
+      background: var(--panel-soft);
+      font-size: 14px;
+      line-height: 1.36;
+    }
+
+    .chat-message strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .chat-input {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .chat-input input {
+      min-height: 38px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: var(--panel);
+      color: var(--ink);
+    }
+
+    .chat-input button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: oklch(35% 0.09 72);
+      font-weight: 800;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: none;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: oklch(35% 0.09 72);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      font-weight: 720;
+      z-index: 20;
+    }
+
+    .toast.visible {
+      display: block;
+    }
+
+    @media (max-width: 860px) {
+      body {
+        overflow: hidden;
+      }
+
+      .slide {
+        padding: 64px 26px 28px;
+      }
+
+      .slide-body {
+        grid-template-columns: 1fr;
+      }
+
+      .slide-copy {
+        gap: 12px;
+      }
+
+      .diagram {
+        display: none;
+      }
+
+      .slide-foot {
+        display: none;
+      }
+
+      .question-drawer {
+        grid-template-columns: 1fr;
+        height: min(70svh, 470px);
+        min-height: 410px;
+        bottom: 10px;
+      }
+
+      .answers {
+        grid-template-columns: 1fr;
+      }
+
+      .timer {
+        grid-template-columns: auto auto;
+        justify-content: start;
+        border-top: 1px solid var(--line);
+        border-left: 0;
+        padding-top: 10px;
+      }
+
+      .learn-bar {
+        right: 10px;
+        bottom: 10px;
+        left: 10px;
+        flex-wrap: wrap;
+        transform: none;
+      }
+
+      .action-stack {
+        top: 10px;
+        right: 10px;
+        bottom: auto;
+      }
+
+      .hotspot {
+        width: 38px;
+        height: 38px;
+      }
+
+      .hotspot.one {
+        left: 42%;
+        top: 38%;
+      }
+
+      .hotspot.two {
+        right: 10%;
+        top: 46%;
+      }
+
+      .hotspot.three {
+        left: 16%;
+        top: 58%;
+      }
+
+      .hotspot.four {
+        left: 54%;
+        top: 62%;
+      }
+
+      .hotspot.five {
+        right: 14%;
+        top: 34%;
+      }
+
+      .hotspot.six {
+        left: 30%;
+        top: 72%;
+      }
+
+      .hotspot.seven {
+        right: 10%;
+        top: 68%;
+      }
+
+      .chat-drawer {
+        top: 10px;
+        right: 10px;
+        bottom: 10px;
+        width: calc(100vw - 20px);
+      }
+
+      .leaderboard-modal {
+        top: 10px;
+        right: 10px;
+        width: calc(100vw - 20px);
+      }
+    }
+  </style>
+</head>
+<body data-view="select" data-question="closed" data-chat="closed" data-board="closed">
+  <section class="view select-view" aria-label="Modusauswahl">
+    <div class="mode-card">
+      <h1>LearnBuddy</h1>
+      <p>Wähle für das Mockup zuerst die Situation. Danach sieht die Oberfläche so aus, als wäre genau dieser Modus aktiv.</p>
+      <div class="mode-list">
+        <button type="button" data-go="lecturer">Live Dozent Modus <span>Präsentation</span></button>
+        <button type="button" data-go="live">Live Student Modus <span>Folie + Quiz</span></button>
+        <button type="button" data-go="learn">Student Learn Modus <span>Replay + Dichte</span></button>
+      </div>
+    </div>
+  </section>
+
+  <main class="view lecture-view slide-screen" aria-label="Live Dozent Modus">
+    <article class="slide" data-slide></article>
+    <nav class="slide-nav" aria-label="Foliennavigation"></nav>
+  </main>
+
+  <main class="view live-view slide-screen" aria-label="Live Student Modus">
+    <article class="slide" data-slide></article>
+    <nav class="slide-nav" aria-label="Foliennavigation"></nav>
+  </main>
+
+  <main class="view learn-view slide-screen" aria-label="Student Learn Modus">
+    <article class="slide" data-slide></article>
+    <div class="hotspots" aria-label="Fragen-Hotspots">
+      <button class="hotspot one" type="button" data-hotspot-level="4.0" data-density-index="1" aria-label="Begriffsfrage anzeigen">?</button>
+      <button class="hotspot two" type="button" data-hotspot-level="3.0" data-density-index="2" aria-label="Anwendungsfrage anzeigen">?</button>
+      <button class="hotspot three" type="button" data-hotspot-level="2.0" data-density-index="3" aria-label="Erklärungsfrage anzeigen">?</button>
+      <button class="hotspot four" type="button" data-hotspot-level="1.0" data-density-index="4" aria-label="Transferfrage anzeigen">?</button>
+      <button class="hotspot five" type="button" data-hotspot-level="3.0" data-density-index="5" aria-label="Zusatzfrage anzeigen">?</button>
+      <button class="hotspot six" type="button" data-hotspot-level="2.0" data-density-index="6" aria-label="Vertiefungsfrage anzeigen">?</button>
+      <button class="hotspot seven" type="button" data-hotspot-level="1.0" data-density-index="7" aria-label="Transferfrage anzeigen">?</button>
+    </div>
+    <nav class="slide-nav" aria-label="Foliennavigation"></nav>
+    <div class="learn-bar">
+      <label>Fragedichte <input id="densityRange" type="range" min="1" max="7" value="4"><span id="densityValue">4</span></label>
+    </div>
+  </main>
+
+  <div class="action-stack" aria-label="Werkzeuge">
+    <button class="icon-action" type="button" id="questionToggle" title="Frage mit Leertaste ein-/ausklappen" aria-label="Frage ein- oder ausklappen">?</button>
+    <button class="icon-action board-action" type="button" id="leaderboardToggle" title="Leaderboard anzeigen" aria-label="Leaderboard anzeigen">≡</button>
+  </div>
+
+  <section class="question-drawer" aria-label="Quizfrage">
+    <div class="drawer-main">
+      <div class="question-head">
+        <button class="ai-link" type="button" id="aiLink">KI fragen</button>
+        <div class="levels" aria-label="Niveau">
+          <button type="button" data-level="4.0">4.0</button>
+          <button type="button" data-level="3.0">3.0</button>
+          <button type="button" data-level="2.0" aria-pressed="true">2.0</button>
+          <button type="button" data-level="1.0">1.0</button>
+        </div>
+      </div>
+      <p class="question" id="questionText"></p>
+      <div class="answers" id="answers"></div>
+    </div>
+    <aside class="timer" aria-label="Timer">
+      <strong id="time">60</strong>
+      <span id="timerText">schlie&szlig;t</span>
+    </aside>
+  </section>
+
+  <aside class="chat-drawer" aria-label="KI Chat">
+    <div class="chat-head">
+      <h2>KI-Assistant</h2>
+      <button type="button" id="closeChat" aria-label="Chat schließen">&times;</button>
+    </div>
+    <div class="chat-body">
+      <div class="chat-message">
+        <strong>Thema</strong>
+        <span id="chatTopic">Gleitlagerung</span>
+      </div>
+      <div class="chat-message">
+        <strong>Erklärung</strong>
+        <span id="chatAnswer">Mischreibung ist kritisch, weil der Schmierfilm noch nicht voll trägt. Dadurch entstehen lokale Kontakte, Wärme und Verschleiß.</span>
+      </div>
+    </div>
+    <div class="chat-input">
+      <input type="text" value="Erkläre mir das mit einem Praxisbeispiel">
+      <button type="button">Senden</button>
+    </div>
+  </aside>
+
+  <aside class="leaderboard-modal" aria-label="Leaderboard">
+    <div class="chat-head">
+      <h2>Leaderboard</h2>
+      <button type="button" id="closeLeaderboard" aria-label="Leaderboard schließen">&times;</button>
+    </div>
+    <div class="leaderboard-list">
+      <div class="leader-row"><span>1 · N. Weber</span><strong>28</strong></div>
+      <div class="leader-row"><span>2 · A. Schmitz</span><strong>24</strong></div>
+      <div class="leader-row"><span>3 · L. Kaya</span><strong>21</strong></div>
+      <div class="leader-row self"><span>6 · Du</span><strong>18</strong></div>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const slides = [
+      {
+        eyebrow: "Folie 1",
+        title: "Hydrodynamische Gleitlagerung",
+        topic: "Stribeck-Kurve",
+        copy: [
+          "Ein tragender Schmierfilm entsteht durch Relativbewegung und einen keilf\u00f6rmigen Spalt.",
+          "Mischreibung ist kritisch, weil Schmierfilm und Festk\u00f6rperkontakt gleichzeitig auftreten."
+        ],
+        diagram: "bearing"
+      },
+      {
+        eyebrow: "Folie 2",
+        title: "Sommerfeldzahl",
+        topic: "Betriebsparameter",
+        copy: [
+          "Die Sommerfeldzahl verbindet Viskosit\u00e4t, Drehzahl, Belastung und Lagerspiel.",
+          "Sie beschreibt, ob sich ein stabiler hydrodynamischer Schmierfilm ausbilden kann."
+        ],
+        diagram: "formula"
+      },
+      {
+        eyebrow: "Folie 3",
+        title: "Auslegung beim Anfahren",
+        topic: "Transfer",
+        copy: [
+          "Beim Start ist die Relativgeschwindigkeit noch gering. Der tragende Schmierfilm baut sich erst auf.",
+          "Konstruktive Maßnahmen müssen die kurze Phase erhöhten Verschleißes abfangen."
+        ],
+        diagram: "ramp"
+      }
+    ];
+
+    const questions = {
+      "4.0": {
+        points: 1,
+        text: "Welche Aussage beschreibt Mischreibung korrekt?",
+        answers: [
+          ["A", "Der Schmierstoff hat keine Viskosit\u00e4t.", false],
+          ["B", "Schmierfilm und Festk\u00f6rperkontakt wirken gleichzeitig.", true],
+          ["C", "Das Lager läuft vollständig flüssigkeitsgeschmiert.", false],
+          ["D", "Die Reibung ist unabhängig von Drehzahl und Last.", false]
+        ]
+      },
+      "3.0": {
+        points: 2,
+        text: "Welche Änderung verschiebt ein Gleitlager am ehesten aus der Mischreibung in Richtung Flüssigkeitsreibung?",
+        answers: [
+          ["A", "Höhere Drehzahl bei sonst gleichen Bedingungen.", true],
+          ["B", "Höhere Last bei gleicher Drehzahl.", false],
+          ["C", "Größerer Festkörperkontakt im Spalt.", false],
+          ["D", "Trockener Betrieb ohne Schmierstoff.", false]
+        ]
+      },
+      "2.0": {
+        points: 3,
+        text: "Warum ist Mischreibung bei einem Gleitlager besonders kritisch?",
+        answers: [
+          ["A", "Der hydrodynamische Druck trägt die Last vollständig.", false],
+          ["B", "Es treten gleichzeitig Schmierfilmanteile und direkter Kontakt auf.", true],
+          ["C", "Die Drehzahl hat in diesem Bereich keinen Einfluss.", false],
+          ["D", "Die Reibung ist kleiner als bei Flüssigkeitsreibung.", false]
+        ]
+      },
+      "1.0": {
+        points: 4,
+        text: "Eine schwer belastete Welle läuft häufig langsam an. Welche Maßnahme adressiert das eigentliche Gleitlagerproblem am besten?",
+        answers: [
+          ["A", "Startphase entlasten oder eine zusätzliche Schmierfilmversorgung vorsehen.", true],
+          ["B", "Nur die Enddrehzahl erhöhen, ohne den Startvorgang zu verändern.", false],
+          ["C", "Das Lagerspiel beliebig verkleinern, damit kein Schmierstoff entweicht.", false],
+          ["D", "Den Schmierstoff entfernen, um Mischreibung zu vermeiden.", false]
+        ]
+      }
+    };
+
+    const body = document.body;
+    const questionText = document.getElementById("questionText");
+    const answers = document.getElementById("answers");
+    const time = document.getElementById("time");
+    const timerText = document.getElementById("timerText");
+    const toast = document.getElementById("toast");
+    const chatTopic = document.getElementById("chatTopic");
+    const chatAnswer = document.getElementById("chatAnswer");
+    const questionToggle = document.getElementById("questionToggle");
+    const leaderboardToggle = document.getElementById("leaderboardToggle");
+    const closeLeaderboard = document.getElementById("closeLeaderboard");
+    const densityRange = document.getElementById("densityRange");
+    const densityValue = document.getElementById("densityValue");
+    const levelOrder = ["4.0", "3.0", "2.0", "1.0"];
+
+    const state = {
+      view: "select",
+      slide: 0,
+      level: "2.0",
+      selected: null,
+      revealed: false,
+      seconds: 60,
+      timer: null,
+      feedbackTimer: null
+    };
+
+    function diagramSvg(type) {
+      if (type === "formula") {
+        return '<svg viewBox="0 0 360 220"><rect x="48" y="50" width="264" height="120" rx="12" fill="oklch(91.5% 0.025 230)" stroke="oklch(58% 0.04 235)" stroke-width="3"/><text x="180" y="104" text-anchor="middle" font-size="30" font-weight="800" fill="oklch(19% 0.034 235)">S = f(&#951;, n, p, &#968;)</text><text x="180" y="142" text-anchor="middle" font-size="17" font-weight="700" fill="oklch(48% 0.034 235)">Viskosität / Drehzahl / Last / Spiel</text></svg>';
+      }
+      if (type === "ramp") {
+        return '<svg viewBox="0 0 360 220"><path d="M62 168 H308" stroke="oklch(55% 0.035 235)" stroke-width="3"/><path d="M78 168 C130 166 148 132 174 106 C205 74 238 58 292 54" fill="none" stroke="oklch(56% 0.11 236)" stroke-width="8" stroke-linecap="round"/><circle cx="110" cy="160" r="11" fill="oklch(57% 0.145 25)"/><circle cx="220" cy="72" r="11" fill="oklch(58% 0.13 150)"/><text x="110" y="194" text-anchor="middle" font-size="15" font-weight="800" fill="oklch(48% 0.034 235)">Start</text><text x="220" y="42" text-anchor="middle" font-size="15" font-weight="800" fill="oklch(48% 0.034 235)">Filmaufbau</text></svg>';
+      }
+      return '<svg viewBox="0 0 360 220"><rect x="42" y="34" width="276" height="136" rx="68" fill="oklch(88% 0.025 230)" stroke="oklch(58% 0.04 235)" stroke-width="3"/><circle cx="178" cy="102" r="50" fill="oklch(98% 0.005 230)" stroke="oklch(40% 0.04 235)" stroke-width="5"/><path d="M130 113 C154 142 218 143 233 86" fill="none" stroke="oklch(62% 0.14 72)" stroke-width="11" stroke-linecap="round"/><path d="M70 194 H310" stroke="oklch(55% 0.035 235)" stroke-width="2"/><path d="M84 194 C124 154 156 156 184 181 C213 207 244 186 296 78" fill="none" stroke="oklch(56% 0.11 236)" stroke-width="5" stroke-linecap="round"/></svg>';
+    }
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.classList.add("visible");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("visible"), 1500);
+    }
+
+    function slideMarkup() {
+      const slide = slides[state.slide];
+      return '<div><div class="slide-meta"><span>' + slide.eyebrow + '</span><span>Maschinenelemente I</span></div><h1>' + slide.title + '</h1></div>' +
+        '<div class="slide-body"><div class="slide-copy">' + slide.copy.map((line) => '<p>' + line + '</p>').join("") + '</div><div class="diagram" aria-hidden="true">' + diagramSvg(slide.diagram) + '</div></div>' +
+        '<footer class="slide-foot"><span>' + slide.topic + '</span><span>' + (state.slide + 1) + ' / ' + slides.length + '</span></footer>';
+    }
+
+    function navMarkup() {
+      return '<button type="button" data-prev aria-label="Vorherige Folie">&#8249;</button><span class="slide-count">' + (state.slide + 1) + ' / ' + slides.length + '</span><button type="button" data-next aria-label="Nächste Folie">&#8250;</button>';
+    }
+
+    function renderSlides() {
+      document.querySelectorAll("[data-slide]").forEach((slide) => {
+        slide.innerHTML = slideMarkup();
+      });
+      document.querySelectorAll(".slide-nav").forEach((nav) => {
+        nav.innerHTML = navMarkup();
+      });
+      document.querySelectorAll("[data-prev]").forEach((button) => {
+        button.addEventListener("click", previousSlide);
+      });
+      document.querySelectorAll("[data-next]").forEach((button) => {
+        button.addEventListener("click", nextSlide);
+      });
+    }
+
+    function renderQuestion() {
+      const current = questions[state.level];
+      if (state.view === "lecturer") {
+        questionText.textContent = "Live-Fragen für diese Folie";
+        answers.innerHTML = levelOrder.map((level) => {
+          return '<div class="lecturer-question"><strong>Niveau ' + level + '</strong><span>' + questions[level].text + '</span></div>';
+        }).join("");
+        return;
+      }
+      questionText.textContent = current.text;
+      answers.innerHTML = current.answers.map(([letter, text]) => {
+        return '<button class="answer" type="button" data-answer="' + letter + '"><span class="letter">' + letter + '</span><span>' + text + '</span></button>';
+      }).join("");
+      answers.querySelectorAll(".answer").forEach((answer) => {
+        answer.addEventListener("click", () => {
+          if (state.revealed) return;
+          state.selected = answer.dataset.answer;
+          state.revealed = true;
+          clearInterval(state.timer);
+          clearTimeout(state.feedbackTimer);
+          render();
+          state.feedbackTimer = setTimeout(() => {
+            closeQuestion();
+          }, 900);
+        });
+      });
+    }
+
+    function renderAnswerState() {
+      const current = questions[state.level];
+      answers.querySelectorAll(".answer").forEach((answer, index) => {
+        const option = current.answers[index];
+        const selected = answer.dataset.answer === state.selected;
+        const correct = option[2];
+        answer.classList.toggle("correct", state.revealed && correct);
+        answer.classList.toggle("wrong", state.revealed && selected && !correct);
+      });
+      if (state.revealed) {
+        const selectedOption = current.answers.find((option) => option[0] === state.selected);
+        timerText.textContent = selectedOption && selectedOption[2] ? "+" + current.points + " Punkte" : "0 Punkte";
+      } else {
+        timerText.textContent = "schlie\u00dft";
+      }
+      time.textContent = String(state.seconds).padStart(2, "0");
+    }
+
+    function renderDensity() {
+      const density = Number(densityRange.value);
+      densityValue.textContent = String(density);
+      document.querySelectorAll("[data-density-index]").forEach((button) => {
+        button.hidden = Number(button.dataset.densityIndex) > density;
+      });
+    }
+
+    function render() {
+      body.dataset.view = state.view;
+      document.querySelectorAll("button[data-level]").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.level === state.level ? "true" : "false");
+      });
+      renderSlides();
+      renderDensity();
+      renderAnswerState();
+      questionToggle.setAttribute("aria-pressed", body.dataset.question === "open" ? "true" : "false");
+      leaderboardToggle.setAttribute("aria-pressed", body.dataset.board === "open" ? "true" : "false");
+    }
+
+    function openQuestion() {
+      body.dataset.question = "open";
+      body.dataset.chat = "closed";
+      body.dataset.board = "closed";
+      state.selected = null;
+      state.revealed = false;
+      clearInterval(state.timer);
+      clearTimeout(state.feedbackTimer);
+      if (state.view !== "lecturer") {
+        state.seconds = 60;
+      }
+      renderQuestion();
+      render();
+      if (state.view === "lecturer") return;
+      state.timer = setInterval(() => {
+        state.seconds = Math.max(0, state.seconds - 1);
+        if (state.seconds === 0) {
+          closeQuestion();
+          return;
+        }
+        renderAnswerState();
+      }, 1000);
+    }
+
+    function closeQuestion() {
+      body.dataset.question = "closed";
+      clearInterval(state.timer);
+      clearTimeout(state.feedbackTimer);
+      render();
+    }
+
+    function toggleQuestion() {
+      if (state.view === "select") return;
+      if (body.dataset.question === "open") {
+        closeQuestion();
+      } else {
+        openQuestion();
+      }
+    }
+
+    function switchLevel(level) {
+      state.level = level;
+      state.selected = null;
+      state.revealed = false;
+      renderQuestion();
+      render();
+    }
+
+    function openAssistant() {
+      const current = questions[state.level];
+      chatTopic.textContent = current.text;
+      chatAnswer.textContent = "Der KI-Assistant würde hier die Frage aus dem aktuellen Foliensatz heraus erklären, Rückfragen beantworten und bei Bedarf ein weiteres Beispiel zur Gleitlagerung erzeugen.";
+      body.dataset.chat = "open";
+    }
+
+    function toggleLeaderboard() {
+      if (state.view !== "live" && state.view !== "learn") return;
+      body.dataset.board = body.dataset.board === "open" ? "closed" : "open";
+      render();
+    }
+
+    function nextSlide() {
+      state.slide = (state.slide + 1) % slides.length;
+      renderSlides();
+    }
+
+    function previousSlide() {
+      state.slide = (state.slide + slides.length - 1) % slides.length;
+      renderSlides();
+    }
+
+    document.querySelectorAll("[data-go]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.view = button.dataset.go;
+        body.dataset.chat = "closed";
+        body.dataset.board = "closed";
+        if (state.view === "live") openQuestion();
+        if (state.view !== "live") closeQuestion();
+        render();
+      });
+    });
+
+    document.querySelectorAll("button[data-level]").forEach((button) => {
+      button.addEventListener("click", () => {
+        switchLevel(button.dataset.level);
+      });
+    });
+
+    questionToggle.addEventListener("click", () => {
+      toggleQuestion();
+    });
+
+    leaderboardToggle.addEventListener("click", () => {
+      toggleLeaderboard();
+    });
+
+    closeLeaderboard.addEventListener("click", () => {
+      body.dataset.board = "closed";
+      render();
+    });
+
+    densityRange.addEventListener("input", () => {
+      renderDensity();
+    });
+
+    document.querySelectorAll("[data-hotspot-level]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.level = button.dataset.hotspotLevel;
+        openQuestion();
+      });
+    });
+
+    document.getElementById("aiLink").addEventListener("click", () => {
+      openAssistant();
+    });
+
+    document.getElementById("closeChat").addEventListener("click", () => {
+      body.dataset.chat = "closed";
+    });
+
+    document.addEventListener("keydown", (event) => {
+      const typing = event.target && ["INPUT", "TEXTAREA"].includes(event.target.tagName);
+      if (event.key === "ArrowRight") nextSlide();
+      if (event.key === "ArrowLeft") previousSlide();
+      if (event.code === "Space" && state.view !== "select" && !typing) {
+        event.preventDefault();
+        toggleQuestion();
+      }
+    });
+
+    renderQuestion();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "learnbuddy-retention-policy-v1",
+  "pseudonymousLearningSignals": {
+    "defaultYears": 5,
+    "cleanupAction": "anonymize",
+    "autoCleanup": true,
+    "tables": [
+      "participant_sessions",
+      "analytics_events",
+      "answers",
+      "student_chat_questions",
+      "transcript_segments"
+    ],
+    "description": "Pseudonyme Lernsignale werden nach Ablauf der Aufbewahrungsfrist von Personen- und Freitextbezug getrennt."
+  },
+  "courseContent": {
+    "retentionClass": "owner-controlled-course-content",
+    "minimumYears": null,
+    "autoCleanup": false,
+    "tables": [
+      "lectures",
+      "slides",
+      "questions",
+      "question_review_items",
+      "lecture_assets",
+      "material_processing_runs"
+    ],
+    "description": "Vorlesungsinhalte, Fragen, Reviews und Materialien sind Kursartefakte und werden nicht durch den Lernsignal-Cleanup automatisch geloescht."
+  },
+  "standaloneArtifacts": {
+    "retentionClass": "long-term-standalone-archive",
+    "minimumYears": 20,
+    "autoCleanup": false,
+    "tables": [
+      "standalone_exports",
+      "standalone_export_jobs"
+    ],
+    "description": "Standalone-Artefakte sind fuer Langzeitnutzung ausgelegt und sollen mindestens 20 Jahre exportierbar beziehungsweise archivierbar bleiben."
+  },
+  "qualityAggregates": {
+    "retentionClass": "anonymized-quality-loop",
+    "minimumYears": 5,
+    "autoCleanup": false,
+    "description": "Aggregierte Qualitaetssignale duerfen ohne Personen- oder Sessionbezug fuer den geschlossenen Qualitaetsregelkreis erhalten bleiben."
+  }
+}

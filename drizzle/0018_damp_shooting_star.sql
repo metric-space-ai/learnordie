@@ -1,0 +1,1 @@
+ALTER TABLE "lecturer_assistant_messages" ADD COLUMN "metadata_json" jsonb DEFAULT '{}'::jsonb NOT NULL;
