@@ -476,6 +476,22 @@ async function checkLecturerAssistant(page, timeoutMs, requireProvider) {
   });
 }
 
+async function waitForLecturerStudio(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const editorTitle = page.getByRole("textbox", { name: "Folientitel" });
+  const createDialog = page.getByRole("dialog", { name: "Neue Vorlesung als Folie anlegen" });
+
+  while (Date.now() < deadline) {
+    if (await visible(editorTitle, 500)) return "lecture-editor";
+    if (await visible(createDialog, 500)) {
+      await page.getByRole("textbox", { name: "Titel" }).waitFor({ state: "visible", timeout: 2_000 });
+      return "create-lecture";
+    }
+  }
+
+  return null;
+}
+
 async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth, includeAssistant, requireAssistantProvider) {
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl("/lecturer/login"), { waitUntil: "domcontentloaded", timeout: timeoutMs });
@@ -511,11 +527,23 @@ async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth,
 
   await page.goto(new URL(link, baseUrl).toString(), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await page.waitForURL(/\/lecturer$/, { timeout: timeoutMs });
-  await page.getByRole("textbox", { name: "Folientitel" }).waitFor({ state: "visible", timeout: timeoutMs });
+  const studioState = await waitForLecturerStudio(page, timeoutMs);
+  if (!studioState) {
+    fail("lecturer_auth_browser", "Lecturer login succeeded, but the lecturer studio did not become usable.");
+    return;
+  }
   await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
-  await page.getByRole("textbox", { name: "Folientitel" }).waitFor({ state: "visible", timeout: timeoutMs });
+  const reloadedStudioState = await waitForLecturerStudio(page, timeoutMs);
+  if (!reloadedStudioState) {
+    fail("lecturer_auth_browser", "Lecturer studio was not usable after authenticated reload.");
+    return;
+  }
 
   if (includeAssistant) {
+    if (studioState !== "lecture-editor") {
+      fail("lecturer_assistant_browser", "Lecturer assistant smoke requires an existing lecture editor, but the account opened the create-lecture view.");
+      return;
+    }
     await checkLecturerAssistant(page, timeoutMs, requireAssistantProvider);
   }
 
@@ -528,7 +556,9 @@ async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth,
   if (!failOnDiagnostics("lecturer_auth_browser", problems)) return;
   pass("lecturer_auth_browser", "Lecturer login, authenticated reload and logout worked.", {
     requestedEmail: Boolean(email),
-    magicLinkSource: magicLink ? "provided" : "local-console"
+    magicLinkSource: magicLink ? "provided" : "local-console",
+    studioState,
+    reloadedStudioState
   });
 }
 

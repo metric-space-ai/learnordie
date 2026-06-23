@@ -43,13 +43,13 @@ class ResendMailProvider implements MailProvider {
     await this.resend.emails.send({
       from: this.from,
       to: input.email,
-      subject: "Dein LearnBuddy Login-Link",
+      subject: "Dein learnordie.app Login-Link",
       html: [
-        "<p>Hier ist dein Login-Link:</p>",
+        "<p>Lernen im Norden: Hier ist dein Login-Link.</p>",
         `<p><a href="${escapeHtml(input.magicLink)}">${escapeHtml(input.magicLink)}</a></p>`,
         "<p>Der Link ist 15 Minuten gültig.</p>"
       ].join(""),
-      text: `Hier ist dein LearnBuddy Login-Link: ${input.magicLink}\n\nDer Link ist 15 Minuten gültig.`
+      text: `Lernen im Norden: Hier ist dein learnordie.app Login-Link: ${input.magicLink}\n\nDer Link ist 15 Minuten gültig.`
     });
     return { delivery: "external" as const };
   }
@@ -137,7 +137,7 @@ export function getMailProvider(): MailProvider {
   if (process.env.RESEND_API_KEY) {
     const from = production
       ? productionEmailFrom()
-      : process.env.EMAIL_FROM?.trim() || "LearnBuddy <noreply@example.com>";
+      : process.env.EMAIL_FROM?.trim() || "learnordie.app <noreply@example.com>";
 
     return new ResendMailProvider(
       process.env.RESEND_API_KEY,

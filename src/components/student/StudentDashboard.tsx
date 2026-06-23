@@ -130,11 +130,16 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
   }
 
   return (
-    <main className="student-app lb-motion-root" aria-label="Mein LearnBuddy Dashboard">
+    <main className="student-app lb-motion-root" aria-label="Mein learnordie.app Dashboard">
       <header className="student-head lb-enter-row">
         <Link className="student-brand" href="/">
-          <span className="home-brand-mark" aria-hidden="true">LB</span>
-          <strong>LearnBuddy</strong>
+          <span className="home-brand-mark" aria-hidden="true">
+            <span className="brand-face alive" />
+            <span className="brand-face out" />
+          </span>
+          <strong className="brand-word" aria-label="learnordie.app">
+            <span>learn</span><span className="brand-or">or</span><span>die</span><span className="brand-dot">.app</span>
+          </strong>
         </Link>
         <div className="student-id">
           {editing ? (
@@ -181,7 +186,7 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
           <h1>Gib einen Vorlesungscode ein</h1>
           <p>
             Du bist noch keiner Vorlesung beigetreten. Sobald du oben einen Code eingibst, erscheinen hier deine
-            Live-Termine, der Lernmodus und deine Prüfungsvorbereitung.
+            Live-Termine, der Lernmodus und dein Level bis zur Pruefung.
           </p>
         </section>
       ) : (

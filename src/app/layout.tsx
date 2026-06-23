@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LearnBuddy",
-  description: "Quiz-augmentierte Vorlesungen mit Live- und Learn-Modus",
+  title: "learnordie.app",
+  description: "Lernen im Norden: quiz-augmentierte Vorlesungen mit Live-Modus, Lernrunden und KI-Erklaerungen",
   icons: {
     icon: "/icon.svg"
   }

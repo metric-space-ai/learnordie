@@ -1,12 +1,12 @@
-# LearnBuddy
+# learnordie.app
 
-LearnBuddy is a lecture augmentation platform for technical university courses. It combines presentation delivery, live multiple-choice questions, pseudonymous student participation, replay learning, AI explanations, analytics and long-term standalone exports.
+learnordie.app is the product surface for LearnBuddy: a lecture augmentation platform for technical university courses. Officially it reads as **Lernen im Norden**. The sharper English reading stays as a quiet easter egg in the domain, while the product itself remains calm, precise and study-focused.
 
 The current reference topic is **Maschinenelemente I: Gleitlagerung**.
 
 ## Product
 
-LearnBuddy has two primary roles:
+learnordie.app has two primary roles:
 
 - **Lecturers** create lecture series, set join codes, upload material, prepare questions, run live sessions and review learning analytics.
 - **Students** join with a link or short code, choose a pseudonym, participate live and later use the Learn mode until the exam date.
@@ -18,8 +18,8 @@ The core product principle is: **slides first, tools second**. The presentation 
 - Pseudonymous student participation without account friction.
 - Lecturer Magic-Link login through Resend.
 - Human join codes such as `ME1-GL-2026`.
-- Live lecture mode with instant answer feedback and leaderboard.
-- Learn mode with slide hotspots, question density, AI chat and replay.
+- Live lecture mode with instant answer feedback, points and leaderboard.
+- Learn mode with slide hotspots, question density, AI chat, replay and exam readiness.
 - Four question levels from `4.0` to `1.0`, mapped to 1-4 points.
 - Material pipeline for PDF, PowerPoint, URLs and notes.
 - Realtime transcript ingestion path for browser microphone/STT.
@@ -109,6 +109,7 @@ Production-ready means the browser flows pass in a clean profile. Build success 
 
 Primary deployment target:
 
+- Canonical production domain: `https://learnordie.app`
 - Vercel
 - Neon Postgres
 - Resend

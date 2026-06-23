@@ -12,9 +12,9 @@ Eine Aufgabe gilt nur als ✅, wenn der zugehoerige Flow im laufenden Dev-Server
 
 **Stand 2026-06-23:** Der komplette neue Produkt-Spine ist im Browser end-to-end verifiziert — **lokal (Local-Store) UND auf dem deployten Vercel-Preview (Neon-Postgres)**. Der wichtigste Produktbeweis aus §17 ist nachgewiesen: Dozent meldet sich an → setzt im Studio `ME1-GL-2026` → frischer Student öffnet `/join/ME1-GL-2026` → wählt Pseudonym → sieht „Maschinenelemente I" im Dashboard mit korrekten live/zukünftig/vergangen-Buckets, Readiness und Code → Reload behält den Stand. Zusätzlich verifiziert: Antwort im Learn-Modus speist Readiness (48 „Auf Kurs"), unbekannter Code → Fehler ohne Demo, Mobile-Layout, Standalone-Export offline.
 
-**Deployment:** Migration `0023` auf Neon angewendet. **Production live: `https://learn-buddy-lyart.vercel.app`** (Vercel `--prod`, Neon-Postgres). Production-ENV eingerichtet (19 Variablen aus Preview kopiert: `DATABASE_URL`, `AUTH_SECRET`, Provider, `LEARNBUDDY_DEPLOYMENT_ENV=production`, `NEXT_PUBLIC_APP_URL=https://learn-buddy-lyart.vercel.app`). Deploy-Smoke (Postgres-backed) grün (3/3) **gegen Production**: Student-Join→Dashboard, unbekannter Code→Fehler-ohne-Demo, Dozent-Studio zeigt aktiven Code. Preview ebenfalls live (`…-bdc2gky9a-…`).
+**Deployment:** Migration `0023` auf Neon angewendet. **Production live: `https://learnordie.app`** (Vercel `--prod`, Neon-Postgres). Production-ENV ist auf die kanonische Domain gesetzt (`NEXT_PUBLIC_APP_URL=https://learnordie.app`) und nutzt Resend, Vercel Blob, `ctox-responses` ueber `llm.ctox.dev`, lokale deterministische Retrieval-Embeddings und die providerabstrahierten OCR/STT-Pfade. Deploy-Readiness ist gegen Vercel Production gruen (15/15). Live-Smoke gegen `https://learnordie.app` ist gruen fuer Health, Student Live, Learn-Modus, Leaderboard und providerbasierten KI-Stream (`ctox-responses`, `MiniMax-M3`). Der vollstaendige Production-Dozentenlogin-Smoke bleibt ohne Zugriff auf einen echten Resend-Posteingang separat nachzuziehen; lokale E2E decken Login/Reload/Logout ab.
 
-**Noch vom Nutzer zu setzen (eigene Secrets, nur damit Zusatz-Integrationen laufen — der Kern-Produktflow läuft bereits):** `RESEND_API_KEY` + `EMAIL_FROM` (Dozenten-Magic-Link-Login per E-Mail; aktuell 502, da nicht gesetzt), LLM-Proxy-Key für `ctox-responses` (KI-Chat im Learn-Modus), Mistral-Voxtral-Key (Live-STT). Diese liegen außerhalb meiner Reichweite (Nutzer-Accounts).
+**Noch operativ zu prüfen:** echter Resend-Posteingang fuer den Production-Dozentenlogin, echte OCR/STT-Provideraufrufe mit finalen Anbieter-Credentials und spaeter der bevorzugte Mistral/Voxtral-Realtime-Pfad.
 
 **Pre-Deploy-Audit (Multi-Agent-Workflow):** 8 Findings bestätigt; behoben — seriesId Slug/UUID-Mismatch im Postgres-Pfad (Blocker, empirisch gegen Neon reproduziert & via `resolveSeriesRow` gefixt), Enrollment-Ordering (`lastOpenedAt` beim Insert), PII-Hygiene (`anonymousKey`/`emailHash` nicht mehr in API-Responses). Lokaler fs-Write-Pfad greift im Deploy nicht (Postgres-Impl aktiv).
 
@@ -31,7 +31,7 @@ Gates grün: `typecheck`, `lint`, `motion:contract` (20/20), `test:e2e:local` (3
 | 4 | Live/Learn Enrollment-Integration | ✅ (E1/E2 verifiziert; E3/E4 vorhanden) |
 | 5 | Readiness & Analytics | ✅ (A1/A2 verifiziert; A3/A4 vorhanden) |
 | 6 | Production Hardening (Export, Proxy, Auth, ENV, A11y) | ✅ (P1/P4/P5 verifiziert; Proxy/Auth vorhanden; P3 Basis-Limits) |
-| 7 | End-to-End & Deployment | ✅ Production live (`learn-buddy-lyart.vercel.app`) + Preview; Neon-E2E 3/3, Deploy-Smoke 3/3 gegen Production; Migration `0023` auf Neon. Optional-Integrationen (Mail/KI/STT) brauchen Nutzer-Secrets |
+| 7 | End-to-End & Deployment | ✅ Production live (`learnordie.app`) + Vercel/Neon; Deploy-Readiness 15/15, Live-Smoke mit Student Live/Learn/KI gruen; Migration `0023` auf Neon. Resend-Posteingang und echte OCR/STT-Provideraufrufe bleiben operative Smokes |
 
 ### Ticket-Status
 
@@ -985,7 +985,7 @@ LearnBuddy gilt erst als gruener Stand, wenn alle Punkte erfuellt sind (Status n
 - ✅ (vorhanden) Standalone Export enthaelt Praesentation, Audio und Fragen.
 - ✅ Analytics sind anonym und zweckgebunden.
 - ✅ (vorhanden) 5-Jahres-Retention ist dokumentiert und technisch vorbereitet (`retention-policy`).
-- ✅ Vercel/Neon/Resend Deployment ohne Vercel-Lock-in: **Production live** (`https://learn-buddy-lyart.vercel.app`) + Preview, beide auf Neon-Postgres verifiziert (Provider-Abstraktion; Migration `0023`). Mail/KI/STT-Integrationen brauchen Nutzer-Secrets (RESEND/LLM/Voxtral).
+- ✅ Vercel/Neon/Resend Deployment ohne Vercel-Lock-in: **Production live** (`https://learnordie.app`), Neon-Postgres verifiziert, Vercel Blob angebunden, KI-Chat live ueber `ctox-responses`/`MiniMax-M3`, Provider-Abstraktion und Migration `0023` aktiv. Resend-Posteingang und echte OCR/STT-Provideraufrufe bleiben operative Smokes.
 - ✅ Playwright deckt Student- und Dozenten-Kernflows in echten Browsern ab: `test:e2e:local` (Local-Store) + Neon-E2E + Deploy-Smoke gegen die Live-Preview, je 3/3 grün.
 
 ## 14. Verifikationsbefehle
