@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "learnordie.app",
-  description: "Lernen im Norden: quiz-augmentierte Vorlesungen mit Live-Modus, Lernrunden und KI-Erklaerungen",
+  description: "Lernen im Norden: quiz-augmentierte Vorlesungen mit Live-Modus, Lernrunden und KI-Erklärungen",
   icons: {
     icon: "/icon.svg"
   }

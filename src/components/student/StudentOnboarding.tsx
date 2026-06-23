@@ -42,19 +42,19 @@ export function StudentOnboarding() {
       <header className="student-head lb-enter-row">
         <Link className="student-brand" href="/">
           <span className="home-brand-mark" aria-hidden="true">
-            <span className="brand-face alive" />
-            <span className="brand-face out" />
+            <span className="brand-loop" />
+            <span className="brand-north-dot" />
           </span>
           <strong className="brand-word" aria-label="learnordie.app">
-            <span>learn</span><span className="brand-or">or</span><span>die</span><span className="brand-dot">.app</span>
+            <span>lear</span><span className="brand-nord">nord</span><span>ie</span><span className="brand-dot">.app</span>
           </strong>
         </Link>
       </header>
 
       <section className="student-emptystate lb-enter-panel">
         <p className="eyebrow">Lernen im Norden</p>
-        <h1>Waehle ein Pseudonym</h1>
-        <p>Du brauchst kein Konto. Waehle ein Pseudonym, bitte keinen Klarnamen, und starte deine erste Lernrunde.</p>
+        <h1>Wähle ein Pseudonym</h1>
+        <p>Du brauchst kein Konto. Wähle ein Pseudonym, bitte keinen Klarnamen, und starte deine erste Lernrunde.</p>
         <form className="student-onboard-form" onSubmit={submit}>
           <label>
             Pseudonym

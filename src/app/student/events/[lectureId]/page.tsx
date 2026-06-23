@@ -27,7 +27,10 @@ export default async function StudentEventPage({ params }: { params: Promise<{ l
     <main className="student-app lb-motion-root" aria-label={`Termin ${lecture.title}`}>
       <header className="student-head lb-enter-row">
         <a className="student-brand" href="/student">
-          <span className="home-brand-mark" aria-hidden="true">LB</span>
+          <span className="home-brand-mark" aria-hidden="true">
+            <span className="brand-loop" />
+            <span className="brand-north-dot" />
+          </span>
           <strong>Zurück zum Dashboard</strong>
         </a>
       </header>

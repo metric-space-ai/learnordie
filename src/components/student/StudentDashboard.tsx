@@ -134,11 +134,11 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
       <header className="student-head lb-enter-row">
         <Link className="student-brand" href="/">
           <span className="home-brand-mark" aria-hidden="true">
-            <span className="brand-face alive" />
-            <span className="brand-face out" />
+            <span className="brand-loop" />
+            <span className="brand-north-dot" />
           </span>
           <strong className="brand-word" aria-label="learnordie.app">
-            <span>learn</span><span className="brand-or">or</span><span>die</span><span className="brand-dot">.app</span>
+            <span>lear</span><span className="brand-nord">nord</span><span>ie</span><span className="brand-dot">.app</span>
           </strong>
         </Link>
         <div className="student-id">
@@ -186,7 +186,7 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
           <h1>Gib einen Vorlesungscode ein</h1>
           <p>
             Du bist noch keiner Vorlesung beigetreten. Sobald du oben einen Code eingibst, erscheinen hier deine
-            Live-Termine, der Lernmodus und dein Level bis zur Pruefung.
+            Live-Termine, der Lernmodus und dein Level bis zur Prüfung.
           </p>
         </section>
       ) : (

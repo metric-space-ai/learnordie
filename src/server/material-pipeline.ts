@@ -52,7 +52,7 @@ function extractionWarnings(value: string) {
   if (/OCR oder visuelle Analyse erforderlich/i.test(value)) {
     warnings.push("Bildbasierte Inhalte erkannt. Nicht getaggte Bildinhalte benötigen OCR oder visuelle Analyse.");
   }
-  if (/Abruf blockiert:\s*Nur oeffentliche HTTP\(S\)-Quellen werden automatisch extrahiert\./i.test(value)) {
+  if (/Abruf blockiert:\s*Nur (?:oe|ö)ffentliche HTTP\(S\)-Quellen werden automatisch extrahiert\./i.test(value)) {
     warnings.push("URL-Abruf blockiert. Nur öffentliche HTTP(S)-Quellen werden automatisch extrahiert.");
   }
   return [...new Set(warnings)];
@@ -61,11 +61,11 @@ function extractionWarnings(value: string) {
 function textWithoutExtractionWarnings(value: string) {
   return cleanText(value
     .replace(/Keine verwertbaren Textinhalte gefunden\.[\s\S]*?Materialquelle gespeichert\./gi, " ")
-    .replace(/Bildbasierte PDF-Inhalte erkannt:\s*\d+\s*eingebettete Bilder\.\s*Fuer nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich\./gi, " ")
-    .replace(/Bildbasierte PPTX-Inhalte erkannt:.*?Fuer nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich\./gi, " ")
+    .replace(/Bildbasierte PDF-Inhalte erkannt:\s*\d+\s*eingebettete Bilder\.\s*F(?:ue|ü)r nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich\./gi, " ")
+    .replace(/Bildbasierte PPTX-Inhalte erkannt:.*?F(?:ue|ü)r nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich\./gi, " ")
     .replace(/^Visuelle Struktur:.*$/gim, " ")
     .replace(/^Bildposition:.*$/gim, " ")
-    .replace(/Abruf blockiert:\s*Nur oeffentliche HTTP\(S\)-Quellen werden automatisch extrahiert\./gi, " ")
+    .replace(/Abruf blockiert:\s*Nur (?:oe|ö)ffentliche HTTP\(S\)-Quellen werden automatisch extrahiert\./gi, " ")
     .replace(/^Originaldatei:.*$/gim, " ")
     .replace(/^Typ:.*$/gim, " ")
     .replace(/^Groesse:.*$/gim, " ")
@@ -158,7 +158,7 @@ async function canFetchUrl(url: URL) {
 function blockedUrlText(rawUrl: string) {
   return [
     `URL-Quelle: ${rawUrl}`,
-    "Abruf blockiert: Nur oeffentliche HTTP(S)-Quellen werden automatisch extrahiert."
+    "Abruf blockiert: Nur öffentliche HTTP(S)-Quellen werden automatisch extrahiert."
   ].join("\n");
 }
 
@@ -257,7 +257,7 @@ function fallbackText(lecture: Lecture, material: LectureMaterial) {
     return [
       `URL-Quelle: ${material.originalName}`,
       `Vorlesung: ${lecture.title}`,
-      "Die Quelle wurde als externer Kontext fuer die Fragenpipeline erfasst."
+      "Die Quelle wurde als externer Kontext für die Fragenpipeline erfasst."
     ].join("\n");
   }
 
@@ -269,7 +269,7 @@ function fallbackText(lecture: Lecture, material: LectureMaterial) {
     `Datei: ${material.originalName}`,
     `Materialtyp: ${material.kind}`,
     `Vorlesung: ${lecture.title}`,
-    "Die Datei wurde vorgemerkt. Vollstaendige PPTX/PDF-Extraktion folgt in der naechsten Pipeline-Stufe."
+    "Die Datei wurde vorgemerkt. Vollständige PPTX/PDF-Extraktion folgt in der nächsten Pipeline-Stufe."
   ].join("\n");
 }
 

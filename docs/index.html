@@ -6,7 +6,7 @@
     <title>learnordie.app - Lernen im Norden</title>
     <meta
       name="description"
-      content="learnordie.app erweitert technische Vorlesungen um Live-Fragen, Lernrunden, KI-Erklaerungen, Analytics und Standalone-Export."
+      content="learnordie.app erweitert technische Vorlesungen um Live-Fragen, Lernrunden, KI-Erklärungen, Analytics und Standalone-Export."
     >
     <style>
       :root {
@@ -57,84 +57,57 @@
       }
 
       .mark {
-        width: 48px;
-        height: 42px;
+        position: relative;
+        width: 46px;
+        height: 38px;
         border-radius: 12px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        background: #e8f0f5;
+        background: #eef4f5;
         box-shadow: inset 0 0 0 1px var(--line);
       }
 
-      .face {
+      .loop {
         position: relative;
-        width: 16px;
-        height: 16px;
+        width: 24px;
+        height: 24px;
         border-radius: 999px;
+        border: 2px solid #2f6f8f;
+        border-right-color: rgba(47, 111, 143, 0.32);
+        transform: rotate(-18deg);
       }
 
-      .face.alive {
-        background: var(--blue);
-      }
-
-      .face.alive:before {
-        content: "";
-        position: absolute;
-        top: 5px;
-        left: 4px;
-        width: 2px;
-        height: 2px;
-        border-radius: 999px;
-        background: #f8fbfd;
-        box-shadow: 6px 0 0 #f8fbfd;
-      }
-
-      .face.alive:after {
+      .loop:after {
         content: "";
         position: absolute;
         left: 4px;
-        top: 9px;
-        width: 8px;
-        height: 4px;
-        border-bottom: 2px solid #f8fbfd;
-        border-radius: 0 0 10px 10px;
+        bottom: 3px;
+        width: 11px;
+        height: 5px;
+        border-bottom: 2px solid #397f66;
+        border-radius: 0 0 12px 12px;
+        transform: rotate(12deg);
       }
 
-      .face.out {
-        background: var(--amber);
-      }
-
-      .face.out:before {
-        content: "x x";
+      .north-dot {
         position: absolute;
-        top: 2px;
-        left: 0;
-        width: 100%;
-        color: var(--night);
-        font-size: 7px;
-        font-weight: 900;
-        line-height: 1;
-        letter-spacing: 1px;
-        text-align: center;
-      }
-
-      .face.out:after {
-        content: "";
-        position: absolute;
-        left: 5px;
-        top: 11px;
-        width: 6px;
-        border-top: 2px solid var(--night);
+        top: 7px;
+        right: 10px;
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: #7ed6c1;
+        box-shadow: 0 0 0 4px rgba(126, 214, 193, 0.18);
       }
 
       .wordmark {
         color: var(--night);
       }
 
-      .wordmark .or {
-        color: var(--blue);
+      .wordmark .nord {
+        color: #2f6f8f;
+        font-weight: 900;
       }
 
       .wordmark .dot {
@@ -329,21 +302,21 @@
         <div>
           <div class="brand">
             <span class="mark" aria-hidden="true">
-              <span class="face alive"></span>
-              <span class="face out"></span>
+              <span class="loop"></span>
+              <span class="north-dot"></span>
             </span>
             <span>
-              <span class="wordmark">learn<span class="or">or</span>die<span class="dot">.app</span></span>
-              <small>Lernen im Norden</small>
+              <span class="wordmark">lear<span class="nord">nord</span>ie<span class="dot">.app</span></span>
+              <small>Lernen im Norden. Lehre im Loop.</small>
             </span>
           </div>
           <h1>Technische Vorlesungen als Lernrunde.</h1>
           <p class="lead">
             Ein Link reicht. Studierende sammeln Punkte, sehen ihren Lernstand und bleiben
-            bis zum Pruefungstag im Stoff. Dozierende steuern alles direkt am Foliendeck.
+            bis zum Prüfungstag im Stoff. Dozierende steuern alles direkt am Foliendeck.
           </p>
           <div class="actions">
-            <a class="button primary" href="https://learnordie.app">App oeffnen</a>
+            <a class="button primary" href="https://learnordie.app">App öffnen</a>
             <a class="button" href="../">Repository ansehen</a>
             <a class="button" href="learnbuddy-parallel-product-plan.md">Produktplan</a>
             <a class="button" href="deployment-checklist.md">Deployment</a>
@@ -353,7 +326,7 @@
           <div>
             <small>Maschinenelemente I</small>
             <h2>Hydrodynamische Gleitlagerung</h2>
-            <p>Ein tragender Schmierfilm entsteht durch Relativbewegung und einen keilfoermigen Spalt.</p>
+            <p>Ein tragender Schmierfilm entsteht durch Relativbewegung und einen keilförmigen Spalt.</p>
           </div>
           <div class="diagram" aria-hidden="true"></div>
         </div>
@@ -361,11 +334,11 @@
 
       <section class="sections">
         <div class="section">
-          <h2>Fuer Studierende</h2>
+          <h2>Für Studierende</h2>
           <div class="grid">
             <article class="item">
               <strong>Link reicht</strong>
-              <p>Teilnahme mit Code oder Einladung, ohne Account-Huerde und mit Pseudonym statt Klarname.</p>
+              <p>Teilnahme mit Code oder Einladung, ohne Account-Hürde und mit Pseudonym statt Klarname.</p>
             </article>
             <article class="item">
               <strong>Live Feedback</strong>
@@ -373,13 +346,13 @@
             </article>
             <article class="item">
               <strong>Lernrunden</strong>
-              <p>Nach der Vorlesung werden Fragen, Folien, KI-Hilfe und Levelstand im eigenen Dashboard verfuegbar.</p>
+              <p>Nach der Vorlesung werden Fragen, Folien, KI-Hilfe und Levelstand im eigenen Dashboard verfügbar.</p>
             </article>
           </div>
         </div>
 
         <div class="section">
-          <h2>Fuer Dozierende</h2>
+          <h2>Für Dozierende</h2>
           <div class="grid">
             <article class="item">
               <strong>Studio statt Adminliste</strong>
@@ -390,7 +363,7 @@
               <p>Kurzcodes wie ME1-GL-2026 verbinden Studierende mit der richtigen Vorlesungsreihe.</p>
             </article>
             <article class="item">
-              <strong>Qualitaetsregelkreis</strong>
+              <strong>Qualitätsregelkreis</strong>
               <p>Anonyme Analytics zeigen, welche Themen verstanden wurden und wo Nacharbeit sinnvoll ist.</p>
             </article>
           </div>
@@ -399,7 +372,7 @@
         <div class="section">
           <h2>Production Gates</h2>
           <p>
-            learnordie.app nutzt TypeScript, ESLint, Motion-Vertraege, Playwright-Clean-Profile-Flows,
+            learnordie.app nutzt TypeScript, ESLint, Motion-Verträge, Playwright-Clean-Profile-Flows,
             Provider-Smokes, Backup/Restore-Smokes und Deployment-Readiness-Checks. Production-ready
             bedeutet echte Browserflows, nicht nur ein erfolgreicher Build.
           </p>

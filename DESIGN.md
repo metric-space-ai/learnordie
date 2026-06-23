@@ -8,7 +8,7 @@ product
 
 learnordie.app ist eine ruhige, technische Arbeitsbühne für Vorlesungsfolien. Wiedererkennung entsteht nicht durch Dekor, starke Farben oder zusätzliche Karten, sondern durch eine konsistente räumliche Logik: Die Folie ist der Anker, Bottom-Bar und foliennahe Werkzeuge sind Ursprünge, Fragen, Quellen, Chat, Evaluation und Analytics öffnen als fachliche Sheets aus diesen Ursprüngen.
 
-Die Wortmarke nutzt die Domain selbst als Hook. Offiziell ist die Lesart "Lernen im Norden"; visuell darf `or` als kleines Gelenk zwischen Nordlicht-Blau und Amber hervortreten. Der versteckte "learn or die"-Eindruck bleibt ein Easter Egg der URL, nicht die sichtbare Tonalität der App. Das Markenzeichen darf diesen Dualismus als kleines Game-State-Symbol zeigen: ein freundlicher Kopf und ein zweiter Kopf mit X-Augen. Dieses Motiv bleibt klein, froehlich und UI-nah, niemals brutal, drohend oder illustrativ dominant.
+Die Wortmarke nutzt die Domain selbst als Hook. Offiziell ist die Lesart "Lernen im Norden"; visuell darf `nord` minimal hervortreten. Der versteckte "learn or die"-Eindruck bleibt ein Easter Egg der URL, nicht die sichtbare Tonalität der App. Das Markenzeichen ist ein ruhiger Loop mit Nordpunkt: Orientierung, Feedbackkreislauf und Lernsystem, ohne Totenkopf-, Warn- oder Survival-Ästhetik.
 
 Der visuelle Fingerabdruck ist eine präzise technische Bühnenlogik: Folienflächen tragen feine Registermarken, Arbeitsbühnen haben ein dezentes Konstruktionsraster, und aktive Ursprungslinien verbinden Bottom-Bar, Hotspots und Sheets. Diese Marker bleiben zurückhaltend und dürfen keine zusätzlichen Informationen oder Bedienelemente vortäuschen.
 
