@@ -1043,7 +1043,7 @@ function providerModeRules() {
     },
     {
       name: "LEARNBUDDY_OCR_PROVIDER",
-      allowed: ["http", "external", "vision", "ocr"],
+      allowed: ["http", "external", "vision", "ocr", "openai-compatible", "openai-vision", "vision-chat"],
       reason: "Scanned material handling needs an external OCR/vision provider."
     },
     {
@@ -1312,7 +1312,12 @@ if (localOnly || selfHostOnly) {
     if (pulled) {
       targetEnvValues = pulled;
       source = `${source}:env-pull`;
-      names = activeEnvNames();
+      try {
+        names = await vercelEnvNames(environment);
+      } catch (error) {
+        fail("vercel_env_list", error);
+        names = activeEnvNames();
+      }
     }
   }
   if (!names) {

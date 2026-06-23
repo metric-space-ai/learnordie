@@ -56,6 +56,15 @@ type HTTPOCRResponse = {
   error?: { message?: unknown };
 };
 
+type OpenAICompatibleVisionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: unknown;
+    };
+  }>;
+  error?: { message?: unknown };
+};
+
 function envValue(name: string) {
   return (process.env[name] ?? "").trim();
 }
@@ -69,6 +78,18 @@ function normalizeOCRBaseUrl(value: string) {
   const trimmed = value.trim().replace(/\/+$/, "");
   if (!trimmed) return "";
   const endpoint = trimmed.endsWith("/ocr") ? trimmed : `${trimmed}/v1/ocr`;
+  assertDeploymentFetchEndpoint(endpoint, "LEARNBUDDY_OCR_BASE_URL");
+  return endpoint;
+}
+
+function normalizeOpenAICompatibleVisionBaseUrl(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  const endpoint = trimmed.endsWith("/chat/completions")
+    ? trimmed
+    : trimmed.endsWith("/v1")
+      ? `${trimmed}/chat/completions`
+      : `${trimmed}/v1/chat/completions`;
   assertDeploymentFetchEndpoint(endpoint, "LEARNBUDDY_OCR_BASE_URL");
   return endpoint;
 }
@@ -286,8 +307,122 @@ class HTTPOCRProvider implements OCRProvider {
   }
 }
 
+class OpenAICompatibleVisionOCRProvider implements OCRProvider {
+  readonly name: string;
+  private readonly endpoint: string;
+  private readonly apiKey: string;
+  private readonly model: string;
+
+  constructor(input: { endpoint: string; apiKey: string; model: string }) {
+    this.endpoint = input.endpoint;
+    this.apiKey = input.apiKey.trim();
+    this.model = input.model;
+    this.name = `openai-compatible-vision:${input.model}`;
+  }
+
+  async extractText(input: {
+    fileName: string;
+    mimeType: string;
+    language?: string;
+    images: OCRImageInput[];
+  }): Promise<OCRProviderResult> {
+    if (input.images.length === 0) return { text: "", model: this.model };
+
+    const language = input.language ?? (envValue("LEARNBUDDY_OCR_LANGUAGE") || "de");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ocrTimeoutMs());
+    const imageContent = input.images.slice(0, 8).map((image) => ({
+      type: "image_url",
+      image_url: {
+        url: `data:${image.mimeType};base64,${image.bytes.toString("base64")}`,
+        detail: "auto"
+      }
+    }));
+
+    try {
+      const response = await fetch(this.endpoint, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: this.model,
+          temperature: 0,
+          messages: [
+            {
+              role: "system",
+              content: `Extrahiere sichtbaren Text aus Vorlesungsfolien. Antworte nur mit dem erkannten Text in ${language}.`
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Datei: ${input.fileName}. Extrahiere den gesamten fachlich relevanten Text, Formeln und Beschriftungen aus den Bildern.`
+                },
+                ...imageContent
+              ]
+            }
+          ]
+        }),
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => null) as OpenAICompatibleVisionResponse | null;
+      if (!response.ok) {
+        const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
+        throw new Error(`OCR vision provider request failed: ${message}`);
+      }
+
+      return {
+        text: normalizedOpenAICompatibleVisionText(payload),
+        confidence: 0.75,
+        model: this.model
+      };
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("OCR vision provider request timed out.");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function normalizedOpenAICompatibleVisionText(payload: OpenAICompatibleVisionResponse | null) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((item) => {
+      const record = recordFromUnknown(item);
+      return typeof record?.text === "string" ? record.text : "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 export function getOCRProvider(): OCRProvider {
   const selected = envValue("LEARNBUDDY_OCR_PROVIDER").toLowerCase();
+  if (selected === "openai-compatible" || selected === "openai-vision" || selected === "vision-chat") {
+    const endpoint = normalizeOpenAICompatibleVisionBaseUrl(envValue("LEARNBUDDY_OCR_BASE_URL"));
+    if (!endpoint) {
+      throw new Error("LEARNBUDDY_OCR_BASE_URL is required for LEARNBUDDY_OCR_PROVIDER=openai-compatible.");
+    }
+    const apiKey = envValue("LEARNBUDDY_OCR_API_KEY");
+    if (!apiKey) {
+      throw new Error("LEARNBUDDY_OCR_API_KEY is required for LEARNBUDDY_OCR_PROVIDER=openai-compatible.");
+    }
+
+    return new OpenAICompatibleVisionOCRProvider({
+      endpoint,
+      apiKey,
+      model: envValue("LEARNBUDDY_OCR_MODEL") || "gpt-4o-mini"
+    });
+  }
+
   if (selected === "http" || selected === "external" || selected === "vision" || selected === "ocr") {
     const endpoint = normalizeOCRBaseUrl(envValue("LEARNBUDDY_OCR_BASE_URL"));
     if (!endpoint) {

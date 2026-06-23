@@ -603,6 +603,10 @@ async function createFakeVercelCli(envContent: string) {
   const fakeRoot = path.join(process.cwd(), "output", `fake-vercel-${crypto.randomUUID()}`);
   const binDir = path.join(fakeRoot, "bin");
   const vercelPath = path.join(binDir, "vercel");
+  const envNames = envContent
+    .split(/\r?\n/)
+    .map((line) => line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/)?.[1])
+    .filter(Boolean);
   await mkdir(binDir, { recursive: true });
   await writeFile(vercelPath, `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -616,7 +620,11 @@ if (args[0] === "whoami") {
   process.exit(0);
 }
 if (args[0] === "env" && args[1] === "list") {
-  console.log(JSON.stringify({ envs: [] }));
+  const environment = args[2] || "";
+  const envs = environment === "production"
+    ? ${JSON.stringify(envNames)}.map((key) => ({ key }))
+    : [];
+  console.log(JSON.stringify({ envs }));
   process.exit(0);
 }
 if (args[0] === "env" && args[1] === "pull") {
