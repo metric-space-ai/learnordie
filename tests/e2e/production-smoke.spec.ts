@@ -3363,12 +3363,13 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   assertClean();
 });
 
-test("Motion-System folgt der LearnBuddy-Spec in Learn- und Studio-Kernflows", async ({ page }) => {
+test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows", async ({ page }) => {
   const assertClean = attachBrowserDiagnostics(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "An Vorlesung teilnehmen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
+  await expect(page.getByText("LERNEN IM NORDEN")).toBeVisible();
   await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer");
   await expect(page.getByText("Hydrodynamische Gleitlagerung")).toHaveCount(0);
   await page.goto("/l/gleitlagerung-demo");

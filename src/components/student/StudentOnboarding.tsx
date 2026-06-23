@@ -38,18 +38,23 @@ export function StudentOnboarding() {
   }
 
   return (
-    <main className="student-app lb-motion-root" aria-label="LearnBuddy einrichten">
+    <main className="student-app lb-motion-root" aria-label="learnordie.app einrichten">
       <header className="student-head lb-enter-row">
         <Link className="student-brand" href="/">
-          <span className="home-brand-mark" aria-hidden="true">LB</span>
-          <strong>LearnBuddy</strong>
+          <span className="home-brand-mark" aria-hidden="true">
+            <span className="brand-face alive" />
+            <span className="brand-face out" />
+          </span>
+          <strong className="brand-word" aria-label="learnordie.app">
+            <span>learn</span><span className="brand-or">or</span><span>die</span><span className="brand-dot">.app</span>
+          </strong>
         </Link>
       </header>
 
       <section className="student-emptystate lb-enter-panel">
-        <p className="eyebrow">Willkommen</p>
-        <h1>Wähle ein Pseudonym</h1>
-        <p>Du brauchst kein Konto. Wähle ein Pseudonym — bitte keinen Klarnamen — und du kannst sofort loslegen.</p>
+        <p className="eyebrow">Lernen im Norden</p>
+        <h1>Waehle ein Pseudonym</h1>
+        <p>Du brauchst kein Konto. Waehle ein Pseudonym, bitte keinen Klarnamen, und starte deine erste Lernrunde.</p>
         <form className="student-onboard-form" onSubmit={submit}>
           <label>
             Pseudonym

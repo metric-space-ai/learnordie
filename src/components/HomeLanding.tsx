@@ -38,19 +38,27 @@ export function HomeLanding() {
   }
 
   return (
-    <main className="home-app lb-motion-root" aria-label="LearnBuddy Start">
+    <main className="home-app lb-motion-root" aria-label="learnordie.app Start">
       <section className="home-app-stage lb-enter-stage">
         <header className="home-app-head lb-enter-row">
-          <span className="home-brand-mark" aria-hidden="true">LB</span>
-          <strong>LearnBuddy</strong>
+          <span className="home-brand-mark" aria-hidden="true">
+            <span className="brand-face alive" />
+            <span className="brand-face out" />
+          </span>
+          <span>
+            <strong className="brand-word" aria-label="learnordie.app">
+              <span>learn</span><span className="brand-or">or</span><span>die</span><span className="brand-dot">.app</span>
+            </strong>
+            <small>Lernen im Norden</small>
+          </span>
         </header>
 
         <div className="home-app-grid">
           <section className="home-workspace primary lb-enter-panel" aria-label="An Vorlesung teilnehmen">
             <div>
               <p className="eyebrow">Studierende</p>
-              <h1>An Vorlesung teilnehmen</h1>
-              <p>Gib den Code aus deiner Vorlesung ein. Du brauchst kein Konto — ein Pseudonym genügt.</p>
+              <h1>Vorlesungscode rein, Lernrunde starten</h1>
+              <p>Ein Link oder Code reicht. Waehle ein Pseudonym, sammle Punkte und sieh, wie nah du an der Pruefung bist.</p>
             </div>
             <form className="home-join-form" onSubmit={joinByCode}>
               <label>
@@ -66,7 +74,7 @@ export function HomeLanding() {
                 />
               </label>
               {error && <p className="form-error" role="alert">{error}</p>}
-              <button className="primary-button" type="submit">Beitreten</button>
+              <button className="primary-button" type="submit">Runde starten</button>
             </form>
           </section>
 
@@ -77,7 +85,7 @@ export function HomeLanding() {
                   <div>
                     <p className="eyebrow">Angemeldet als {profile.pseudonym}</p>
                     <h2>Meine Vorlesungen</h2>
-                    <p>Dein Dashboard mit Live-Terminen, Lernmodus und Prüfungsvorbereitung.</p>
+                    <p>Live-Termine, Lernmodus und dein Level bis zum Pruefungstag.</p>
                   </div>
                   <div className="home-lecturer-actions">
                     <a className="primary-button" href="/student">Zum Dashboard</a>
@@ -87,10 +95,10 @@ export function HomeLanding() {
                 <>
                   <div>
                     <p className="eyebrow">Meine Vorlesungen</p>
-                    <h2>Dein Lernstand</h2>
+                    <h2>Dein Levelstand</h2>
                     <p>
                       {checkedProfile
-                        ? "Sobald du einer Vorlesung beigetreten bist, erscheint hier dein persönliches Dashboard."
+                        ? "Sobald du einer Vorlesung beigetreten bist, erscheint hier dein persoenliches Dashboard."
                         : "Lade dein Profil …"}
                     </p>
                   </div>
@@ -104,8 +112,8 @@ export function HomeLanding() {
             <section className="home-workspace tertiary lb-enter-panel" aria-label="Dozentenbereich">
               <div>
                 <p className="eyebrow">Dozierende</p>
-                <h2>Vorlesungen erstellen</h2>
-                <p>Reihe planen, Code teilen, Live steuern und Lernmodus freigeben.</p>
+                <h2>Deck bauen, Code teilen</h2>
+                <p>Vorlesungsreihe planen, Live-Fragen steuern und Lernrunden bis zum Pruefungstag freigeben.</p>
               </div>
               <div className="home-lecturer-actions">
                 <a className="plain-button" href="/lecturer">Dozentenlogin</a>

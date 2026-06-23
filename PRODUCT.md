@@ -6,15 +6,15 @@ product
 
 ## Users
 
-LearnBuddy hat zwei Hauptrollen: Referenten, die technische Vorlesungen vorbereiten, live halten und nachbereiten, und Studierende, die mit einem einfachen Link live teilnehmen oder spaeter im Learn-Modus ueben. Referenten arbeiten in einem konzentrierten Studio-Kontext: Sie wollen Material, Folien, Fragen, Live-Modus, Evaluation und Analytics kontrollieren, ohne durch administrative Formularstrecken abgelenkt zu werden.
+learnordie.app hat zwei Hauptrollen: Referenten, die technische Vorlesungen vorbereiten, live halten und nachbereiten, und Studierende, die mit einem einfachen Link live teilnehmen oder spaeter im Learn-Modus ueben. Referenten arbeiten in einem konzentrierten Studio-Kontext: Sie wollen Material, Folien, Fragen, Live-Modus, Evaluation und Analytics kontrollieren, ohne durch administrative Formularstrecken abgelenkt zu werden.
 
 ## Product Purpose
 
-LearnBuddy augmentiert Vorlesungsfolien mit dynamisch erzeugten Multiple-Choice-Fragen, KI-Erklaerungen, anonymen Lernsignalen und exportierbaren Standalone-Inhalten. Erfolg bedeutet: Eine Vorlesung fuehlt sich fuer Referenten wie ein direkt steuerbares Foliendeck an und fuer Studierende wie eine niederschwellige, motivierende Lernumgebung.
+learnordie.app augmentiert Vorlesungsfolien mit dynamisch erzeugten Multiple-Choice-Fragen, KI-Erklaerungen, anonymen Lernsignalen und exportierbaren Standalone-Inhalten. Erfolg bedeutet: Eine Vorlesung fuehlt sich fuer Referenten wie ein direkt steuerbares Foliendeck an und fuer Studierende wie eine niederschwellige, motivierende Lernumgebung.
 
 ## Brand Personality
 
-Praezise, ruhig, werkzeugartig. Die Oberflaeche soll Vertrauen in technische Inhalte und Lernprozesse schaffen, nicht wie eine Marketingseite oder ein generisches Admin-Panel wirken.
+Praezise, ruhig, werkzeugartig. Die Oberflaeche soll Vertrauen in technische Inhalte und Lernprozesse schaffen, nicht wie eine Marketingseite oder ein generisches Admin-Panel wirken. Die offizielle Lesart der Marke ist "Lernen im Norden"; die Domain laesst zugleich ein leises, spielerisches "learn or die" erkennen, ohne diese Lesart explizit als Drohung oder Produktversprechen auszuspielen.
 
 ## Anti-references
 
