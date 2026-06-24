@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { allBlockTypesSlideDocument } from "@learnordie/slide-engine/fixtures";
+import {
+  renderStandaloneSlideDocumentHtml,
+  SLIDE_STANDALONE_RENDERER_VERSION
+} from "@learnordie/slide-engine/standalone";
 
 type ViewportCase = {
   name: string;
@@ -394,5 +399,77 @@ test.describe("SlideDocument renderer QA harness", () => {
 
     const missingTypes = expectedSlideDocumentBlockTypes.filter((type) => !renderedTypes.has(type));
     expect(missingTypes, `Missing block renderers: ${missingTypes.join(", ")}`).toEqual([]);
+  });
+
+  test("standalone SlideDocument export renders offline without external runtime requests", async ({ page }) => {
+    const assertClean = attachSlideEngineConsoleGuard(page);
+    const externalRequests: string[] = [];
+    const dataJson = JSON.stringify({
+      export: {
+        offline: { selfContained: true, externalAssets: 0 },
+        slideEngine: {
+          renderer: SLIDE_STANDALONE_RENDERER_VERSION,
+          slideDocumentSchemaVersion: allBlockTypesSlideDocument.schemaVersion,
+          slideDocumentId: allBlockTypesSlideDocument.id
+        }
+      },
+      lecture: {
+        slideDocument: allBlockTypesSlideDocument
+      }
+    });
+    const manifestJson = JSON.stringify({
+      assets: [
+        { path: "assets/styles.css", sha256: "fixture-style-sha" },
+        { path: "assets/standalone.js", sha256: "fixture-script-sha" },
+        { path: "learnbuddy-data.json", sha256: "fixture-data-sha" }
+      ],
+      externalAssetCount: 0,
+      selfContained: true
+    });
+    const html = renderStandaloneSlideDocumentHtml({
+      dataJson,
+      document: allBlockTypesSlideDocument,
+      manifestJson,
+      metadata: {
+        version: "standalone-html-test",
+        exportedAt: "2026-06-24T00:00:00.000Z",
+        title: "Slide Engine Offline QA",
+        seriesTitle: "learnordie QA",
+        payloadSha256: "fixture-payload-sha",
+        manifestSha256: "fixture-manifest-sha",
+        selfContained: true,
+        externalAssetCount: 0
+      },
+      questions: [
+        {
+          level: "2.0",
+          text: "Welche Aussage beschreibt den Vorteil eines strukturierten SlideDocument?",
+          explanation: "Strukturierte Blöcke bleiben validierbar, adressierbar und reparierbar.",
+          answers: [
+            { key: "A", text: "Blöcke können gezielt validiert und repariert werden.", correct: true },
+            { key: "B", text: "Freies HTML wird dadurch ungeprüft gespeichert.", correct: false },
+            { key: "C", text: "Quellenbezüge werden dadurch unnötig.", correct: false },
+            { key: "D", text: "Mobile-Reflow wird dadurch abgeschaltet.", correct: false }
+          ]
+        }
+      ]
+    });
+
+    await page.route("**/*", async (route) => {
+      externalRequests.push(route.request().url());
+      await route.abort();
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setContent(html, { waitUntil: "load" });
+
+    await expect(page.locator(`[data-slide-engine="${SLIDE_STANDALONE_RENDERER_VERSION}"]`)).toBeVisible();
+    await expect(page.locator("[data-slide-document-version]")).toHaveAttribute("data-slide-document-version", "learnordie.slide.v1");
+    await expect(page.locator("[data-block-type='chart']")).toBeVisible();
+    await expect(page.locator("[data-block-type='quizAnchor']")).toBeVisible();
+    await expect(page.getByText("assets/styles.css · fixture-style-sha")).toBeVisible();
+    await page.getByRole("button", { name: /Antwort A:/ }).click();
+    await expect(page.getByText("Richtig.")).toBeVisible();
+    expect(externalRequests).toEqual([]);
+    assertClean();
   });
 });
