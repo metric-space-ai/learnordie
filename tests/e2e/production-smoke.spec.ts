@@ -2643,6 +2643,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
     rootDocument?: string;
     selfContained?: boolean;
     externalAssetCount?: number;
+    slideEngine?: { renderer?: string; slideDocumentSchemaVersion?: string; slideDocumentId?: string };
     integrity?: { payloadSha256?: string };
     audioSegments?: Array<{ path?: string; sha256?: string; bytes?: number }>;
     assets?: Array<{ path?: string; role?: string; bytes?: number; sha256?: string }>;
@@ -2651,6 +2652,11 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(manifest.rootDocument).toBe("index.html");
   expect(manifest.selfContained).toBe(true);
   expect(manifest.externalAssetCount).toBe(0);
+  expect(manifest.slideEngine).toMatchObject({
+    renderer: "learnordie-slide-standalone-v1",
+    slideDocumentSchemaVersion: "learnordie.slide.v1",
+    slideDocumentId: "standalone-gleitlagerung-demo"
+  });
 
   const assetPaths = new Set((manifest.assets ?? []).map((asset) => asset.path));
   for (const requiredPath of [
@@ -2683,18 +2689,27 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   const dataBytes = entries.get("learnbuddy-data.json");
   if (!dataBytes) throw new Error("ZIP export is missing learnbuddy-data.json.");
   const data = JSON.parse(dataBytes.toString("utf8")) as {
-    export?: { payloadSha256?: string; offline?: { selfContained?: boolean; externalAssets?: number } };
-    lecture?: { slides?: unknown[]; questions?: unknown[] };
+    export?: {
+      payloadSha256?: string;
+      offline?: { selfContained?: boolean; externalAssets?: number };
+      slideEngine?: { renderer?: string; slideDocumentSchemaVersion?: string; slideDocumentId?: string };
+    };
+    lecture?: { slideDocument?: { schemaVersion?: string; slides?: unknown[] }; slides?: unknown[]; questions?: unknown[] };
     manifest?: unknown;
   };
   expect(data.manifest).toBeUndefined();
   expect(data.export?.payloadSha256).toBe(manifest.integrity?.payloadSha256);
   expect(data.export?.offline).toMatchObject({ selfContained: true, externalAssets: 0 });
+  expect(data.export?.slideEngine).toMatchObject(manifest.slideEngine ?? {});
+  expect(data.lecture?.slideDocument?.schemaVersion).toBe("learnordie.slide.v1");
+  expect(data.lecture?.slideDocument?.slides?.length).toBeGreaterThan(0);
   expect(data.lecture?.slides?.length).toBeGreaterThan(0);
   expect(data.lecture?.questions?.length).toBeGreaterThan(0);
 
   const html = entries.get("index.html")?.toString("utf8") ?? "";
   expect(html).toContain('id="learnbuddy-data"');
+  expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v1"');
+  expect(html).toContain('data-slide-document-version="learnordie.slide.v1"');
   expect(html).toContain("Self-contained: ja, externe Assets: 0");
   expect(html).toContain("data:audio/wav;base64,");
 });

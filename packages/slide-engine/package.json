@@ -19,6 +19,10 @@
     "./schema": {
       "types": "./src/schema.ts",
       "default": "./src/schema.ts"
+    },
+    "./standalone": {
+      "types": "./src/standalone.ts",
+      "default": "./src/standalone.ts"
     }
   },
   "sideEffects": [

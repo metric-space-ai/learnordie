@@ -14,6 +14,7 @@ The Next.js app consumes this package through the `@learnordie/slide-engine` wor
 - Every copied upstream path is tracked in `NOTICE.md` and `vendor/reveal-core/UPSTREAM.md`.
 - No unsanitized free HTML becomes the slide source of truth.
 - Browser QA must cover desktop, tablet and mobile before replacing `SlideCanvas`.
+- Standalone exports must be rendered from `SlideDocument` through the package exporter, not from app-local legacy HTML.
 
 ## Vendor Commands
 
@@ -21,3 +22,7 @@ The Next.js app consumes this package through the `@learnordie/slide-engine` wor
 - `npm run check:slide-engine-vendor` verifies the upstream commit, copied paths and excluded demo/plugin/theme paths.
 
 The vendored upstream source is treated as third-party reference/runtime material. Product code should use the typed learnordie exports from this package instead of importing arbitrary files from `vendor/`.
+
+## Standalone Runtime
+
+`src/standalone.ts` renders a validated `SlideDocument` into self-contained HTML for long-term offline use. The exported document embeds the slide data JSON, manifest JSON, package CSS, package interaction script, optional inline audio sources and quiz feedback logic.

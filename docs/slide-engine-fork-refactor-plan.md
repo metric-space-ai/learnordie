@@ -20,6 +20,9 @@ Aktueller Umsetzungsstand:
 - `/slide-engine/qa/blocks` rendert eine All-Block-Fixture, damit neue Agenten und CI-Gates jeden erlaubten Blocktyp sichtbar prüfen können.
 - `npm run test:slide-engine` startet einen lokalen Next-Server und prüft die Fixture über Desktop, Laptop, Tablet, iPad Portrait und Mobile.
 - `scripts/live-smoke.mjs` und die Production-E2E-Smokes prüfen `data-slide-engine="v1"` in den realen Live-/Learn-Flows.
+- `packages/slide-engine/src/standalone.ts` rendert `SlideDocument` als selbstenthaltenes Standalone-HTML mit eingebetteten Daten, Manifest, Offline-Interaktionen und Quizfeedback.
+- `/api/lecture/[token]/export` migriert Legacy-Lectures vor dem Export in ein validiertes `SlideDocument`; ZIP und HTML enthalten `data-slide-engine="learnordie-slide-standalone-v1"` und `learnordie.slide.v1` im Manifest.
+- `npm run test:slide-engine` enthält zusätzlich einen browserbasierten Offline-Test, der Standalone-HTML ohne externe Runtime-Requests lädt.
 
 ## 0. Entscheidung
 
