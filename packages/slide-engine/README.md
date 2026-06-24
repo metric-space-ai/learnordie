@@ -35,4 +35,4 @@ Agents should use this API instead of editing rendered HTML or app-local legacy 
 
 ## Editor QA
 
-`DeckRenderer` and `SlideRenderer` expose optional block-selection hooks for editor surfaces. The app-level QA route `/slide-engine/qa/editor` uses those hooks together with `applySlideDocumentEdits` to prove text edits, layout changes, figure asset replacement, formula edits, quiz-anchor updates and invalid-patch repair feedback in a real browser.
+`DeckRenderer` and `SlideRenderer` expose optional block-selection hooks for editor surfaces. The app-level QA route `/slide-engine/qa/editor` uses those hooks together with `applySlideDocumentEdits` to prove text edits, layout changes, figure asset replacement, formula edits, table cell/row/column edits, quiz-anchor updates and invalid-patch repair feedback in a real browser.
