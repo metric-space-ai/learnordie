@@ -1,7 +1,10 @@
 {
-  "name": "learn-buddy",
+  "name": "learnordie",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -22,7 +25,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test:e2e": "npm run build && playwright test",
-    "test:e2e:local": "playwright test --config playwright.local.config.ts"
+    "test:e2e:local": "playwright test --config playwright.local.config.ts",
+    "test:slide-engine": "playwright test --config playwright.slide-engine.config.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.4.0",
