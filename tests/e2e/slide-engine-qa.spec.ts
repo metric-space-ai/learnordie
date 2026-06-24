@@ -8,6 +8,11 @@ import {
   summarizeSlideDocumentForEditing
 } from "@learnordie/slide-engine/editing";
 import {
+  legacySlidesToSlideDocument,
+  slideDocumentToLegacySlides,
+  type LegacySlide
+} from "@learnordie/slide-engine/legacy";
+import {
   renderStandaloneSlideDocumentHtml,
   SLIDE_STANDALONE_RENDERER_VERSION
 } from "@learnordie/slide-engine/standalone";
@@ -595,6 +600,54 @@ test.describe("SlideDocument renderer QA harness", () => {
     if (invalidDocument.ok) throw new Error("Expected invalid document edit to fail validation.");
     expect(invalidDocument.appliedOperations).toEqual(["agent-break-formula"]);
     expect(invalidDocument.issues.some((issue) => issue.code === "formula.source_ambiguity" && issue.blockId === "media-formula")).toBe(true);
+  });
+
+  test("legacy lectures can round-trip through SlideDocument edit operations", async () => {
+    const legacySlides: LegacySlide[] = [
+      {
+        id: "legacy-slide-1",
+        eyebrow: "Folie 7",
+        title: "Hydrodynamische Gleitlagerung",
+        topic: "Stribeck-Kurve",
+        copy: ["Keilspalt baut Druck auf.", "Mischreibung bleibt kritisch."],
+        diagram: "bearing"
+      }
+    ];
+    const document = legacySlidesToSlideDocument(legacySlides, { id: "legacy-roundtrip-test" });
+    const result = applySlideDocumentEdits(document, [
+      {
+        operationId: "roundtrip-title",
+        kind: "updateSlide",
+        slideId: "legacy-slide-1",
+        patch: { title: "Hydrodynamische Gleitlagerung im Engine-Editor" }
+      },
+      {
+        operationId: "roundtrip-copy",
+        kind: "patchBlock",
+        slideId: "legacy-slide-1",
+        blockId: "legacy-slide-1-copy-1",
+        patch: { text: "Der Keilspalt baut im Betrieb einen tragenden Druck auf." }
+      },
+      {
+        operationId: "roundtrip-topic",
+        kind: "patchBlock",
+        slideId: "legacy-slide-1",
+        blockId: "legacy-slide-1-diagram",
+        patch: { caption: "Schmierfilmaufbau" }
+      }
+    ]);
+
+    expect(result.ok, result.ok ? "" : JSON.stringify(result.issues, null, 2)).toBe(true);
+    if (!result.ok) throw new Error("Expected legacy round-trip edit to be valid.");
+    const [roundTripped] = slideDocumentToLegacySlides(result.document, legacySlides);
+    expect(roundTripped).toMatchObject({
+      id: "legacy-slide-1",
+      eyebrow: "Folie 7",
+      title: "Hydrodynamische Gleitlagerung im Engine-Editor",
+      topic: "Schmierfilmaufbau",
+      diagram: "bearing"
+    });
+    expect(roundTripped.copy[0]).toBe("Der Keilspalt baut im Betrieb einen tragenden Druck auf.");
   });
 
   test("SlideDocument editor QA patches visible blocks through stable ids", async ({ page }) => {

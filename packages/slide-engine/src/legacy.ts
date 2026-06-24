@@ -134,8 +134,46 @@ export function legacySlidesToSlideDocument(
   return validation.document;
 }
 
+export function slideDocumentToLegacySlides(
+  document: SlideDocument,
+  fallbackSlides: LegacySlide[] = []
+): LegacySlide[] {
+  return document.slides.map((slide, index) => {
+    const fallback = fallbackSlides.find((item) => item.id === slide.id) ?? fallbackSlides[index];
+    const figureBlock = slide.blocks.find((block) => block.type === "figure");
+    const copy = slide.blocks
+      .filter((block) => block.type === "paragraph")
+      .map((block) => block.text.trim())
+      .filter(Boolean)
+      .slice(0, 4);
+
+    return {
+      id: slide.id,
+      eyebrow: fallback?.eyebrow?.trim() || legacyEyebrowFromSlide(slide, index),
+      title: slide.title.trim() || fallback?.title || `Folie ${index + 1}`,
+      topic: figureBlock?.caption?.trim() || fallback?.topic || slide.title.trim() || `Folie ${index + 1}`,
+      copy: copy.length > 0 ? copy : fallback?.copy ?? [" "],
+      diagram: legacyDiagramFromSlideNode(slide, fallback?.diagram ?? "bearing")
+    };
+  });
+}
+
 export function legacyDiagramAssetId(diagram: LegacyDiagram): string {
   return `legacy-diagram-${diagram}`;
+}
+
+function legacyEyebrowFromSlide(slide: SlideNode, index: number) {
+  const legacySource = slide.sourceRefs.find((source) => source.sourceType === "legacy" && source.locator);
+  return legacySource?.locator?.trim() || `Folie ${index + 1}`;
+}
+
+function legacyDiagramFromSlideNode(slide: SlideNode, fallback: LegacyDiagram): LegacyDiagram {
+  const figureBlock = slide.blocks.find((block) => block.type === "figure");
+  if (!figureBlock) return fallback;
+  if (figureBlock.assetId === legacyDiagramAssetId("formula")) return "formula";
+  if (figureBlock.assetId === legacyDiagramAssetId("ramp")) return "ramp";
+  if (figureBlock.assetId === legacyDiagramAssetId("bearing")) return "bearing";
+  return fallback;
 }
 
 function legacyDiagramToAsset(diagram: LegacyDiagram): SlideAssetRef {

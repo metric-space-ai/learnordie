@@ -7,7 +7,7 @@ Dieses Dokument ist der verbindliche Plan, bevor reveal.js geforkt, reduziert un
 Aktueller Umsetzungsstand:
 
 - `packages/slide-engine/src/schema.ts` definiert `SlideDocument` v1 mit Zod-Validation und Repair-Issues.
-- `packages/slide-engine/src/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument`.
+- `packages/slide-engine/src/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument` und kann validierte Engine-Dokumente wieder in das aktuelle Legacy-`Slide[]`-Modell zurückführen.
 - `packages/slide-engine/src/components/*` enthält den typisierten Renderer für kontrollierte Blocks.
 - Der Renderer deckt alle `SlideDocument`-v1-Blocktypen ab: Text, Listen, Definitionen, Callouts, Figuren, Formeln, Tabellen, Charts, Prozesse, Vergleiche, Code, Zitate, Quizanker und Spacer.
 - `src/components/SlideEngineCanvas.tsx` rendert Legacy-Slides über die neue Engine.
@@ -26,6 +26,7 @@ Aktueller Umsetzungsstand:
 - `packages/slide-engine/src/editing.ts` stellt den agentenfähigen Editiervertrag bereit: strukturierte Batches ändern Dokumente, Slides, Blöcke, Assets, Speaker Notes und Quizanker über stabile IDs und werden danach vollständig gegen das `SlideDocument`-Schema validiert.
 - `DeckRenderer`/`SlideRenderer` besitzen optionale Block-Selection-Hooks, damit Editor und Agent-QA sichtbare Blöcke über dieselben stabilen `blockId`s adressieren.
 - `/slide-engine/qa/editor` ist ein browserbasierter SlideDocument-Editor-Harness für Text-, Layout-, Bildasset-, Formel-, Tabellen- und Quizanker-Änderungen inklusive Repair-Fehleranzeige und Mobile-Overflow-Gate.
+- Das produktive Dozentenstudio enthält einen ersten `SlideDocument`-Engine-Editor, der Legacy-Lectures über stabile Engine-Block-IDs bearbeitet, zurück in `Slide[]` synchronisiert und über die bestehende Lecture-Speicherung persistiert.
 
 ## 0. Entscheidung
 
@@ -881,7 +882,7 @@ Deliverables:
 - Formel-/Tabelleneditor.
 - Quizanker-Editor.
 
-Status 2026-06-24: Block-Auswahl, Textbearbeitung, Layoutwechsel, Bildasset-Austausch, Formeledit, strukturierte Tabellenzellen-/Zeilen-/Spaltenbearbeitung, Quizanker-Setzen und Repair-Fehleranzeige sind als Engine-QA-Harness unter `/slide-engine/qa/editor` umgesetzt und mit Playwright abgedeckt. Offen bleibt die Übernahme in den produktiven Studio-Editor.
+Status 2026-06-24: Block-Auswahl, Textbearbeitung, Layoutwechsel, Bildasset-Austausch, Formeledit, strukturierte Tabellenzellen-/Zeilen-/Spaltenbearbeitung, Quizanker-Setzen und Repair-Fehleranzeige sind als Engine-QA-Harness unter `/slide-engine/qa/editor` umgesetzt und mit Playwright abgedeckt. Zusätzlich ist ein erster produktiver, legacy-kompatibler Studio-Editor im Dozentenstudio umgesetzt: Er rendert die aktuelle Lecture als `SlideDocument`, editiert ausgewählte Engine-Blöcke und synchronisiert die Änderung zurück in das bestehende `Slide[]`-Datenmodell. Offen bleibt die vollständige native `SlideDocument`-Persistenz für importierte Assets, Tabellen, Formeln und agentisch erzeugte Layouts.
 
 ### Track G: Export & Compatibility
 

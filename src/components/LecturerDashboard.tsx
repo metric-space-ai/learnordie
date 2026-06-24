@@ -13,6 +13,7 @@ import {
 import { animateStudioSlideSharedElement } from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
+import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
 import { Diagram } from "./Diagram";
 import { Presence } from "./Presence";
 import type { PresenceState } from "./Presence";
@@ -446,6 +447,7 @@ export function LecturerDashboard({
   const sourceFileRef = useRef<File | null>(null);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [engineEditorOpen, setEngineEditorOpen] = useState(false);
   const [reviewFocusId, setReviewFocusId] = useState("");
   const [reviewLevel, setReviewLevel] = useState<QuestionLevel>("2.0");
   const [studioSlideIndex, setStudioSlideIndex] = useState(0);
@@ -520,6 +522,7 @@ export function LecturerDashboard({
     sourceFileRef.current = null;
     setCommandMenuOpen(false);
     setToolMenuOpen(false);
+    setEngineEditorOpen(false);
     setShowCreateForm(false);
     setAssistantError("");
   }, [initialTool, selectedLectureId]);
@@ -911,6 +914,13 @@ export function LecturerDashboard({
     updateSlideDraft(slideId, (slide) => ({
       ...slide,
       copy: slide.copy.length <= 1 ? slide.copy : slide.copy.filter((_, index) => index !== lineIndex)
+    }));
+  }
+
+  function updateSlidesFromEngine(slides: Slide[]) {
+    setEdit((current) => ({
+      ...current,
+      slides
     }));
   }
 
@@ -2677,6 +2687,14 @@ export function LecturerDashboard({
                   <Presence show={workspaceTool === "analytics"}>
                     {(motionState) => renderSlideAnalyticsOverlay(motionState)}
                   </Presence>
+                  {engineEditorOpen && (
+                    <StudioSlideDocumentEditor
+                      currentIndex={activeStudioSlideIndex}
+                      seriesTitle={edit.seriesTitle}
+                      slides={studioSlides}
+                      onSlidesChange={updateSlidesFromEngine}
+                    />
+                  )}
                   {renderStudioHotspots()}
                 </>
               ) : (
@@ -2708,6 +2726,14 @@ export function LecturerDashboard({
                 {renderPlanSummaryButton()}
                 {renderPlanEditor()}
                 {renderSlideToolMenu()}
+                <button
+                  aria-pressed={engineEditorOpen}
+                  className="plain-button studio-engine-toggle"
+                  type="button"
+                  onClick={() => setEngineEditorOpen((open) => !open)}
+                >
+                  Engine
+                </button>
                 <button className="primary-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
                 {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
               </div>
