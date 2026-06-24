@@ -1,5 +1,6 @@
 export * from "./schema";
 export * from "./legacy";
+export * from "./editing";
 export { BlockRenderer } from "./components/BlockRenderer";
 export type { BlockRendererProps } from "./components/BlockRenderer";
 export { DeckRenderer } from "./components/DeckRenderer";

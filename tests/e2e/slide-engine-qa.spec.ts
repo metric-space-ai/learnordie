@@ -3,6 +3,11 @@ import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { allBlockTypesSlideDocument } from "@learnordie/slide-engine/fixtures";
 import {
+  AGENTIC_SLIDE_EDIT_CONTRACT,
+  applySlideDocumentEdits,
+  summarizeSlideDocumentForEditing
+} from "@learnordie/slide-engine/editing";
+import {
   renderStandaloneSlideDocumentHtml,
   SLIDE_STANDALONE_RENDERER_VERSION
 } from "@learnordie/slide-engine/standalone";
@@ -471,5 +476,124 @@ test.describe("SlideDocument renderer QA harness", () => {
     await expect(page.getByText("Richtig.")).toBeVisible();
     expect(externalRequests).toEqual([]);
     assertClean();
+  });
+
+  test("agentic SlideDocument edit batches stay validated and target stable ids", async () => {
+    const beforeSummary = summarizeSlideDocumentForEditing(allBlockTypesSlideDocument);
+    const result = applySlideDocumentEdits(allBlockTypesSlideDocument, [
+      {
+        operationId: "agent-update-slide-title",
+        kind: "updateSlide",
+        slideId: "blocks-text",
+        patch: {
+          title: "Agentisch editierte Struktur",
+          layout: "technical_one_column"
+        },
+        context: { actor: "agent", reason: "Titel und Layout anpassen" }
+      },
+      {
+        operationId: "agent-patch-paragraph",
+        kind: "patchBlock",
+        slideId: "blocks-text",
+        blockId: "text-paragraph",
+        patch: {
+          text: "Agenten ändern gezielt einzelne Blöcke und behalten stabile IDs für QA und Repair."
+        },
+        context: { actor: "agent", reason: "Präzisere Aussage" }
+      },
+      {
+        operationId: "agent-insert-callout",
+        kind: "insertBlock",
+        slideId: "blocks-text",
+        afterBlockId: "text-paragraph",
+        block: {
+          id: "text-agentic-callout",
+          type: "callout",
+          tone: "tip",
+          title: "Agentenregel",
+          text: "Ändere strukturierte Blöcke, nicht DOM-Strings."
+        },
+        context: { actor: "agent", source: "repair-loop" }
+      },
+      {
+        operationId: "agent-note",
+        kind: "upsertSpeakerNote",
+        slideId: "blocks-text",
+        note: {
+          id: "note-agentic-editing",
+          kind: "talkingPoint",
+          blockId: "text-agentic-callout",
+          text: "Diese Notiz zeigt, dass Editor und Agent dieselben Block-IDs verwenden."
+        }
+      },
+      {
+        operationId: "agent-quiz-anchor",
+        kind: "upsertQuizAnchor",
+        slideId: "blocks-text",
+        anchor: {
+          id: "anchor-agentic-editing",
+          level: "2.0",
+          blockId: "text-agentic-callout",
+          label: "Agentische Editierung"
+        }
+      }
+    ]);
+
+    expect(result.ok, result.ok ? "" : JSON.stringify(result.issues, null, 2)).toBe(true);
+    if (!result.ok) throw new Error("Expected agentic edit batch to be valid.");
+    expect(result.appliedOperations).toEqual([
+      "agent-update-slide-title",
+      "agent-patch-paragraph",
+      "agent-insert-callout",
+      "agent-note",
+      "agent-quiz-anchor"
+    ]);
+    const afterSummary = summarizeSlideDocumentForEditing(result.document);
+    expect(afterSummary.blockCount).toBe(beforeSummary.blockCount + 1);
+    expect(afterSummary.quizAnchorCount).toBe(beforeSummary.quizAnchorCount + 1);
+    expect(afterSummary.speakerNoteCount).toBe(beforeSummary.speakerNoteCount + 1);
+    const editedSlide = result.document.slides.find((slide) => slide.id === "blocks-text");
+    expect(editedSlide?.title).toBe("Agentisch editierte Struktur");
+    expect(editedSlide?.blocks.some((block) => block.id === "text-agentic-callout")).toBe(true);
+    expect(AGENTIC_SLIDE_EDIT_CONTRACT.operationKinds).toContain("patchBlock");
+    expect(AGENTIC_SLIDE_EDIT_CONTRACT.stableTargets).toContain("blockId");
+  });
+
+  test("agentic SlideDocument edits return repair issues for invalid operations", async () => {
+    const missingTarget = applySlideDocumentEdits(allBlockTypesSlideDocument, [
+      {
+        operationId: "agent-missing-block",
+        kind: "patchBlock",
+        slideId: "blocks-text",
+        blockId: "does-not-exist",
+        patch: { text: "Kann nicht angewendet werden." }
+      }
+    ]);
+
+    expect(missingTarget.ok).toBe(false);
+    if (missingTarget.ok) throw new Error("Expected missing target edit to be rejected.");
+    expect(missingTarget.rejectedOperation).toBe("agent-missing-block");
+    expect(missingTarget.issues[0]).toMatchObject({
+      code: "edit.block_missing",
+      slideId: "blocks-text",
+      blockId: "does-not-exist"
+    });
+
+    const invalidDocument = applySlideDocumentEdits(allBlockTypesSlideDocument, [
+      {
+        operationId: "agent-break-formula",
+        kind: "patchBlock",
+        slideId: "blocks-media",
+        blockId: "media-formula",
+        patch: {
+          mathMl: "<math><mi>S</mi></math>"
+        }
+      }
+    ]);
+
+    expect(invalidDocument.ok).toBe(false);
+    if (invalidDocument.ok) throw new Error("Expected invalid document edit to fail validation.");
+    expect(invalidDocument.appliedOperations).toEqual(["agent-break-formula"]);
+    expect(invalidDocument.issues.some((issue) => issue.code === "formula.source_ambiguity" && issue.blockId === "media-formula")).toBe(true);
   });
 });

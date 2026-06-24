@@ -12,6 +12,10 @@
       "types": "./src/components/index.ts",
       "default": "./src/components/index.ts"
     },
+    "./editing": {
+      "types": "./src/editing.ts",
+      "default": "./src/editing.ts"
+    },
     "./fixtures": {
       "types": "./src/fixtures.ts",
       "default": "./src/fixtures.ts"

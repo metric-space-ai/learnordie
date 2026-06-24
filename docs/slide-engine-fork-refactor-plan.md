@@ -23,6 +23,7 @@ Aktueller Umsetzungsstand:
 - `packages/slide-engine/src/standalone.ts` rendert `SlideDocument` als selbstenthaltenes Standalone-HTML mit eingebetteten Daten, Manifest, Offline-Interaktionen und Quizfeedback.
 - `/api/lecture/[token]/export` migriert Legacy-Lectures vor dem Export in ein validiertes `SlideDocument`; ZIP und HTML enthalten `data-slide-engine="learnordie-slide-standalone-v1"` und `learnordie.slide.v1` im Manifest.
 - `npm run test:slide-engine` enthält zusätzlich einen browserbasierten Offline-Test, der Standalone-HTML ohne externe Runtime-Requests lädt.
+- `packages/slide-engine/src/editing.ts` stellt den agentenfähigen Editiervertrag bereit: strukturierte Batches ändern Dokumente, Slides, Blöcke, Assets, Speaker Notes und Quizanker über stabile IDs und werden danach vollständig gegen das `SlideDocument`-Schema validiert.
 
 ## 0. Entscheidung
 
@@ -541,10 +542,6 @@ learnordie/
     app/
     components/
     lib/
-    slide-engine/
-      schema.ts
-      legacy.ts
-      index.ts
   packages/
     slide-engine/
       package.json
@@ -552,21 +549,16 @@ learnordie/
       LICENSE
       NOTICE
       src/
-        reveal-core/
-          navigation/
-          layout/
-          keyboard/
-          touch/
-          fragments/
-          notes/
-          print/
-        learnordie/
-          deck.ts
-          slide-document.ts
-          renderer.ts
-          events.ts
-          standalone.ts
-          qa-hooks.ts
+        schema.ts
+        legacy.ts
+        editing.ts
+        fixtures.ts
+        standalone.ts
+        index.ts
+        components/
+          BlockRenderer.tsx
+          DeckRenderer.tsx
+          SlideRenderer.tsx
       styles/
         core.css
         themes/
@@ -607,21 +599,16 @@ Langfristige Grenze:
 ```txt
 packages/slide-engine/
   src/
-    reveal-core/
-      navigation/
-      layout/
-      keyboard/
-      touch/
-      fragments/
-      notes/
-      print/
-    learnordie/
-      deck.ts
-      slide-document.ts
-      renderer.ts
-      events.ts
-      standalone.ts
-      qa-hooks.ts
+    schema.ts
+    legacy.ts
+    editing.ts
+    fixtures.ts
+    standalone.ts
+    index.ts
+    components/
+      BlockRenderer.tsx
+      DeckRenderer.tsx
+      SlideRenderer.tsx
   styles/
     core.css
     themes/
