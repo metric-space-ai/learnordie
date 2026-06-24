@@ -32,3 +32,7 @@ The vendored upstream source is treated as third-party reference/runtime materia
 `src/editing.ts` exposes the structured edit contract for agents and the future WYSIWYG editor. It applies batches of operations against stable `slideId`, `blockId`, `assetId`, `noteId` and `anchorId` targets, then validates the full `SlideDocument` before returning an accepted document.
 
 Agents should use this API instead of editing rendered HTML or app-local legacy slide data. Failed operations return repair-oriented issues so the generation loop can retry only the affected slide or block.
+
+## Editor QA
+
+`DeckRenderer` and `SlideRenderer` expose optional block-selection hooks for editor surfaces. The app-level QA route `/slide-engine/qa/editor` uses those hooks together with `applySlideDocumentEdits` to prove text edits, layout changes, figure asset replacement, formula edits, quiz-anchor updates and invalid-patch repair feedback in a real browser.

@@ -5,6 +5,7 @@ import type {
   SlideAssetCollection,
   SlideAssetRenderer,
   SlideAssetUrlResolver,
+  SlideBlockSelection,
   SlideDocument
 } from "./types";
 
@@ -15,6 +16,8 @@ export type DeckRendererProps = {
   resolveAssetUrl?: SlideAssetUrlResolver;
   currentSlideId?: string;
   renderMode?: "all" | "current";
+  selectedBlockId?: string;
+  onBlockSelect?: (selection: SlideBlockSelection) => void;
   className?: string;
   style?: CSSProperties;
 };
@@ -46,6 +49,8 @@ export function DeckRenderer({
   renderAsset,
   resolveAssetUrl,
   renderMode,
+  selectedBlockId,
+  onBlockSelect,
   style
 }: DeckRendererProps) {
   const activeRenderMode = renderMode ?? (currentSlideId ? "current" : "all");
@@ -87,10 +92,12 @@ export function DeckRenderer({
             key={slide.id}
             renderAsset={renderAsset}
             resolveAssetUrl={resolveAssetUrl}
+            selectedBlockId={selectedBlockId}
             showSlideNumber={showSlideNumber}
             slide={slide}
             slideCount={document.slides.length}
             slideNumber={slideIndex + 1}
+            onBlockSelect={onBlockSelect}
           />
         );
       })}

@@ -596,4 +596,55 @@ test.describe("SlideDocument renderer QA harness", () => {
     expect(invalidDocument.appliedOperations).toEqual(["agent-break-formula"]);
     expect(invalidDocument.issues.some((issue) => issue.code === "formula.source_ambiguity" && issue.blockId === "media-formula")).toBe(true);
   });
+
+  test("SlideDocument editor QA patches visible blocks through stable ids", async ({ page }) => {
+    const assertClean = attachSlideEngineConsoleGuard(page);
+    const replacementText = "Agentische und manuelle Edits laufen über dieselbe validierte Block-ID.";
+
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.goto("/slide-engine/qa/editor?slide=blocks-media", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("load");
+
+    await expect(page.locator("[data-slide-engine-qa='editor']")).toBeVisible();
+    await page.getByLabel("Block media-paragraph bearbeiten").click();
+    await expect(page.locator("[aria-label='SlideDocument Editor']")).toHaveAttribute("data-selected-block-id", "media-paragraph");
+    await page.getByLabel("Blockinhalt bearbeiten").fill(replacementText);
+    await page.getByRole("button", { name: "Block speichern" }).click();
+    await expect(page.getByText("Block gespeichert und validiert.")).toBeVisible();
+    await expect(page.locator("p[data-block-id='media-paragraph']")).toHaveText(replacementText);
+
+    await page.getByLabel("Layout wählen").selectOption("case_study");
+    await expect(page.locator(".ld-slide-renderer[data-slide-id='blocks-media']")).toHaveAttribute("data-layout", "case_study");
+
+    await page.getByRole("button", { name: "Quizanker setzen" }).click();
+    await expect(page.locator("[aria-label='SlideDocument Editor']")).toHaveAttribute("data-quiz-anchor-count", "1");
+
+    await page.getByRole("button", { name: "Repair-Fehler testen" }).click();
+    await expect(page.locator("p[role='alert']")).toContainText("schema.");
+    await expect(page.locator("[aria-label='SlideDocument Editor']")).toHaveAttribute("data-edit-status", "invalid");
+    assertClean();
+  });
+
+  test("SlideDocument editor QA edits figure assets and formula blocks without mobile overflow", async ({ page }) => {
+    const assertClean = attachSlideEngineConsoleGuard(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/slide-engine/qa/editor?slide=blocks-media", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("load");
+
+    await page.getByLabel("Block media-figure bearbeiten").click();
+    await page.getByRole("button", { name: "Bildasset ersetzen" }).click();
+    await expect(page.locator("figure[data-block-id='media-figure'] figcaption")).toHaveText("Asset über den SlideDocument-Editor ersetzt");
+
+    await page.getByLabel("Block media-formula bearbeiten").click();
+    await page.getByLabel("Blockinhalt bearbeiten").fill("h_0 = c + e \\cdot \\cos(\\varphi)");
+    await page.getByRole("button", { name: "Block speichern" }).click();
+    await expect(page.locator("figure[data-block-id='media-formula'] code")).toHaveText("h_0 = c + e \\cdot \\cos(\\varphi)");
+
+    const horizontalOverflow = await page.evaluate(() => (
+      document.documentElement.scrollWidth - document.documentElement.clientWidth
+    ));
+    expect(horizontalOverflow).toBeLessThanOrEqual(2);
+    assertClean();
+  });
 });

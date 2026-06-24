@@ -30,6 +30,7 @@ export type {
   SlideAssetUrlResolver,
   SlideAspect,
   SlideBlock,
+  SlideBlockSelection,
   SlideDocument,
   SlideIntent,
   SlideLayoutId,
