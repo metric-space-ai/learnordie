@@ -63,8 +63,12 @@ export function DeckRenderer({
       <section
         aria-label={document.title}
         className={["ld-deck-renderer", className].filter(Boolean).join(" ")}
+        data-aspect={document.aspect}
         data-deck-id={document.id}
+        data-default-transition={document.deckSettings?.defaultTransition ?? "slide"}
+        data-mobile-mode={document.deckSettings?.mobileMode ?? "hybrid"}
         data-schema-version={document.schemaVersion}
+        data-theme={document.theme}
         style={{ ...deckStyle, ...style }}
       >
         <div style={emptyDeckStyle}>Empty slide deck</div>
@@ -76,7 +80,10 @@ export function DeckRenderer({
     <section
       aria-label={document.title}
       className={["ld-deck-renderer", className].filter(Boolean).join(" ")}
+      data-aspect={document.aspect}
       data-deck-id={document.id}
+      data-default-transition={document.deckSettings?.defaultTransition ?? "slide"}
+      data-mobile-mode={document.deckSettings?.mobileMode ?? "hybrid"}
       data-render-mode={activeRenderMode}
       data-schema-version={document.schemaVersion}
       data-theme={document.theme}

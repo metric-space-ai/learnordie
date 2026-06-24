@@ -16,6 +16,10 @@
       "types": "./src/editing.ts",
       "default": "./src/editing.ts"
     },
+    "./agent": {
+      "types": "./src/agent.ts",
+      "default": "./src/agent.ts"
+    },
     "./fixtures": {
       "types": "./src/fixtures.ts",
       "default": "./src/fixtures.ts"
@@ -31,7 +35,11 @@
     "./standalone": {
       "types": "./src/standalone.ts",
       "default": "./src/standalone.ts"
-    }
+    },
+    "./styles/core.css": "./styles/core.css",
+    "./styles/themes/learnordie-north.css": "./styles/themes/learnordie-north.css",
+    "./styles/themes/learnordie-technical.css": "./styles/themes/learnordie-technical.css",
+    "./styles/themes/learnordie-dark-room.css": "./styles/themes/learnordie-dark-room.css"
   },
   "sideEffects": [
     "./styles/**/*.css"

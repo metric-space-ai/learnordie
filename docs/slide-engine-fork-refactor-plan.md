@@ -10,6 +10,7 @@ Aktueller Umsetzungsstand:
 - `packages/slide-engine/src/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument` und kann validierte Engine-Dokumente wieder in das aktuelle Legacy-`Slide[]`-Modell zurückführen.
 - `packages/slide-engine/src/components/*` enthält den typisierten Renderer für kontrollierte Blocks.
 - Der Renderer deckt alle `SlideDocument`-v1-Blocktypen ab: Text, Listen, Definitionen, Callouts, Figuren, Formeln, Tabellen, Charts, Prozesse, Vergleiche, Code, Zitate, Quizanker und Spacer.
+- `packages/slide-engine/styles/core.css` und `packages/slide-engine/styles/themes/*` definieren den Package-eigenen CSS-Vertrag für Layout-Budgets, Mobile-Reflow, Print-Grundlagen und die drei Schema-Themes `learnordie-north`, `learnordie-technical` und `learnordie-dark-room`; die App importiert diese Styles über das Workspace-Package.
 - `src/components/SlideEngineCanvas.tsx` rendert gespeicherte `SlideDocument`s über die neue Engine und migriert Legacy-Slides nur noch als Fallback.
 - Die App konsumiert die Engine über das Workspace-Package `@learnordie/slide-engine`.
 - Student Live, Learn-Modus und Dozent Live verwenden `SlideEngineCanvas`.
@@ -24,6 +25,7 @@ Aktueller Umsetzungsstand:
 - `/api/lecture/[token]/export` nutzt das persistierte `SlideDocument` und migriert Legacy-Lectures nur noch als Fallback; ZIP und HTML enthalten `data-slide-engine="learnordie-slide-standalone-v1"` und `learnordie.slide.v1` im Manifest.
 - `npm run test:slide-engine` enthält zusätzlich einen browserbasierten Offline-Test, der Standalone-HTML ohne externe Runtime-Requests lädt.
 - `packages/slide-engine/src/editing.ts` stellt den agentenfähigen Editiervertrag bereit: strukturierte Batches ändern Dokumente, Slides, Blöcke, Assets, Speaker Notes und Quizanker über stabile IDs und werden danach vollständig gegen das `SlideDocument`-Schema validiert.
+- `packages/slide-engine/src/agent.ts` stellt den ersten agentischen Generierungsvertrag bereit: Materialquellen werden in Briefing, Outline und validierten `SlideDocument`-Draft überführt; Repair-Feedback läuft über denselben Schema-Repair-Report.
 - `DeckRenderer`/`SlideRenderer` besitzen optionale Block-Selection-Hooks, damit Editor und Agent-QA sichtbare Blöcke über dieselben stabilen `blockId`s adressieren.
 - `/slide-engine/qa/editor` ist ein browserbasierter SlideDocument-Editor-Harness für Text-, Layout-, Bildasset-, Formel-, Tabellen- und Quizanker-Änderungen inklusive Repair-Fehleranzeige und Mobile-Overflow-Gate.
 - Das produktive Dozentenstudio enthält einen `SlideDocument`-Engine-Editor, der Layouts, visuelle Assets, Textblöcke, Formeln, Tabellenzellen/-zeilen/-spalten und Quizanker über stabile Engine-Block-IDs bearbeitet, validiert, nativ in `Lecture.slideDocument` persistiert und für alte Flows zusätzlich zurück in `Slide[]` synchronisiert.
@@ -843,6 +845,8 @@ Deliverables:
 - Desktop/Tablet/Mobile-Regeln.
 - Overflow-Guards.
 
+Status 2026-06-24: Der Package-Renderer deckt alle `SlideDocument`-v1-Blocktypen ab. Der CSS-Vertrag liegt im Package unter `styles/core.css` und `styles/themes/`; er enthält Selektoren für alle Schema-Layouts, Variablen für Layout-Budgets, Mobile-Reflow/Scaled/Hybrid-Modi, Print-Grundlagen und alle drei Theme-IDs. Ein Playwright-Gate prüft, dass Layout- und Theme-IDs aus dem Schema im CSS-Vertrag und in den Package-Exports vorhanden sind.
+
 ### Track D: Asset Library
 
 Ziel: echte Asset-Entitäten für Bilder, Tabellen, Formeln, Charts.
@@ -868,6 +872,8 @@ Deliverables:
 - SlideDocument-Generation.
 - Repair-Loop.
 - QA-Fehlerfeedback.
+
+Status 2026-06-24: `packages/slide-engine/src/agent.ts` definiert `learnordie.slide-agent.v1` als kontrollierten Agent-Vertrag für Materialbriefing, Outline und `SlideDocument`-Draft. Der Draft-Pfad erzeugt aus bereitgestellten Quellen und Assets ein validiertes `SlideDocument` mit Quellenreferenzen, Sprecher-Notizen und Quizankern. Das Repair-Feedback nutzt den bestehenden `SlideDocument`-Repair-Report. Playwright prüft, dass der Agent-Pfad aus PPTX-/Transkript-artigen Quellen einen validen, quellengestützten Draft erzeugt.
 
 ### Track F: Manual Editor
 
