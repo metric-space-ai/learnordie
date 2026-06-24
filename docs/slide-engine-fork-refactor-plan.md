@@ -6,12 +6,16 @@ Dieses Dokument ist der verbindliche Plan, bevor reveal.js geforkt, reduziert un
 
 Aktueller Umsetzungsstand:
 
-- `src/slide-engine/schema.ts` definiert `SlideDocument` v1 mit Zod-Validation und Repair-Issues.
-- `src/slide-engine/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument`.
-- `src/slide-engine/components/*` enthält einen ersten typisierten Renderer für kontrollierte Blocks.
+- `packages/slide-engine/src/schema.ts` definiert `SlideDocument` v1 mit Zod-Validation und Repair-Issues.
+- `packages/slide-engine/src/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument`.
+- `packages/slide-engine/src/components/*` enthält den typisierten Renderer für kontrollierte Blocks.
+- Der Renderer deckt alle `SlideDocument`-v1-Blocktypen ab: Text, Listen, Definitionen, Callouts, Figuren, Formeln, Tabellen, Charts, Prozesse, Vergleiche, Code, Zitate, Quizanker und Spacer.
 - `src/components/SlideEngineCanvas.tsx` rendert Legacy-Slides über die neue Engine.
+- Die App konsumiert die Engine über das Workspace-Package `@learnordie/slide-engine`.
 - Student Live, Learn-Modus und Dozent Live verwenden `SlideEngineCanvas`.
+- `packages/slide-engine` enthält Renderer, Schema, Fixtures und den vorbereiteten, reduzierbaren reveal.js-Core-Fork innerhalb desselben Produktrepos.
 - `/slide-engine/qa` rendert eine echte Browser-Fixture mit den drei Gleitlager-Slides.
+- `/slide-engine/qa/blocks` rendert eine All-Block-Fixture, damit neue Agenten und CI-Gates jeden erlaubten Blocktyp sichtbar prüfen können.
 - `npm run test:slide-engine` startet einen lokalen Next-Server und prüft die Fixture über Desktop, Laptop, Tablet, iPad Portrait und Mobile.
 - `scripts/live-smoke.mjs` und die Production-E2E-Smokes prüfen `data-slide-engine="v1"` in den realen Live-/Learn-Flows.
 

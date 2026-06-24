@@ -1,5 +1,3 @@
-import type { Slide } from "@/lib/types";
-
 import {
   SLIDE_DOCUMENT_SCHEMA_VERSION,
   type SlideAspect,
@@ -10,7 +8,16 @@ import {
   validateSlideDocument
 } from "./schema";
 
-type LegacyDiagram = Slide["diagram"];
+export type LegacySlide = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  topic: string;
+  copy: string[];
+  diagram: "bearing" | "formula" | "ramp";
+};
+
+type LegacyDiagram = LegacySlide["diagram"];
 type LegacyDiagramMetadata = {
   title: string;
   description: string;
@@ -43,7 +50,7 @@ const legacyDiagramMetadata: Record<LegacyDiagram, LegacyDiagramMetadata> = {
   }
 };
 
-export function legacySlideToSlideNode(slide: Slide, index = 0): SlideNode {
+export function legacySlideToSlideNode(slide: LegacySlide, index = 0): SlideNode {
   const slideNumber = index + 1;
   const paragraphBlocks = slide.copy.map((text, copyIndex) => ({
     id: `${slide.id}-copy-${copyIndex + 1}`,
@@ -94,7 +101,7 @@ export function legacySlideToSlideNode(slide: Slide, index = 0): SlideNode {
 }
 
 export function legacySlidesToSlideDocument(
-  slides: Slide[],
+  slides: LegacySlide[],
   options: LegacySlideDocumentOptions = {}
 ): SlideDocument {
   const usedDiagramTypes = Array.from(new Set(slides.map((slide) => slide.diagram)));
