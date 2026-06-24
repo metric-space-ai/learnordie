@@ -4,6 +4,7 @@ import { BlockRenderer } from "./BlockRenderer";
 import type {
   SlideAspect,
   SlideAssetCollection,
+  SlideAssetRenderer,
   SlideAssetUrlResolver,
   SlideBlock,
   SlideNode
@@ -13,6 +14,7 @@ export type SlideRendererProps = {
   slide: SlideNode;
   aspect?: SlideAspect;
   assets?: SlideAssetCollection;
+  renderAsset?: SlideAssetRenderer;
   resolveAssetUrl?: SlideAssetUrlResolver;
   slideNumber?: number;
   slideCount?: number;
@@ -112,6 +114,7 @@ export function SlideRenderer({
   aspect = "16:9",
   assets,
   className,
+  renderAsset,
   resolveAssetUrl,
   showSlideNumber = true,
   slide,
@@ -121,7 +124,7 @@ export function SlideRenderer({
 }: SlideRendererProps) {
   const layoutMode = getLayoutMode(slide.layout);
   const bodyBlocks = visibleBodyBlocks(slide);
-  const body = renderSlideBody(slide, bodyBlocks, layoutMode, assets, resolveAssetUrl);
+  const body = renderSlideBody(slide, bodyBlocks, layoutMode, assets, renderAsset, resolveAssetUrl);
 
   return (
     <section
@@ -157,6 +160,7 @@ function renderSlideBody(
   blocks: SlideBlock[],
   layoutMode: SlideLayoutMode,
   assets: SlideAssetCollection | undefined,
+  renderAsset: SlideAssetRenderer | undefined,
   resolveAssetUrl: SlideAssetUrlResolver | undefined
 ) {
   if (layoutMode === "center") {
@@ -167,6 +171,7 @@ function renderSlideBody(
             assets={assets}
             block={block}
             key={block.id}
+            renderAsset={renderAsset}
             resolveAssetUrl={resolveAssetUrl}
           />
         ))}
@@ -192,6 +197,7 @@ function renderSlideBody(
                   assets={assets}
                   block={block}
                   key={block.id}
+                  renderAsset={renderAsset}
                   resolveAssetUrl={resolveAssetUrl}
                 />
               ))}
@@ -209,6 +215,7 @@ function renderSlideBody(
           assets={assets}
           block={block}
           key={block.id}
+          renderAsset={renderAsset}
           resolveAssetUrl={resolveAssetUrl}
         />
       ))}

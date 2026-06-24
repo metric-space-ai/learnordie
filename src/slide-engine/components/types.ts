@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   QuizAnchor,
   SlideAspect,
@@ -37,6 +39,7 @@ export type SlideBlock = SchemaSlideBlock;
 export type SlideAsset = SlideAssetRef;
 export type SlideAssetCollection = SlideAsset[] | Record<string, SlideAsset | undefined>;
 export type SlideAssetUrlResolver = (asset: SlideAsset, block: FigureBlock) => string | undefined;
+export type SlideAssetRenderer = (asset: SlideAsset, block: FigureBlock) => ReactNode;
 export type SlideTransition = "none" | "fade" | "slide";
 export type SlideMobileMode = "reflow" | "scaled" | "hybrid";
 export type TableCellValue = string;

@@ -15,7 +15,7 @@ type LayoutIssue = {
   details: Record<string, number | string | boolean | null>;
 };
 
-const slideEngineQaUrl = process.env.SLIDE_ENGINE_QA_URL?.trim() ?? "";
+const slideEngineQaUrl = process.env.SLIDE_ENGINE_QA_URL?.trim() || "/slide-engine/qa";
 const slideSelector = process.env.SLIDE_ENGINE_QA_SLIDE_SELECTOR?.trim()
   || "[data-slide-id], [data-slide-node-id], .slide, section";
 const overflowTolerancePx = Number.parseFloat(process.env.SLIDE_ENGINE_QA_OVERFLOW_TOLERANCE_PX ?? "2");

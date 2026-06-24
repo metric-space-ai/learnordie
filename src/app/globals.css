@@ -5411,6 +5411,52 @@ textarea.review-live-explanation {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.slide-engine-stage {
+  --slide-engine-padding: clamp(18px, 2.6vw, 42px);
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: var(--slide-engine-padding);
+  place-items: center;
+  overflow: hidden;
+  transition:
+    opacity var(--lb-dur-control) var(--lb-ease-out),
+    transform var(--lb-dur-panel) var(--lb-ease-mask);
+  transform-origin: center top;
+}
+
+.slide-screen.question-open .slide-engine-stage {
+  opacity: 0.94;
+  transform: translateY(-7px) scale(0.992);
+}
+
+.slide-engine-stage[data-direction="next"] .ld-slide-renderer {
+  animation: lb-slide-content-next 320ms var(--lb-ease-out) both;
+}
+
+.slide-engine-stage[data-direction="previous"] .ld-slide-renderer {
+  animation: lb-slide-content-previous 320ms var(--lb-ease-out) both;
+}
+
+.slide-engine-stage .ld-deck-renderer {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.slide-engine-stage .ld-slide-renderer {
+  width: min(100%, 168svh) !important;
+  max-height: 100%;
+}
+
+.slide-engine-stage [data-asset-renderer] svg {
+  width: min(100%, 390px);
+  height: auto;
+  max-height: min(44svh, 420px);
+}
+
 .slide-content[data-direction="next"] {
   animation: lb-slide-content-next 320ms var(--lb-ease-out) both;
 }
@@ -10611,3 +10657,30 @@ textarea.review-live-explanation {
   text-decoration: none;
 }
 .learn-export-link:hover { border-color: var(--accent); }
+
+@media (max-width: 760px) {
+  .slide-engine-stage {
+    --slide-engine-padding: 14px;
+    align-items: start;
+    padding: 54px var(--slide-engine-padding) 86px;
+  }
+
+  .slide-engine-stage .ld-deck-renderer {
+    align-items: stretch;
+  }
+
+  .slide-engine-stage .ld-slide-renderer {
+    width: 100% !important;
+    min-height: calc(100svh - 148px);
+    aspect-ratio: auto !important;
+    padding: 28px 18px !important;
+  }
+
+  .slide-engine-stage [data-asset-renderer] {
+    min-height: 154px !important;
+  }
+
+  .slide-engine-stage [data-asset-renderer] svg {
+    max-height: 190px;
+  }
+}

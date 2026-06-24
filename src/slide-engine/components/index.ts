@@ -18,6 +18,7 @@ export type {
   QuizAnchor,
   SlideAsset,
   SlideAssetCollection,
+  SlideAssetRenderer,
   SlideAssetUrlResolver,
   SlideAspect,
   SlideBlock,

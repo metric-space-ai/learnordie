@@ -1,11 +1,17 @@
 import type { CSSProperties } from "react";
 
 import { SlideRenderer } from "./SlideRenderer";
-import type { SlideAssetCollection, SlideAssetUrlResolver, SlideDocument } from "./types";
+import type {
+  SlideAssetCollection,
+  SlideAssetRenderer,
+  SlideAssetUrlResolver,
+  SlideDocument
+} from "./types";
 
 export type DeckRendererProps = {
   document: SlideDocument;
   assets?: SlideAssetCollection;
+  renderAsset?: SlideAssetRenderer;
   resolveAssetUrl?: SlideAssetUrlResolver;
   currentSlideId?: string;
   renderMode?: "all" | "current";
@@ -37,6 +43,7 @@ export function DeckRenderer({
   className,
   currentSlideId,
   document,
+  renderAsset,
   resolveAssetUrl,
   renderMode,
   style
@@ -78,6 +85,7 @@ export function DeckRenderer({
             aspect={document.aspect}
             assets={activeAssets}
             key={slide.id}
+            renderAsset={renderAsset}
             resolveAssetUrl={resolveAssetUrl}
             showSlideNumber={showSlideNumber}
             slide={slide}
