@@ -3118,6 +3118,7 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   await page.goto("/l/gleitlagerung-demo");
   await page.getByPlaceholder("z. B. LagerProfi42").fill("E2E Lager");
   await page.getByRole("button", { name: "Teilnehmen" }).click();
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
   await page.getByRole("button", { name: "Chatfrage stellen" }).click();
@@ -3291,6 +3292,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
 
   const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
   await expect(hotspots).toHaveCount(4);
@@ -3396,10 +3398,12 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studentGateMotion.coverOriginYRatio).toBeGreaterThan(0.95);
   expect(studentGateMotion.cardState).toBe("true");
   expect(studentGateMotion.coverGrid).toContain("linear-gradient");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
   await page.goto("/learn/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
 
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
@@ -3560,6 +3564,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSheetMotion.radius).toBe("18px");
 
   await page.goto("/lecturer/live/gleitlagerung-demo");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
   await expect(page.getByRole("button", { name: "STT starten" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Passage transkribieren" })).toBeDisabled();

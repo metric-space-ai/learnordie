@@ -9,9 +9,11 @@ Aktueller Umsetzungsstand:
 - `src/slide-engine/schema.ts` definiert `SlideDocument` v1 mit Zod-Validation und Repair-Issues.
 - `src/slide-engine/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument`.
 - `src/slide-engine/components/*` enthält einen ersten typisierten Renderer für kontrollierte Blocks.
-- `src/components/SlideEngineCanvas.tsx` rendert Legacy-Slides über die neue Engine und bleibt neben `SlideCanvas`.
+- `src/components/SlideEngineCanvas.tsx` rendert Legacy-Slides über die neue Engine.
+- Student Live, Learn-Modus und Dozent Live verwenden `SlideEngineCanvas`.
 - `/slide-engine/qa` rendert eine echte Browser-Fixture mit den drei Gleitlager-Slides.
 - `npm run test:slide-engine` startet einen lokalen Next-Server und prüft die Fixture über Desktop, Laptop, Tablet, iPad Portrait und Mobile.
+- `scripts/live-smoke.mjs` und die Production-E2E-Smokes prüfen `data-slide-engine="v1"` in den realen Live-/Learn-Flows.
 
 ## 0. Entscheidung
 

@@ -12,7 +12,7 @@ import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
 import { QuizDrawer } from "./QuizDrawer";
-import { SlideCanvas } from "./SlideCanvas";
+import { SlideEngineCanvas } from "./SlideEngineCanvas";
 
 const hotspotLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0", "3.0", "2.0", "1.0"];
 const hotspotClasses = ["one", "two", "three", "four", "five", "six", "seven"];
@@ -337,7 +337,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       data-question-origin={questionOrigin}
       style={originStyle}
     >
-      <SlideCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
+      <SlideEngineCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
       {questionOpen && questionOrigin === "hotspot" && <span className="question-origin-trace" aria-hidden="true" />}
       <div className="hotspots" aria-label="Fragen-Hotspots">
         {hotspotLevels.slice(0, density).map((level, index) => (
