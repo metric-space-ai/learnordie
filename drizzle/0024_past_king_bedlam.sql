@@ -1,0 +1,1 @@
+ALTER TABLE "lectures" ADD COLUMN "slide_document_json" jsonb;

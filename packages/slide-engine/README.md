@@ -35,7 +35,7 @@ Agents should use this API instead of editing rendered HTML or app-local legacy 
 
 ## Legacy Bridge
 
-`src/legacy.ts` is the temporary compatibility bridge between the existing app `Slide[]` model and the new `SlideDocument` runtime. It supports both directions: legacy lectures can render and edit through the engine, and accepted `SlideDocument` edits can be synchronized back into the current lecture storage until native `SlideDocument` persistence replaces the legacy model.
+`src/legacy.ts` is the compatibility bridge between the existing app `Slide[]` model and the new `SlideDocument` runtime. It supports both directions: old lectures can render through the engine, and accepted `SlideDocument` edits can be synchronized back into `Slide[]` for legacy live/learn surfaces while the native `Lecture.slideDocument` snapshot remains the primary engine payload.
 
 ## Editor QA
 

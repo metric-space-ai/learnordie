@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import crypto from "node:crypto";
 import {
-  legacySlidesToSlideDocument,
   renderStandaloneSlideDocumentHtml,
   SLIDE_STANDALONE_RENDERER_VERSION,
   standaloneScript,
@@ -9,6 +8,7 @@ import {
   type StandaloneAudioSource
 } from "@learnordie/slide-engine";
 
+import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
 import type { Lecture } from "@/lib/types";
 import { getLecturerSession } from "@/server/auth";
 import { isValidPublicLectureToken } from "@/server/public-params";
@@ -280,11 +280,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const version = `${EXPORT_SCHEMA_VERSION}-${exportedAt.replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`;
   const audioBytes = createSilentWav();
   const audioAssets = await collectAudioAssets(lecture, audioBytes);
-  const slideDocument = legacySlidesToSlideDocument(lecture.slides, {
-    id: `standalone-${lecture.publicToken}`,
-    title: `${lecture.seriesTitle}: ${lecture.title}`,
-    language: "de",
-    theme: "learnordie-technical"
+  const slideDocument = lecture.slideDocument ?? buildLegacyLectureSlideDocument({
+    id: lecture.id,
+    title: lecture.title,
+    seriesTitle: lecture.seriesTitle,
+    language: lecture.language,
+    slides: lecture.slides
   });
   const audioSources: StandaloneAudioSource[] = audioAssets.map((asset) => ({
     path: asset.path,

@@ -12,6 +12,7 @@ import {
   type SlideBlock,
   type SlideBlockPatch,
   type SlideBlockSelection,
+  type SlideDocument,
   type SlideDocumentEditOperation
 } from "@learnordie/slide-engine";
 import type { SlideAsset } from "@learnordie/slide-engine/components";
@@ -21,21 +22,23 @@ type StudioSlideDocumentEditorProps = {
   currentIndex: number;
   seriesTitle: string;
   slides: Slide[];
-  onSlidesChange: (slides: Slide[]) => void;
+  slideDocument?: SlideDocument;
+  onSlideDocumentChange: (document: SlideDocument, slides: Slide[]) => void;
 };
 
 export function StudioSlideDocumentEditor({
   currentIndex,
   seriesTitle,
   slides,
-  onSlidesChange
+  slideDocument,
+  onSlideDocumentChange
 }: StudioSlideDocumentEditorProps) {
-  const document = useMemo(() => legacySlidesToSlideDocument(slides, {
+  const document = useMemo(() => slideDocument ?? legacySlidesToSlideDocument(slides, {
     id: "studio-legacy-slide-document",
     title: seriesTitle,
     language: "de",
     theme: "learnordie-technical"
-  }), [seriesTitle, slides]);
+  }), [seriesTitle, slideDocument, slides]);
   const currentSlide = document.slides[currentIndex] ?? document.slides[0];
   const firstEditableBlock = currentSlide?.blocks.find((block) => block.type !== "spacer") ?? currentSlide?.blocks[0];
   const [selectedBlockId, setSelectedBlockId] = useState(firstEditableBlock?.id ?? "");
@@ -71,7 +74,7 @@ export function StudioSlideDocumentEditor({
       return;
     }
 
-    onSlidesChange(slideDocumentToLegacySlides(result.document, slides));
+    onSlideDocumentChange(result.document, slideDocumentToLegacySlides(result.document, slides));
     setStatus(message);
     setIssue("");
   }

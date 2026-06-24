@@ -177,7 +177,13 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
       data-question-origin={questionOrigin}
     >
-      <SlideEngineCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
+      <SlideEngineCanvas
+        current={slide}
+        onNext={next}
+        onPrevious={previous}
+        slideDocument={lecture.slideDocument}
+        slides={lecture.slides}
+      />
       <div className="action-stack lb-enter-control">
         <button
           className="icon-action"

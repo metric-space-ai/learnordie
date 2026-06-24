@@ -6,8 +6,9 @@ import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
+import { slideDocumentSchema } from "@learnordie/slide-engine";
 
-const MAX_UPDATE_LECTURE_BYTES = 256 * 1024;
+const MAX_UPDATE_LECTURE_BYTES = 2 * 1024 * 1024;
 
 const evaluationConfigSchema = z.object({
   enabled: z.boolean(),
@@ -82,6 +83,7 @@ const updateLectureSchema = z.object({
   evaluationConfig: evaluationConfigSchema.optional(),
   saveEvaluationAsSeriesTemplate: z.boolean().optional(),
   slides: z.array(slideSchema).min(1).max(40).optional(),
+  slideDocument: slideDocumentSchema.optional(),
   questions: z.array(questionSchema).length(4).optional(),
   improvementDraftEvent: improvementDraftEventSchema.optional(),
   status: z

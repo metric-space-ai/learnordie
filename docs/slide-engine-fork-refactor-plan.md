@@ -10,7 +10,7 @@ Aktueller Umsetzungsstand:
 - `packages/slide-engine/src/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument` und kann validierte Engine-Dokumente wieder in das aktuelle Legacy-`Slide[]`-Modell zurückführen.
 - `packages/slide-engine/src/components/*` enthält den typisierten Renderer für kontrollierte Blocks.
 - Der Renderer deckt alle `SlideDocument`-v1-Blocktypen ab: Text, Listen, Definitionen, Callouts, Figuren, Formeln, Tabellen, Charts, Prozesse, Vergleiche, Code, Zitate, Quizanker und Spacer.
-- `src/components/SlideEngineCanvas.tsx` rendert Legacy-Slides über die neue Engine.
+- `src/components/SlideEngineCanvas.tsx` rendert gespeicherte `SlideDocument`s über die neue Engine und migriert Legacy-Slides nur noch als Fallback.
 - Die App konsumiert die Engine über das Workspace-Package `@learnordie/slide-engine`.
 - Student Live, Learn-Modus und Dozent Live verwenden `SlideEngineCanvas`.
 - `packages/slide-engine` enthält Renderer, Schema, Fixtures und den vorbereiteten, reduzierbaren reveal.js-Core-Fork innerhalb desselben Produktrepos.
@@ -21,12 +21,13 @@ Aktueller Umsetzungsstand:
 - `npm run test:slide-engine` startet einen lokalen Next-Server und prüft die Fixture über Desktop, Laptop, Tablet, iPad Portrait und Mobile.
 - `scripts/live-smoke.mjs` und die Production-E2E-Smokes prüfen `data-slide-engine="v1"` in den realen Live-/Learn-Flows.
 - `packages/slide-engine/src/standalone.ts` rendert `SlideDocument` als selbstenthaltenes Standalone-HTML mit eingebetteten Daten, Manifest, Offline-Interaktionen und Quizfeedback.
-- `/api/lecture/[token]/export` migriert Legacy-Lectures vor dem Export in ein validiertes `SlideDocument`; ZIP und HTML enthalten `data-slide-engine="learnordie-slide-standalone-v1"` und `learnordie.slide.v1` im Manifest.
+- `/api/lecture/[token]/export` nutzt das persistierte `SlideDocument` und migriert Legacy-Lectures nur noch als Fallback; ZIP und HTML enthalten `data-slide-engine="learnordie-slide-standalone-v1"` und `learnordie.slide.v1` im Manifest.
 - `npm run test:slide-engine` enthält zusätzlich einen browserbasierten Offline-Test, der Standalone-HTML ohne externe Runtime-Requests lädt.
 - `packages/slide-engine/src/editing.ts` stellt den agentenfähigen Editiervertrag bereit: strukturierte Batches ändern Dokumente, Slides, Blöcke, Assets, Speaker Notes und Quizanker über stabile IDs und werden danach vollständig gegen das `SlideDocument`-Schema validiert.
 - `DeckRenderer`/`SlideRenderer` besitzen optionale Block-Selection-Hooks, damit Editor und Agent-QA sichtbare Blöcke über dieselben stabilen `blockId`s adressieren.
 - `/slide-engine/qa/editor` ist ein browserbasierter SlideDocument-Editor-Harness für Text-, Layout-, Bildasset-, Formel-, Tabellen- und Quizanker-Änderungen inklusive Repair-Fehleranzeige und Mobile-Overflow-Gate.
 - Das produktive Dozentenstudio enthält einen ersten `SlideDocument`-Engine-Editor, der Legacy-Lectures über stabile Engine-Block-IDs bearbeitet, zurück in `Slide[]` synchronisiert und über die bestehende Lecture-Speicherung persistiert.
+- `Lecture.slideDocument` ist im App-Typ, im Local Store, in der Lecturer-PATCH-API und in Postgres als `lectures.slide_document_json` nativ verdrahtet; Live, Learn und Standalone lesen diesen Snapshot vor der Legacy-Brücke.
 
 ## 0. Entscheidung
 
@@ -882,7 +883,7 @@ Deliverables:
 - Formel-/Tabelleneditor.
 - Quizanker-Editor.
 
-Status 2026-06-24: Block-Auswahl, Textbearbeitung, Layoutwechsel, Bildasset-Austausch, Formeledit, strukturierte Tabellenzellen-/Zeilen-/Spaltenbearbeitung, Quizanker-Setzen und Repair-Fehleranzeige sind als Engine-QA-Harness unter `/slide-engine/qa/editor` umgesetzt und mit Playwright abgedeckt. Zusätzlich ist ein erster produktiver, legacy-kompatibler Studio-Editor im Dozentenstudio umgesetzt: Er rendert die aktuelle Lecture als `SlideDocument`, editiert ausgewählte Engine-Blöcke und synchronisiert die Änderung zurück in das bestehende `Slide[]`-Datenmodell. Offen bleibt die vollständige native `SlideDocument`-Persistenz für importierte Assets, Tabellen, Formeln und agentisch erzeugte Layouts.
+Status 2026-06-24: Block-Auswahl, Textbearbeitung, Layoutwechsel, Bildasset-Austausch, Formeledit, strukturierte Tabellenzellen-/Zeilen-/Spaltenbearbeitung, Quizanker-Setzen und Repair-Fehleranzeige sind als Engine-QA-Harness unter `/slide-engine/qa/editor` umgesetzt und mit Playwright abgedeckt. Zusätzlich ist ein erster produktiver Studio-Editor im Dozentenstudio umgesetzt: Er rendert die aktuelle Lecture als `SlideDocument`, editiert ausgewählte Engine-Blöcke, persistiert das native Dokument über `slide_document_json` und synchronisiert daraus das bestehende `Slide[]`-Datenmodell für alte Flows. Offen bleibt die Ausweitung des Produkteditors auf native Asset-Picker, Tabellen-, Formel- und Layoutbearbeitung ohne Legacy-Projektion.
 
 ### Track G: Export & Compatibility
 
