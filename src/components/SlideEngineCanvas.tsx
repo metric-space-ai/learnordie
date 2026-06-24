@@ -8,8 +8,8 @@ import {
   DeckRenderer,
   legacyDiagramAssetId,
   legacySlidesToSlideDocument
-} from "@/slide-engine";
-import type { SlideAsset } from "@/slide-engine/components";
+} from "@learnordie/slide-engine";
+import type { SlideAsset } from "@learnordie/slide-engine/components";
 import { Diagram } from "./Diagram";
 
 export function SlideEngineCanvas({

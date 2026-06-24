@@ -4,7 +4,7 @@ Internal learnordie slide runtime package.
 
 This package is the canonical home for the reveal.js-derived presentation core, the controlled learnordie renderer, the CSS contract, QA hooks and the standalone runtime.
 
-The current spike may keep app adapters in `src/slide-engine` while schema and renderer contracts settle. Reusable runtime code moves here before it becomes a stable product dependency inside the app.
+The Next.js app consumes this package through the `@learnordie/slide-engine` workspace dependency. App-level components may adapt product data into `SlideDocument`, but schema, renderer, fixtures and engine contracts live here.
 
 ## Rules
 

@@ -256,7 +256,7 @@ function getLayoutMode(layout: string): SlideLayoutMode {
 }
 
 function isVisualBlock(block: SlideBlock) {
-  return block.type === "figure" || block.type === "formula" || block.type === "table";
+  return block.type === "figure" || block.type === "formula" || block.type === "table" || block.type === "chart";
 }
 
 function sourceSummary(count: number) {

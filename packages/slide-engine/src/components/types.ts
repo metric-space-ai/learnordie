@@ -17,10 +17,19 @@ export const SUPPORTED_SLIDE_BLOCK_TYPES = [
   "heading",
   "paragraph",
   "bulletList",
+  "numberedList",
+  "definition",
+  "callout",
   "figure",
   "formula",
   "table",
-  "callout"
+  "chart",
+  "process",
+  "comparison",
+  "code",
+  "quote",
+  "quizAnchor",
+  "spacer"
 ] as const;
 
 export type SupportedSlideBlockType = (typeof SUPPORTED_SLIDE_BLOCK_TYPES)[number];
@@ -30,10 +39,19 @@ export type SupportedSlideBlock = Extract<SchemaSlideBlock, { type: SupportedSli
 export type HeadingBlock = Extract<SchemaSlideBlock, { type: "heading" }>;
 export type ParagraphBlock = Extract<SchemaSlideBlock, { type: "paragraph" }>;
 export type BulletListBlock = Extract<SchemaSlideBlock, { type: "bulletList" }>;
+export type NumberedListBlock = Extract<SchemaSlideBlock, { type: "numberedList" }>;
+export type DefinitionBlock = Extract<SchemaSlideBlock, { type: "definition" }>;
+export type CalloutBlock = Extract<SchemaSlideBlock, { type: "callout" }>;
 export type FigureBlock = Extract<SchemaSlideBlock, { type: "figure" }>;
 export type FormulaBlock = Extract<SchemaSlideBlock, { type: "formula" }>;
 export type TableBlock = Extract<SchemaSlideBlock, { type: "table" }>;
-export type CalloutBlock = Extract<SchemaSlideBlock, { type: "callout" }>;
+export type ChartBlock = Extract<SchemaSlideBlock, { type: "chart" }>;
+export type ProcessBlock = Extract<SchemaSlideBlock, { type: "process" }>;
+export type ComparisonBlock = Extract<SchemaSlideBlock, { type: "comparison" }>;
+export type CodeBlock = Extract<SchemaSlideBlock, { type: "code" }>;
+export type QuoteBlock = Extract<SchemaSlideBlock, { type: "quote" }>;
+export type QuizAnchorBlock = Extract<SchemaSlideBlock, { type: "quizAnchor" }>;
+export type SpacerBlock = Extract<SchemaSlideBlock, { type: "spacer" }>;
 
 export type SlideBlock = SchemaSlideBlock;
 export type SlideAsset = SlideAssetRef;

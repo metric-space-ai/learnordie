@@ -15,10 +15,42 @@ type LayoutIssue = {
   details: Record<string, number | string | boolean | null>;
 };
 
-const slideEngineQaUrl = process.env.SLIDE_ENGINE_QA_URL?.trim() || "/slide-engine/qa";
+type QaTarget = {
+  name: string;
+  url: string;
+};
+
+const configuredSlideEngineQaUrl = process.env.SLIDE_ENGINE_QA_URL?.trim();
+const qaTargets: QaTarget[] = configuredSlideEngineQaUrl
+  ? [{ name: "custom", url: configuredSlideEngineQaUrl }]
+  : [
+      { name: "legacy-demo", url: "/slide-engine/qa" },
+      { name: "blocks-text", url: "/slide-engine/qa/blocks?slide=blocks-text" },
+      { name: "blocks-media", url: "/slide-engine/qa/blocks?slide=blocks-media" },
+      { name: "blocks-reasoning", url: "/slide-engine/qa/blocks?slide=blocks-reasoning" }
+    ];
 const slideSelector = process.env.SLIDE_ENGINE_QA_SLIDE_SELECTOR?.trim()
   || "[data-slide-id], [data-slide-node-id], .slide, section";
 const overflowTolerancePx = Number.parseFloat(process.env.SLIDE_ENGINE_QA_OVERFLOW_TOLERANCE_PX ?? "2");
+
+const expectedSlideDocumentBlockTypes = [
+  "heading",
+  "paragraph",
+  "bulletList",
+  "numberedList",
+  "definition",
+  "callout",
+  "figure",
+  "formula",
+  "table",
+  "chart",
+  "process",
+  "comparison",
+  "code",
+  "quote",
+  "quizAnchor",
+  "spacer"
+];
 
 const viewportMatrix: ViewportCase[] = [
   { name: "desktop-1920", width: 1920, height: 1080 },
@@ -312,30 +344,55 @@ test("Slide Engine Track H QA contract is documented", async () => {
 });
 
 test.describe("SlideDocument renderer QA harness", () => {
-  test.skip(!slideEngineQaUrl, "Set SLIDE_ENGINE_QA_URL to a renderer route or standalone fixture when SlideEngineCanvas exists.");
+  for (const target of qaTargets) {
+    for (const viewport of viewportMatrix) {
+      test(`${target.name}: viewport matrix, overflow scanner, and console guard: ${viewport.name}`, async ({ page }) => {
+        const assertClean = attachSlideEngineConsoleGuard(page);
 
-  for (const viewport of viewportMatrix) {
-    test(`viewport matrix, overflow scanner, and console guard: ${viewport.name}`, async ({ page }) => {
-      const assertClean = attachSlideEngineConsoleGuard(page);
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto(target.url, { waitUntil: "domcontentloaded" });
+        await page.waitForLoadState("load");
+        await page.evaluate(() => new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }));
 
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.goto(slideEngineQaUrl, { waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("load");
-      await page.evaluate(() => new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }));
+        await expect(page.getByText("Unsupported slide block")).toHaveCount(0);
 
-      const scan = await scanSlideEngineLayout(page, {
-        slideSelector,
-        tolerancePx: overflowTolerancePx
+        const scan = await scanSlideEngineLayout(page, {
+          slideSelector,
+          tolerancePx: overflowTolerancePx
+        });
+
+        expect(scan.issues as LayoutIssue[], JSON.stringify({
+          target,
+          viewport,
+          summary: scan.summary,
+          issues: scan.issues
+        }, null, 2)).toEqual([]);
+        assertClean();
       });
-
-      expect(scan.issues as LayoutIssue[], JSON.stringify({
-        viewport,
-        summary: scan.summary,
-        issues: scan.issues
-      }, null, 2)).toEqual([]);
-      assertClean();
-    });
+    }
   }
+
+  test("all SlideDocument v1 block types render in the repo fixture", async ({ page }) => {
+    test.skip(Boolean(configuredSlideEngineQaUrl), "Custom QA URLs cannot prove the bundled all-block fixture.");
+
+    const renderedTypes = new Set<string>();
+    const blockTargets = qaTargets.filter((target) => target.name.startsWith("blocks-"));
+
+    for (const target of blockTargets) {
+      await page.goto(target.url, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("load");
+      await expect(page.getByText("Unsupported slide block")).toHaveCount(0);
+      const types = await page.locator("[data-block-type]").evaluateAll((elements) => (
+        elements
+          .map((element) => element.getAttribute("data-block-type"))
+          .filter((type): type is string => Boolean(type))
+      ));
+      for (const type of types) renderedTypes.add(type);
+    }
+
+    const missingTypes = expectedSlideDocumentBlockTypes.filter((type) => !renderedTypes.has(type));
+    expect(missingTypes, `Missing block renderers: ${missingTypes.join(", ")}`).toEqual([]);
+  });
 });
