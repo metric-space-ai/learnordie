@@ -169,6 +169,13 @@
       "when": 1782215879642,
       "tag": "0023_neat_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782330567636,
+      "tag": "0024_past_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

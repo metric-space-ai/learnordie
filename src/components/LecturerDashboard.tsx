@@ -12,7 +12,9 @@ import {
 } from "@/lib/learn-settings";
 import { animateStudioSlideSharedElement } from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
+import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
+import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
 import { Diagram } from "./Diagram";
 import { Presence } from "./Presence";
 import type { PresenceState } from "./Presence";
@@ -30,6 +32,7 @@ import type {
   StandaloneExportJob,
   StudentChatQuestion
 } from "@/lib/types";
+import type { SlideDocument } from "@learnordie/slide-engine";
 import type { FormEvent, KeyboardEvent } from "react";
 
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
@@ -446,6 +449,7 @@ export function LecturerDashboard({
   const sourceFileRef = useRef<File | null>(null);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [engineEditorOpen, setEngineEditorOpen] = useState(false);
   const [reviewFocusId, setReviewFocusId] = useState("");
   const [reviewLevel, setReviewLevel] = useState<QuestionLevel>("2.0");
   const [studioSlideIndex, setStudioSlideIndex] = useState(0);
@@ -478,7 +482,8 @@ export function LecturerDashboard({
     evaluationConfig: selected?.evaluationConfig,
     saveEvaluationAsSeriesTemplate: false,
     status: selected?.status ?? "draft",
-    slides: selected?.slides ?? []
+    slides: selected?.slides ?? [],
+    slideDocument: selected?.slideDocument
   });
   const [createDraft, setCreateDraft] = useState({
     title: "Wälzlager und Lebensdauer",
@@ -505,7 +510,8 @@ export function LecturerDashboard({
       evaluationConfig: selected.evaluationConfig,
       saveEvaluationAsSeriesTemplate: false,
       status: selected.status,
-      slides: selected.slides
+      slides: selected.slides,
+      slideDocument: selected.slideDocument
     });
   }, [selected]);
 
@@ -520,6 +526,7 @@ export function LecturerDashboard({
     sourceFileRef.current = null;
     setCommandMenuOpen(false);
     setToolMenuOpen(false);
+    setEngineEditorOpen(false);
     setShowCreateForm(false);
     setAssistantError("");
   }, [initialTool, selectedLectureId]);
@@ -637,7 +644,8 @@ export function LecturerDashboard({
     if (updatedLecture) {
       setEdit((current) => ({
         ...current,
-        slides: updatedLecture.slides
+        slides: updatedLecture.slides,
+        slideDocument: updatedLecture.slideDocument
       }));
     }
   }
@@ -768,6 +776,7 @@ export function LecturerDashboard({
       setEdit((current) => ({
         ...current,
         slides: updatedLecture.slides,
+        slideDocument: updatedLecture.slideDocument,
         learnQuestionDensity: String(normalizeLearnQuestionDensity(updatedLecture.learnQuestionDensity)),
         evaluationConfig: updatedLecture.evaluationConfig
       }));
@@ -819,26 +828,37 @@ export function LecturerDashboard({
 
   function visibleStageEditDraft(current: typeof edit): typeof edit {
     const root = stageFrameRef.current;
-    if (!root || !studioSlide || showCreateForm) return current;
+    if (!root || !selected || !studioSlide || showCreateForm) return current;
 
     const readText = (selector: string, fallback: string) => {
       const value = root.querySelector<HTMLElement>(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "";
       return value || fallback;
     };
 
+    const slides = current.slides.map((slide) => {
+      if (slide.id !== studioSlide.id) return slide;
+      return {
+        ...slide,
+        eyebrow: readText('[data-slide-field="eyebrow"]', slide.eyebrow),
+        title: readText('[data-slide-field="title"]', slide.title),
+        topic: readText('[data-slide-field="topic"]', slide.topic),
+        copy: slide.copy.map((line, index) => readText(`[data-slide-copy-index="${index}"]`, line))
+      };
+    });
+
     return {
       ...current,
       seriesTitle: readText('[data-lecture-field="seriesTitle"]', current.seriesTitle),
-      slides: current.slides.map((slide) => {
-        if (slide.id !== studioSlide.id) return slide;
-        return {
-          ...slide,
-          eyebrow: readText('[data-slide-field="eyebrow"]', slide.eyebrow),
-          title: readText('[data-slide-field="title"]', slide.title),
-          topic: readText('[data-slide-field="topic"]', slide.topic),
-          copy: slide.copy.map((line, index) => readText(`[data-slide-copy-index="${index}"]`, line))
-        };
-      })
+      slides,
+      slideDocument: engineEditorOpen && current.slideDocument
+        ? current.slideDocument
+        : buildLegacyLectureSlideDocument({
+            id: selected.id,
+            title: current.title,
+            seriesTitle: current.seriesTitle,
+            language: selected.language,
+            slides
+          })
     };
   }
 
@@ -876,7 +896,8 @@ export function LecturerDashboard({
         evaluationConfig: updated.evaluationConfig,
         saveEvaluationAsSeriesTemplate: false,
         status: updated.status,
-        slides: updated.slides
+        slides: updated.slides,
+        slideDocument: updated.slideDocument
       });
     }
   }
@@ -911,6 +932,14 @@ export function LecturerDashboard({
     updateSlideDraft(slideId, (slide) => ({
       ...slide,
       copy: slide.copy.length <= 1 ? slide.copy : slide.copy.filter((_, index) => index !== lineIndex)
+    }));
+  }
+
+  function updateSlideDocumentFromEngine(document: SlideDocument, slides: Slide[]) {
+    setEdit((current) => ({
+      ...current,
+      slides,
+      slideDocument: document
     }));
   }
 
@@ -1136,7 +1165,8 @@ export function LecturerDashboard({
     if (updatedLecture) {
       setEdit((current) => ({
         ...current,
-        slides: updatedLecture.slides
+        slides: updatedLecture.slides,
+        slideDocument: updatedLecture.slideDocument
       }));
     }
     setImprovementMessage(draft.kind === "slide" ? "Folienentwurf übernommen." : "Fragenentwurf übernommen.");
@@ -2677,6 +2707,15 @@ export function LecturerDashboard({
                   <Presence show={workspaceTool === "analytics"}>
                     {(motionState) => renderSlideAnalyticsOverlay(motionState)}
                   </Presence>
+                  {engineEditorOpen && (
+                    <StudioSlideDocumentEditor
+                      currentIndex={activeStudioSlideIndex}
+                      seriesTitle={edit.seriesTitle}
+                      slideDocument={edit.slideDocument}
+                      slides={studioSlides}
+                      onSlideDocumentChange={updateSlideDocumentFromEngine}
+                    />
+                  )}
                   {renderStudioHotspots()}
                 </>
               ) : (
@@ -2708,6 +2747,14 @@ export function LecturerDashboard({
                 {renderPlanSummaryButton()}
                 {renderPlanEditor()}
                 {renderSlideToolMenu()}
+                <button
+                  aria-pressed={engineEditorOpen}
+                  className="plain-button studio-engine-toggle"
+                  type="button"
+                  onClick={() => setEngineEditorOpen((open) => !open)}
+                >
+                  Engine
+                </button>
                 <button className="primary-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
                 {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
               </div>

@@ -1100,6 +1100,9 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/provider-smoke.mjs", "Usage: npm run provider:smoke -- [options]"],
     ["scripts/release-gate.mjs", "Usage: npm run release:gate -- [options]"],
     ["scripts/script-syntax-check.mjs", "Usage: npm run scripts:check"],
+    ["scripts/slide-engine-qa-contract.mjs", "Usage: node scripts/slide-engine-qa-contract.mjs"],
+    ["scripts/slide-engine-vendor-check.mjs", "Usage: node scripts/slide-engine-vendor-check.mjs"],
+    ["scripts/vendor-reveal-core.mjs", "Usage: node scripts/vendor-reveal-core.mjs"],
     ["scripts/worker-smoke.mjs", "Usage: npm run smoke:worker -- [options]"],
     ["scripts/self-host-smoke.mjs", "Usage: npm run smoke:self-host -- [options]"]
   ] as const;
@@ -2643,6 +2646,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
     rootDocument?: string;
     selfContained?: boolean;
     externalAssetCount?: number;
+    slideEngine?: { renderer?: string; slideDocumentSchemaVersion?: string; slideDocumentId?: string };
     integrity?: { payloadSha256?: string };
     audioSegments?: Array<{ path?: string; sha256?: string; bytes?: number }>;
     assets?: Array<{ path?: string; role?: string; bytes?: number; sha256?: string }>;
@@ -2651,6 +2655,11 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(manifest.rootDocument).toBe("index.html");
   expect(manifest.selfContained).toBe(true);
   expect(manifest.externalAssetCount).toBe(0);
+  expect(manifest.slideEngine).toMatchObject({
+    renderer: "learnordie-slide-standalone-v1",
+    slideDocumentSchemaVersion: "learnordie.slide.v1"
+  });
+  expect(manifest.slideEngine?.slideDocumentId).toMatch(/^lecture:[^:]+:deck$/);
 
   const assetPaths = new Set((manifest.assets ?? []).map((asset) => asset.path));
   for (const requiredPath of [
@@ -2683,18 +2692,27 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   const dataBytes = entries.get("learnbuddy-data.json");
   if (!dataBytes) throw new Error("ZIP export is missing learnbuddy-data.json.");
   const data = JSON.parse(dataBytes.toString("utf8")) as {
-    export?: { payloadSha256?: string; offline?: { selfContained?: boolean; externalAssets?: number } };
-    lecture?: { slides?: unknown[]; questions?: unknown[] };
+    export?: {
+      payloadSha256?: string;
+      offline?: { selfContained?: boolean; externalAssets?: number };
+      slideEngine?: { renderer?: string; slideDocumentSchemaVersion?: string; slideDocumentId?: string };
+    };
+    lecture?: { slideDocument?: { schemaVersion?: string; slides?: unknown[] }; slides?: unknown[]; questions?: unknown[] };
     manifest?: unknown;
   };
   expect(data.manifest).toBeUndefined();
   expect(data.export?.payloadSha256).toBe(manifest.integrity?.payloadSha256);
   expect(data.export?.offline).toMatchObject({ selfContained: true, externalAssets: 0 });
+  expect(data.export?.slideEngine).toMatchObject(manifest.slideEngine ?? {});
+  expect(data.lecture?.slideDocument?.schemaVersion).toBe("learnordie.slide.v1");
+  expect(data.lecture?.slideDocument?.slides?.length).toBeGreaterThan(0);
   expect(data.lecture?.slides?.length).toBeGreaterThan(0);
   expect(data.lecture?.questions?.length).toBeGreaterThan(0);
 
   const html = entries.get("index.html")?.toString("utf8") ?? "";
   expect(html).toContain('id="learnbuddy-data"');
+  expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v1"');
+  expect(html).toContain('data-slide-document-version="learnordie.slide.v1"');
   expect(html).toContain("Self-contained: ja, externe Assets: 0");
   expect(html).toContain("data:audio/wav;base64,");
 });
@@ -3118,6 +3136,7 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   await page.goto("/l/gleitlagerung-demo");
   await page.getByPlaceholder("z. B. LagerProfi42").fill("E2E Lager");
   await page.getByRole("button", { name: "Teilnehmen" }).click();
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
   await page.getByRole("button", { name: "Chatfrage stellen" }).click();
@@ -3291,6 +3310,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
 
   const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
   await expect(hotspots).toHaveCount(4);
@@ -3396,10 +3416,12 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studentGateMotion.coverOriginYRatio).toBeGreaterThan(0.95);
   expect(studentGateMotion.cardState).toBe("true");
   expect(studentGateMotion.coverGrid).toContain("linear-gradient");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
   await page.goto("/learn/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
 
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
@@ -3560,6 +3582,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSheetMotion.radius).toBe("18px");
 
   await page.goto("/lecturer/live/gleitlagerung-demo");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
   await expect(page.getByRole("button", { name: "STT starten" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Passage transkribieren" })).toBeDisabled();

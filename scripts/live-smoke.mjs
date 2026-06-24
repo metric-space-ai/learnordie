@@ -371,6 +371,7 @@ async function checkStudentLive(page, token, timeoutMs) {
   await waitForInteractivePage(page, timeoutMs);
   await page.getByPlaceholder("z. B. LagerProfi42").fill(`Smoke ${Date.now().toString(36)}`);
   await page.getByRole("button", { name: "Teilnehmen" }).click();
+  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
   await page.getByLabel("Quizfrage").waitFor({ state: "visible", timeout: timeoutMs });
   await page.locator(".question-drawer .answer").first().click();
   await page.locator(".toast-inline").waitFor({ state: "visible", timeout: timeoutMs });
@@ -385,6 +386,7 @@ async function checkStudentLive(page, token, timeoutMs) {
   if (!failOnDiagnostics("student_live_browser", problems)) return;
   pass("student_live_browser", "Student Live flow works in a fresh browser context.", {
     lectureToken: token,
+    slideEngine: "v1",
     leaderboardChecked: leaderboardAvailable
   });
 }
@@ -394,6 +396,7 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   let aiState = null;
   await page.goto(appUrl(`/learn/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
+  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
   const hotspot = page.getByLabel(/Frage Niveau .* anzeigen/).first();
   await page.getByLabel("Fragen-Hotspots").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
   await openQuizDrawer(page, hotspot, timeoutMs);
@@ -443,6 +446,7 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   if (!failOnDiagnostics("learn_browser", problems)) return;
   pass("learn_browser", "Learn mode flow works in a fresh browser context.", {
     lectureToken: token,
+    slideEngine: "v1",
     aiRequested: includeAI,
     requireAIProvider,
     aiAnswerState: aiState?.answerState ?? null,

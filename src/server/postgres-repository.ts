@@ -5,6 +5,12 @@ import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { demoLecture } from "@/lib/demo-data";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import {
+  buildLegacyLectureSlideDocument,
+  legacySlidesFromSlideDocument,
+  normalizeLectureSlideDocument
+} from "@/lib/slide-documents";
+import type { SlideDocument, SlideNode } from "@learnordie/slide-engine";
 import type {
   AnswerOption,
   Lecture,
@@ -128,6 +134,74 @@ function normalizeSlidePatch(slide: Slide) {
       copy,
       diagram: slide.diagram === "formula" || slide.diagram === "ramp" ? slide.diagram : "bearing"
     }
+  };
+}
+
+function isPostgresUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function replaceSlideScopedId(value: string | undefined, previousSlideId: string, nextSlideId: string) {
+  if (!value) return value;
+  if (value === previousSlideId) return nextSlideId;
+  const prefix = `${previousSlideId}-`;
+  return value.startsWith(prefix) ? `${nextSlideId}-${value.slice(prefix.length)}` : value;
+}
+
+function alignSlideNodeToPersistedId(slide: SlideNode, persistedId: string): SlideNode {
+  if (slide.id === persistedId) return slide;
+  const previousId = slide.id;
+  return {
+    ...slide,
+    id: persistedId,
+    blocks: slide.blocks.map((block) => ({
+      ...block,
+      id: replaceSlideScopedId(block.id, previousId, persistedId) ?? block.id
+    })) as SlideNode["blocks"],
+    speakerNotes: slide.speakerNotes?.map((note) => ({
+      ...note,
+      id: replaceSlideScopedId(note.id, previousId, persistedId) ?? note.id,
+      blockId: replaceSlideScopedId(note.blockId, previousId, persistedId)
+    })),
+    quizAnchors: slide.quizAnchors?.map((anchor) => ({
+      ...anchor,
+      id: replaceSlideScopedId(anchor.id, previousId, persistedId) ?? anchor.id,
+      blockId: replaceSlideScopedId(anchor.blockId, previousId, persistedId) ?? anchor.blockId
+    })),
+    sourceRefs: slide.sourceRefs.map((source) => ({
+      ...source,
+      id: replaceSlideScopedId(source.id, previousId, persistedId) ?? source.id
+    }))
+  };
+}
+
+function alignSlideDocumentToPersistedSlides(document: SlideDocument, persistedSlides: Slide[]): SlideDocument {
+  const persistedIds = new Set(persistedSlides.map((slide) => slide.id));
+  let changed = false;
+  const alignedSlides = document.slides.map((slide, index) => {
+    if (persistedIds.has(slide.id)) return slide;
+    const persistedId = persistedSlides[index]?.id;
+    if (!persistedId) return slide;
+    changed = true;
+    return alignSlideNodeToPersistedId(slide, persistedId);
+  });
+
+  return changed ? { ...document, slides: alignedSlides } : document;
+}
+
+function normalizeSlideUpdate(existing: Slide, next?: Slide): Slide {
+  if (!next) return existing;
+  const copy = Array.isArray(next.copy)
+    ? next.copy.map((line) => line.trim()).filter(Boolean).slice(0, 4)
+    : existing.copy;
+
+  return {
+    ...existing,
+    eyebrow: next.eyebrow?.trim() || existing.eyebrow,
+    title: next.title?.trim() || existing.title,
+    topic: next.topic?.trim() || existing.topic,
+    copy: copy.length > 0 ? copy : existing.copy,
+    diagram: next.diagram === "formula" || next.diagram === "ramp" || next.diagram === "bearing" ? next.diagram : existing.diagram
   };
 }
 
@@ -512,6 +586,7 @@ export class PostgresLectureRepository implements LectureRepository {
     const owner = ownerEmail ? await this.findOrCreateUser(ownerEmail) : null;
     const series = await this.findOrCreateSeries(input.seriesTitle.trim(), owner?.id);
     const publicToken = `${slugify(title)}-${crypto.randomBytes(3).toString("hex")}`;
+    const defaultSlides = createDefaultSlides(title);
     const [lecture] = await this.db
       .insert(lectures)
       .values({
@@ -530,7 +605,15 @@ export class PostgresLectureRepository implements LectureRepository {
       })
       .returning();
 
-    await this.insertSlides(lecture.id, createDefaultSlides(title));
+    const persistedSlides = await this.insertSlides(lecture.id, defaultSlides);
+    const slideDocument = buildLegacyLectureSlideDocument({
+      id: publicToken,
+      title,
+      seriesTitle: input.seriesTitle.trim(),
+      language: "de",
+      slides: persistedSlides
+    });
+    await this.db.update(lectures).set({ slideDocumentJson: slideDocument }).where(eq(lectures.id, lecture.id));
     await this.replaceActiveQuestions(lecture.id, clone(demoLecture.questions), "initial_seed");
 
     const created = await this.getLectureById(lecture.id, ownerEmail);
@@ -572,12 +655,31 @@ export class PostgresLectureRepository implements LectureRepository {
     }
     if (input.evaluationConfig !== undefined) patch.evaluationConfig = normalizeEvaluationConfigForUpdate(existingLecture.evaluationConfig, input.evaluationConfig);
 
+    const effectiveTitle = input.title?.trim() || existingScopedLecture.title;
+    const effectiveSeriesTitle = input.seriesTitle?.trim() || existingScopedLecture.seriesTitle;
+    let nextSlides: Slide[] | undefined;
+    if (input.slideDocument !== undefined) {
+      const alignedSlideDocument = alignSlideDocumentToPersistedSlides(input.slideDocument, existingScopedLecture.slides);
+      patch.slideDocumentJson = alignedSlideDocument;
+      nextSlides = legacySlidesFromSlideDocument(alignedSlideDocument, existingScopedLecture.slides);
+    } else if (input.slides !== undefined) {
+      const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
+      nextSlides = existingScopedLecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
+      patch.slideDocumentJson = buildLegacyLectureSlideDocument({
+        id,
+        title: effectiveTitle,
+        seriesTitle: effectiveSeriesTitle,
+        language: existingScopedLecture.language,
+        slides: nextSlides
+      });
+    }
+
     if (Object.keys(patch).length > 0) {
       await this.db.update(lectures).set(patch).where(eq(lectures.id, id));
     }
 
-    if (input.slides !== undefined) {
-      await this.updateSlides(id, input.slides);
+    if (nextSlides !== undefined) {
+      await this.updateSlides(id, nextSlides);
     }
 
     if (input.questions !== undefined) {
@@ -1620,16 +1722,25 @@ export class PostgresLectureRepository implements LectureRepository {
       })
       .returning();
 
-    await this.insertSlides(lecture.id, demoLecture.slides);
+    const persistedSlides = await this.insertSlides(lecture.id, demoLecture.slides);
+    const demoSlideDocument = buildLegacyLectureSlideDocument({
+      id: demoLecture.id,
+      title: demoLecture.title,
+      seriesTitle: demoLecture.seriesTitle,
+      language: demoLecture.language,
+      slides: persistedSlides
+    });
+    await this.db.update(lectures).set({ slideDocumentJson: demoSlideDocument }).where(eq(lectures.id, lecture.id));
     await this.replaceActiveQuestions(lecture.id, clone(demoLecture.questions), "demo_seed");
     this.seeded = true;
   }
 
   private async insertSlides(lectureId: string, slideItems: Slide[]) {
-    if (slideItems.length === 0) return;
+    if (slideItems.length === 0) return [];
 
-    await this.db.insert(slides).values(
+    const insertedSlides = await this.db.insert(slides).values(
       slideItems.map((slide, index) => ({
+        ...(isPostgresUuid(slide.id) ? { id: slide.id } : {}),
         lectureId,
         position: index + 1,
         title: slide.title,
@@ -1640,7 +1751,11 @@ export class PostgresLectureRepository implements LectureRepository {
           diagram: slide.diagram
         }
       }))
-    );
+    ).returning();
+
+    return insertedSlides
+      .sort((left, right) => left.position - right.position)
+      .map((slide) => this.slideFromRow(slide));
   }
 
   private async updateSlides(lectureId: string, slideItems: Slide[]) {
@@ -1765,6 +1880,14 @@ export class PostgresLectureRepository implements LectureRepository {
       .filter((variant) => questionIds.has(variant.questionId))
       .map((variant) => this.variantFromRow(variant))
       .sort((left, right) => questionLevelOrder[left.level] - questionLevelOrder[right.level]);
+    const slideItems = slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide));
+    const slideDocument = alignSlideDocumentToPersistedSlides(normalizeLectureSlideDocument(row.lecture.slideDocumentJson, {
+      id: row.lecture.id,
+      title: row.lecture.title,
+      seriesTitle: row.series?.title ?? "Maschinenelemente I",
+      language: "de",
+      slides: slideItems
+    }), slideItems);
 
     return {
       id: row.lecture.id,
@@ -1786,7 +1909,8 @@ export class PostgresLectureRepository implements LectureRepository {
       leaderboardEnabled: row.lecture.leaderboardEnabled,
       learnQuestionDensity: normalizeLearnQuestionDensity(row.lecture.learnQuestionDensity),
       evaluationConfig: normalizeEvaluationConfig(row.lecture.evaluationConfig),
-      slides: slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide)),
+      slides: slideItems,
+      slideDocument,
       questions: questionsForLecture,
       materials: assetRows
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())

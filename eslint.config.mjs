@@ -20,6 +20,7 @@ const eslintConfig = defineConfig([
     "node_modules/**",
     "out/**",
     "output/**",
+    "packages/slide-engine/vendor/**",
     "test-results/**"
   ])
 ]);

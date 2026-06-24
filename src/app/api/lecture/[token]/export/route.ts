@@ -1,6 +1,14 @@
 import { notFound } from "next/navigation";
 import crypto from "node:crypto";
+import {
+  renderStandaloneSlideDocumentHtml,
+  SLIDE_STANDALONE_RENDERER_VERSION,
+  standaloneScript,
+  standaloneStyles,
+  type StandaloneAudioSource
+} from "@learnordie/slide-engine";
 
+import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
 import type { Lecture } from "@/lib/types";
 import { getLecturerSession } from "@/server/auth";
 import { isValidPublicLectureToken } from "@/server/public-params";
@@ -46,23 +54,6 @@ type AudioSegment = {
   endSeconds: number;
   source: "upload" | "fallback";
 };
-
-function escapeHtml(input: string) {
-  return input
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function escapeJsonForScript(input: string) {
-  return input
-    .replaceAll("&", "\\u0026")
-    .replaceAll("<", "\\u003c")
-    .replaceAll(">", "\\u003e")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
-}
 
 function sha256(input: string | Buffer) {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -272,154 +263,6 @@ async function collectAudioAssets(lecture: Lecture, fallbackAudio: Buffer) {
   }];
 }
 
-function renderSlides(lecture: Lecture) {
-  return lecture.slides
-    .map((slide, index) => `
-      <article class="slide" id="slide-${index + 1}" aria-labelledby="slide-${index + 1}-title">
-        <p class="eyebrow">${escapeHtml(slide.eyebrow)}</p>
-        <h3 id="slide-${index + 1}-title">${escapeHtml(slide.title)}</h3>
-        ${slide.copy.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
-      </article>`)
-    .join("");
-}
-
-function renderQuestions(lecture: Lecture) {
-  return lecture.questions
-    .map((question, index) => `
-      <article class="question" id="frage-${index + 1}" data-question aria-labelledby="frage-${index + 1}-title" aria-describedby="frage-${index + 1}-feedback frage-${index + 1}-explanation">
-        <h3 id="frage-${index + 1}-title">Niveau ${escapeHtml(question.level)}</h3>
-        <p>${escapeHtml(question.text)}</p>
-        <div class="answers" role="group" aria-label="Antwortoptionen zu Frage ${index + 1}">
-          ${question.answers.map((answer) => `<button type="button" data-answer data-correct="${answer.correct ? "true" : "false"}" aria-pressed="false" aria-disabled="false" aria-label="Antwort ${escapeHtml(answer.key)}: ${escapeHtml(answer.text)}"><span aria-hidden="true">${escapeHtml(answer.key)}</span>${escapeHtml(answer.text)}</button>`).join("")}
-        </div>
-        <p class="feedback" id="frage-${index + 1}-feedback" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" data-feedback>Antwort wählen.</p>
-        <p class="explanation" id="frage-${index + 1}-explanation"><strong>Erklärung:</strong> ${escapeHtml(question.explanation)}</p>
-      </article>`)
-    .join("");
-}
-
-function renderAudioBlock(audioAssets: AudioAsset[], inline: boolean) {
-  return `
-    <section class="audio-block" aria-label="Dozentenaudio">
-      <strong>Dozentenaudio</strong>
-      <span>${audioAssets.some((asset) => asset.source === "upload")
-        ? "Dieser Export enthält die hinterlegte Audiospur des Dozenten."
-        : "Dieser Export enthält einen eingebetteten Audio-Fallback. Echte Vorlesungsaudio-Dateien können später an derselben Manifeststelle ersetzt werden."}</span>
-      ${audioAssets.map((asset) => {
-        const src = inline
-          ? `data:${asset.mediaType};base64,${asset.bytes.toString("base64")}`
-          : asset.path;
-        return `
-          <figure>
-            <figcaption>${escapeHtml(asset.originalName)} · ${escapeHtml(asset.sha256)}</figcaption>
-            <audio controls preload="metadata" src="${src}"></audio>
-          </figure>`;
-      }).join("")}
-    </section>`;
-}
-
-function standaloneStyles() {
-  return `
-    :root { color-scheme: light; --ink: #071722; --muted: #506675; --line: #b9cbd6; --panel: #fbfdfe; --soft: #edf5f8; --good: #d9f2e4; --bad: #ffe0dd; --accent: #c7881b; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: #f6fafc; }
-    main { min-height: 100vh; padding: clamp(20px, 5vw, 72px); }
-    header { display: grid; gap: 18px; max-width: 1040px; }
-    .skip-link { position: absolute; top: 12px; left: 12px; z-index: 10; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; border-radius: 8px; background: var(--ink); color: white; font-weight: 850; }
-    .skip-link:focus { width: auto; height: auto; padding: 10px 12px; overflow: visible; clip: auto; }
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-    h1 { max-width: 980px; margin: 0; font-size: clamp(36px, 7vw, 76px); line-height: 1.02; letter-spacing: 0; }
-    h2 { margin: 0 0 16px; font-size: clamp(24px, 4vw, 42px); line-height: 1.08; }
-    h3 { margin: 0 0 16px; font-size: clamp(22px, 3.5vw, 38px); line-height: 1.1; }
-    .kicker, .eyebrow { margin: 0; color: var(--muted); font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
-    .meta, .manifest, .audio-block, .slide, .question { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
-    .meta, .manifest, .audio-block { display: grid; gap: 8px; max-width: 980px; padding: 14px 16px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
-    .meta strong, .manifest strong, .audio-block strong { color: var(--ink); }
-    audio { width: min(100%, 560px); }
-    section { display: grid; gap: 18px; max-width: 1040px; margin-top: 36px; }
-    .slide, .question { padding: clamp(18px, 3vw, 32px); }
-    .slide p, .question p { max-width: 780px; font-size: clamp(17px, 2.4vw, 22px); line-height: 1.45; }
-    .answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
-    button { min-height: 56px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #dceaf1; color: var(--ink); font: inherit; font-weight: 760; text-align: left; cursor: pointer; }
-    button:focus-visible, audio:focus-visible, .skip-link:focus-visible { outline: 4px solid #1e6b9a; outline-offset: 3px; }
-    button span { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-right: 10px; border-radius: 999px; background: rgba(255,255,255,0.74); color: var(--muted); font-weight: 900; }
-    button[aria-disabled="true"] { cursor: default; }
-    button.correct { border-color: #7eba95; background: var(--good); }
-    button.incorrect { border-color: #e6958d; background: var(--bad); }
-    .feedback { min-height: 28px; margin: 14px 0 0; color: var(--muted); font-weight: 850; }
-    .explanation { color: var(--muted); }
-    .manifest ul { margin: 0; padding-left: 18px; }
-    @media (max-width: 700px) {
-      main { padding: 16px; }
-      .answers { grid-template-columns: 1fr; }
-      button { min-height: 52px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; }
-    }
-  `.trim();
-}
-
-function standaloneScript() {
-  return `
-    (() => {
-      function moveAnswerFocus(button, direction) {
-        const answers = Array.from(button.closest("[data-question]").querySelectorAll("[data-answer]"));
-        const currentIndex = answers.indexOf(button);
-        if (currentIndex < 0) return;
-        const nextIndex = direction === "first"
-          ? 0
-          : direction === "last"
-            ? answers.length - 1
-            : (currentIndex + direction + answers.length) % answers.length;
-        answers[nextIndex].focus();
-      }
-
-      document.querySelectorAll("[data-question]").forEach((question) => {
-        question.addEventListener("keydown", (event) => {
-          const button = event.target.closest("[data-answer]");
-          if (!button || !question.contains(button)) return;
-          if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-            event.preventDefault();
-            moveAnswerFocus(button, 1);
-          }
-          if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-            event.preventDefault();
-            moveAnswerFocus(button, -1);
-          }
-          if (event.key === "Home") {
-            event.preventDefault();
-            moveAnswerFocus(button, "first");
-          }
-          if (event.key === "End") {
-            event.preventDefault();
-            moveAnswerFocus(button, "last");
-          }
-        });
-
-        question.addEventListener("click", (event) => {
-          const button = event.target.closest("[data-answer]");
-          if (!button || !question.contains(button)) return;
-          if (question.dataset.answered === "true") return;
-          question.dataset.answered = "true";
-          const isCorrect = button.dataset.correct === "true";
-          question.querySelectorAll("[data-answer]").forEach((answer) => {
-            answer.classList.toggle("correct", answer.dataset.correct === "true");
-            answer.classList.toggle("incorrect", answer === button && !isCorrect);
-            answer.setAttribute("aria-disabled", "true");
-            answer.setAttribute("aria-pressed", answer === button ? "true" : "false");
-          });
-          const feedback = question.querySelector("[data-feedback]");
-          if (feedback) {
-            feedback.textContent = isCorrect ? "Richtig." : "Nicht korrekt. Die richtige Antwort ist grün markiert.";
-            feedback.focus({ preventScroll: true });
-          }
-        });
-      });
-    })();
-  `.trim();
-}
-
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   if (!isValidPublicLectureToken(token)) notFound();
@@ -437,12 +280,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const version = `${EXPORT_SCHEMA_VERSION}-${exportedAt.replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`;
   const audioBytes = createSilentWav();
   const audioAssets = await collectAudioAssets(lecture, audioBytes);
+  const slideDocument = lecture.slideDocument ?? buildLegacyLectureSlideDocument({
+    id: lecture.id,
+    title: lecture.title,
+    seriesTitle: lecture.seriesTitle,
+    language: lecture.language,
+    slides: lecture.slides
+  });
+  const audioSources: StandaloneAudioSource[] = audioAssets.map((asset) => ({
+    path: asset.path,
+    originalName: asset.originalName,
+    mediaType: asset.mediaType,
+    src: `data:${asset.mediaType};base64,${asset.bytes.toString("base64")}`,
+    sha256: asset.sha256,
+    source: asset.source
+  }));
   const styles = standaloneStyles();
   const script = standaloneScript();
   const canonicalPayload = {
     export: {
       version,
       schemaVersion: EXPORT_SCHEMA_VERSION,
+      slideEngine: {
+        renderer: SLIDE_STANDALONE_RENDERER_VERSION,
+        slideDocumentSchemaVersion: slideDocument.schemaVersion,
+        slideDocumentId: slideDocument.id
+      },
       exportedAt,
       lectureToken: lecture.publicToken,
       offline: {
@@ -468,6 +331,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       seriesTitle: lecture.seriesTitle,
       examDate: lecture.examDate,
       learnQuestionDensity: lecture.learnQuestionDensity,
+      slideDocument,
       slides: lecture.slides,
       questions: lecture.questions
     }
@@ -490,6 +354,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const manifest = {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
     exportVersion: version,
+    slideEngine: {
+      renderer: SLIDE_STANDALONE_RENDERER_VERSION,
+      slideDocumentSchemaVersion: slideDocument.schemaVersion,
+      slideDocumentId: slideDocument.id
+    },
     createdAt: exportedAt,
     selfContained: true,
     externalAssetCount: 0,
@@ -513,51 +382,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     manifest
   });
 
-  const html = `<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(lecture.seriesTitle)} - ${escapeHtml(lecture.title)}</title>
-  <style>${styles}</style>
-</head>
-<body>
-  <a class="skip-link" href="#slides">Zum Folieninhalt springen</a>
-  <main id="inhalt" aria-labelledby="export-title">
-    <header>
-      <p class="kicker">${escapeHtml(lecture.seriesTitle)}</p>
-      <h1 id="export-title">${escapeHtml(lecture.title)}</h1>
-    </header>
-    <section class="meta" aria-label="Export-Metadaten">
-      <strong>Standalone Export ${escapeHtml(version)}</strong>
-      <span>Exportiert: ${escapeHtml(exportedAt)}</span>
-      <span>Payload SHA-256: ${payloadSha256}</span>
-      <span>Manifest SHA-256: ${manifestSha256}</span>
-      <span>Self-contained: ja, externe Assets: 0</span>
-      <span>Server-KI, Analytics und Synchronisation sind in diesem Offline-Export nicht enthalten.</span>
-    </section>
-    ${renderAudioBlock(audioAssets, true)}
-    <section class="manifest" aria-label="Offline-Manifest">
-      <strong>Offline-Manifest</strong>
-      <span>Alle Asset-Prüfsummen sind im HTML eingebettet.</span>
-      <ul>
-        ${assets.map((asset) => `<li>${escapeHtml(asset.path)} · ${escapeHtml(asset.sha256)}</li>`).join("")}
-      </ul>
-    </section>
-    <section id="slides" aria-labelledby="slides-title">
-      <h2 id="slides-title" class="sr-only">Folien</h2>
-      ${renderSlides(lecture)}
-    </section>
-    <section id="questions" aria-labelledby="questions-title">
-      <h2 id="questions-title">Eingebettete Fragen</h2>
-      ${renderQuestions(lecture)}
-    </section>
-  </main>
-  <script type="application/json" id="learnbuddy-data">${escapeJsonForScript(data)}</script>
-  <script type="application/json" id="learnbuddy-manifest">${escapeJsonForScript(manifestJson)}</script>
-  <script>${script}</script>
-</body>
-</html>`;
+  const html = renderStandaloneSlideDocumentHtml({
+    assetUrlMode: "inline-only",
+    audioSources,
+    dataJson: data,
+    document: slideDocument,
+    manifestJson,
+    metadata: {
+      version,
+      exportedAt,
+      title: lecture.title,
+      seriesTitle: lecture.seriesTitle,
+      payloadSha256,
+      manifestSha256,
+      selfContained: true,
+      externalAssetCount: 0
+    },
+    questions: lecture.questions
+  });
   const responseSha256 = sha256(html);
   if (format === "zip") {
     const archiveVersion = version.replace(EXPORT_SCHEMA_VERSION, ARCHIVE_SCHEMA_VERSION);

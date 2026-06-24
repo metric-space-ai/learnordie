@@ -7,7 +7,7 @@ delete process.env.NO_COLOR;
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: /student-local\.spec\.ts/,
+  testMatch: /(student-local|lecturer-engine-local)\.spec\.ts/,
   timeout: 120_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
