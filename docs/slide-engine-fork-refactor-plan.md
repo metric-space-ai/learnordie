@@ -14,6 +14,8 @@ Aktueller Umsetzungsstand:
 - Die App konsumiert die Engine über das Workspace-Package `@learnordie/slide-engine`.
 - Student Live, Learn-Modus und Dozent Live verwenden `SlideEngineCanvas`.
 - `packages/slide-engine` enthält Renderer, Schema, Fixtures und den vorbereiteten, reduzierbaren reveal.js-Core-Fork innerhalb desselben Produktrepos.
+- reveal.js `6.0.1` ist als reduzierter Core-Snapshot gepinnt auf Commit `52c6c8b2a9626915cfaa8a87ae47add261f282be` unter `packages/slide-engine/vendor/reveal-core/src` importiert.
+- `npm run vendor:reveal-core` synchronisiert den dokumentierten Upstream-Schnitt; `npm run check:slide-engine-vendor` prüft Commit-Pin, kopierte Pfade und Ausschluss von Demo-/Dist-/Theme-Zoo.
 - `/slide-engine/qa` rendert eine echte Browser-Fixture mit den drei Gleitlager-Slides.
 - `/slide-engine/qa/blocks` rendert eine All-Block-Fixture, damit neue Agenten und CI-Gates jeden erlaubten Blocktyp sichtbar prüfen können.
 - `npm run test:slide-engine` startet einen lokalen Next-Server und prüft die Fixture über Desktop, Laptop, Tablet, iPad Portrait und Mobile.

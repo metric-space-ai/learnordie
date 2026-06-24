@@ -2,7 +2,7 @@
 
 This package is part of the `metric-space-ai/learnordie` monorepo.
 
-It is planned to contain a controlled, reduced reveal.js core for learnordie presentation rendering.
+It contains a controlled, reduced reveal.js core snapshot for learnordie presentation rendering.
 
 ## Upstream
 
@@ -10,7 +10,8 @@ It is planned to contain a controlled, reduced reveal.js core for learnordie pre
 - Upstream repository: https://github.com/hakimel/reveal.js
 - License: MIT
 - Target release family: 6.0.1
-- Import policy: pin the exact upstream commit in `vendor/reveal-core/UPSTREAM.md` at import time.
+- Pinned commit: 52c6c8b2a9626915cfaa8a87ae47add261f282be
+- Import policy: copied upstream paths are tracked in `vendor/reveal-core/manifest.json` and `vendor/reveal-core/UPSTREAM.md`.
 
 ## Temporary Fork
 
