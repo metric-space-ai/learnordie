@@ -6871,7 +6871,8 @@ textarea.review-live-explanation {
 }
 
 .studio-engine-editor-panel textarea,
-.studio-engine-editor-panel select {
+.studio-engine-editor-panel select,
+.studio-engine-editor-panel input {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
@@ -6885,9 +6886,30 @@ textarea.review-live-explanation {
   resize: vertical;
 }
 
+.studio-engine-editor-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--lb-radius-panel);
+  background: oklch(96.5% 0.011 230 / 0.68);
+}
+
 .studio-engine-editor-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.studio-engine-editor-actions.split {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-engine-editor-actions.split button {
+  min-width: 0;
 }
 
 .studio-engine-toggle[aria-pressed="true"] {
