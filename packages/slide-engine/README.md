@@ -16,6 +16,16 @@ The Next.js app consumes this package through the `@learnordie/slide-engine` wor
 - Browser QA must cover desktop, tablet and mobile before replacing `SlideCanvas`.
 - Standalone exports must be rendered from `SlideDocument` through the package exporter, not from app-local legacy HTML.
 
+## CSS Contract
+
+`styles/core.css` defines the package-owned runtime contract for slide tokens, layout budgets, mobile reflow/scaled/hybrid modes, print behavior and common renderer safeguards. Theme files in `styles/themes/` implement the three schema theme IDs:
+
+- `learnordie-north`
+- `learnordie-technical`
+- `learnordie-dark-room`
+
+The app imports these files through package exports such as `@learnordie/slide-engine/styles/core.css`. QA checks assert that every `SlideLayoutId` has a CSS selector and every `SlideThemeId` has a package-exported theme file.
+
 ## Vendor Commands
 
 - `npm run vendor:reveal-core` imports the pinned reveal.js `6.0.1` core snapshot.
@@ -32,6 +42,12 @@ The vendored upstream source is treated as third-party reference/runtime materia
 `src/editing.ts` exposes the structured edit contract for agents and the future WYSIWYG editor. It applies batches of operations against stable `slideId`, `blockId`, `assetId`, `noteId` and `anchorId` targets, then validates the full `SlideDocument` before returning an accepted document.
 
 Agents should use this API instead of editing rendered HTML or app-local legacy slide data. Failed operations return repair-oriented issues so the generation loop can retry only the affected slide or block.
+
+## Agentic Generation Runtime
+
+`src/agent.ts` exposes the first `learnordie.slide-agent.v1` generation contract. It turns material-like sources and optional assets into a deterministic briefing, outline and validated `SlideDocument` draft. This is the stable shape that LLM agents should target before the richer production planner is wired into lecturer workflows.
+
+The generation contract keeps provenance mandatory: generated content slides carry `sourceRefs`, speaker notes and quiz anchors, while invalid draft output is reported through the same repair issue format as schema validation and structured edit batches.
 
 ## Legacy Bridge
 
