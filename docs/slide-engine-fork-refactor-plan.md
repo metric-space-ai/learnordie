@@ -4,6 +4,15 @@ Stand: 2026-06-24
 
 Dieses Dokument ist der verbindliche Plan, bevor reveal.js geforkt, reduziert und in learnordie.app eingebaut wird. Ziel ist ausdrücklich nicht, eine eigene Präsentationsengine amateurhaft nachzubauen. Ziel ist, den bewährten Kern von reveal.js zu übernehmen, unnötige Teile zu entfernen und darüber ein sicheres, agentenfähiges, responsives Slide-System für learnordie zu bauen.
 
+Aktueller Umsetzungsstand:
+
+- `src/slide-engine/schema.ts` definiert `SlideDocument` v1 mit Zod-Validation und Repair-Issues.
+- `src/slide-engine/legacy.ts` migriert die bisherigen Demo-Slides deterministisch in `SlideDocument`.
+- `src/slide-engine/components/*` enthält einen ersten typisierten Renderer für kontrollierte Blocks.
+- `src/components/SlideEngineCanvas.tsx` rendert Legacy-Slides über die neue Engine und bleibt neben `SlideCanvas`.
+- `/slide-engine/qa` rendert eine echte Browser-Fixture mit den drei Gleitlager-Slides.
+- `npm run test:slide-engine` startet einen lokalen Next-Server und prüft die Fixture über Desktop, Laptop, Tablet, iPad Portrait und Mobile.
+
 ## 0. Entscheidung
 
 Wir forken reveal.js kontrolliert in das learnordie Produktrepo.

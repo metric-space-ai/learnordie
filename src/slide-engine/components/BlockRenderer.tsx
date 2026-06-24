@@ -10,6 +10,7 @@ import type {
   ParagraphBlock,
   SlideAsset,
   SlideAssetCollection,
+  SlideAssetRenderer,
   SlideAssetUrlResolver,
   SlideBlock,
   SupportedSlideBlock,
@@ -20,6 +21,7 @@ import type {
 export type BlockRendererProps = {
   block: SlideBlock;
   assets?: SlideAssetCollection;
+  renderAsset?: SlideAssetRenderer;
   resolveAssetUrl?: SlideAssetUrlResolver;
 };
 
@@ -83,6 +85,17 @@ const figurePlaceholderStyle: CSSProperties = {
   fontSize: 15,
   fontWeight: 760,
   textAlign: "center"
+};
+
+const figureAssetRendererStyle: CSSProperties = {
+  display: "grid",
+  minHeight: 220,
+  placeItems: "center",
+  padding: 10,
+  border: "1px solid var(--line)",
+  borderRadius: "var(--lb-radius-panel)",
+  background: "var(--panel-soft)",
+  overflow: "hidden"
 };
 
 const captionStyle: CSSProperties = {
@@ -191,7 +204,7 @@ const unsupportedBlockStyle: CSSProperties = {
   fontWeight: 720
 };
 
-export function BlockRenderer({ block, assets, resolveAssetUrl }: BlockRendererProps) {
+export function BlockRenderer({ block, assets, renderAsset, resolveAssetUrl }: BlockRendererProps) {
   switch (block.type) {
     case "heading":
       return <HeadingBlockRenderer block={block} />;
@@ -200,7 +213,14 @@ export function BlockRenderer({ block, assets, resolveAssetUrl }: BlockRendererP
     case "bulletList":
       return <BulletListBlockRenderer block={block} />;
     case "figure":
-      return <FigureBlockRenderer assets={assets} block={block} resolveAssetUrl={resolveAssetUrl} />;
+      return (
+        <FigureBlockRenderer
+          assets={assets}
+          block={block}
+          renderAsset={renderAsset}
+          resolveAssetUrl={resolveAssetUrl}
+        />
+      );
     case "formula":
       return <FormulaBlockRenderer block={block} />;
     case "table":
@@ -255,13 +275,16 @@ function BulletListEntry({ item }: { item: string }) {
 function FigureBlockRenderer({
   assets,
   block,
+  renderAsset,
   resolveAssetUrl
 }: {
   assets?: SlideAssetCollection;
   block: FigureBlock;
+  renderAsset?: SlideAssetRenderer;
   resolveAssetUrl?: SlideAssetUrlResolver;
 }) {
   const asset = resolveAsset(assets, block.assetId);
+  const customAsset = asset ? renderAsset?.(asset, block) : undefined;
   const imageUrl = asset ? resolveAssetUrl?.(asset, block) ?? asset.url : undefined;
   const altText = block.altText ?? asset?.altText ?? asset?.description ?? asset?.title ?? block.caption ?? "";
   const label = block.caption ?? asset?.title ?? block.assetId ?? "Figure";
@@ -273,7 +296,11 @@ function FigureBlockRenderer({
       data-block-type={block.type}
       style={figureStyle}
     >
-      {imageUrl ? (
+      {customAsset ? (
+        <div aria-label={altText || label} data-asset-renderer style={figureAssetRendererStyle}>
+          {customAsset}
+        </div>
+      ) : imageUrl ? (
         <img
           alt={altText}
           loading="lazy"
