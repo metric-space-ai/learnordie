@@ -1,13 +1,17 @@
 {
-  "name": "learn-buddy",
+  "name": "learnordie",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "admin": "node scripts/admin.mjs",
+    "check:slide-engine-vendor": "node scripts/slide-engine-vendor-check.mjs",
     "deploy:readiness": "node scripts/deploy-readiness.mjs",
     "motion:contract": "node scripts/motion-design-contract.mjs",
     "provider:smoke": "node scripts/provider-smoke.mjs",
@@ -19,12 +23,15 @@
     "smoke:self-host": "node scripts/self-host-smoke.mjs",
     "smoke:worker": "node scripts/worker-smoke.mjs",
     "typecheck": "tsc --noEmit",
+    "vendor:reveal-core": "node scripts/vendor-reveal-core.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test:e2e": "npm run build && playwright test",
-    "test:e2e:local": "playwright test --config playwright.local.config.ts"
+    "test:e2e:local": "playwright test --config playwright.local.config.ts",
+    "test:slide-engine": "playwright test --config playwright.slide-engine.config.ts"
   },
   "dependencies": {
+    "@learnordie/slide-engine": "file:packages/slide-engine",
     "@vercel/blob": "^2.4.0",
     "drizzle-orm": "^0.45.2",
     "jose": "^6.1.3",

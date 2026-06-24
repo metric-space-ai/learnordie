@@ -37,6 +37,7 @@ const noStoreHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   devIndicators: false,
+  transpilePackages: ["@learnordie/slide-engine"],
   async headers() {
     return [
       {

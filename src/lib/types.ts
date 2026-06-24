@@ -1,3 +1,5 @@
+import type { SlideDocument } from "@learnordie/slide-engine";
+
 export type QuestionLevel = "4.0" | "3.0" | "2.0" | "1.0";
 export type QuestionVariantReviewStatus = "draft" | "reviewed" | "approved" | "rejected";
 export type LectureStatus =
@@ -321,6 +323,7 @@ export type Lecture = {
   learnQuestionDensity: number;
   evaluationConfig: EvaluationConfig;
   slides: Slide[];
+  slideDocument?: SlideDocument;
   questions: QuestionVariant[];
   materials?: LectureMaterial[];
   questionReviews?: QuestionReviewItem[];

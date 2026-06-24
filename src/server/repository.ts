@@ -10,6 +10,7 @@ import type {
   StudentChatQuestion,
   TranscriptSegment
 } from "@/lib/types";
+import type { SlideDocument } from "@learnordie/slide-engine";
 import { LocalLectureStore } from "./local-store";
 import { PostgresLectureRepository } from "./postgres-repository";
 
@@ -37,6 +38,7 @@ export type UpdateLectureInput = {
   evaluationConfig?: unknown;
   saveEvaluationAsSeriesTemplate?: boolean;
   slides?: Slide[];
+  slideDocument?: SlideDocument;
   questions?: QuestionVariant[];
 };
 

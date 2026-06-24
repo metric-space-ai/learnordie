@@ -5,6 +5,11 @@ import path from "node:path";
 import { demoLecture } from "@/lib/demo-data";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import {
+  buildLegacyLectureSlideDocument,
+  legacySlidesFromSlideDocument,
+  normalizeLectureSlideDocument
+} from "@/lib/slide-documents";
 import type {
   Lecture,
   LecturerAssistantMessage,
@@ -21,6 +26,7 @@ import type {
   StudentChatQuestion,
   TranscriptSegment
 } from "@/lib/types";
+import type { SlideDocument } from "@learnordie/slide-engine";
 import { moderateStudentChatQuestion as moderateChatQuestionWithProvider } from "./chat-question-moderation";
 import { evaluateStudentChatQuestion } from "./chat-question-filter";
 import {
@@ -80,6 +86,7 @@ type UpdateLectureInput = {
   evaluationConfig?: unknown;
   saveEvaluationAsSeriesTemplate?: boolean;
   slides?: Slide[];
+  slideDocument?: SlideDocument;
   questions?: QuestionVariant[];
 };
 
@@ -206,9 +213,18 @@ async function ensureStore() {
   try {
     await fs.access(STORE_PATH);
   } catch {
+    const demoSlides = clone(demoLecture.slides);
     const seed: LocalStoreData = {
       lectures: [{
         ...clone(demoLecture),
+        slides: demoSlides,
+        slideDocument: buildLegacyLectureSlideDocument({
+          id: demoLecture.id,
+          title: demoLecture.title,
+          seriesTitle: demoLecture.seriesTitle,
+          language: demoLecture.language,
+          slides: demoSlides
+        }),
         materials: [],
         questionReviews: [],
         materialProcessingRuns: [],
@@ -251,20 +267,31 @@ async function readStore() {
       }
     ])
   );
-  data.lectures = data.lectures.map((lecture) => ({
-    ...lecture,
-    leaderboardEnabled: lecture.leaderboardEnabled ?? true,
-    learnQuestionDensity: normalizeLearnQuestionDensity(lecture.learnQuestionDensity),
-    aiDailyLimit: normalizeAiDailyLimit(lecture.aiDailyLimit, configuredDefaultAiDailyLimit()),
-    aiDailyTokenLimit: normalizeAiDailyTokenLimit(lecture.aiDailyTokenLimit, configuredDefaultAiDailyTokenLimit()),
-    seriesAiDailyLimit: normalizeAiDailyLimit(lecture.seriesAiDailyLimit, localSeriesBudget(data, lecture.seriesTitle).aiDailyLimit),
-    seriesAiDailyTokenLimit: normalizeAiDailyTokenLimit(lecture.seriesAiDailyTokenLimit, localSeriesBudget(data, lecture.seriesTitle).aiDailyTokenLimit),
-    tenantAiDailyLimit: normalizeAiDailyLimit(lecture.tenantAiDailyLimit, configuredDefaultAiDailyLimit()),
-    tenantAiDailyTokenLimit: normalizeAiDailyTokenLimit(lecture.tenantAiDailyTokenLimit, configuredDefaultAiDailyTokenLimit()),
-    tenantBudgetKey: lecture.tenantBudgetKey || "local",
-    evaluationConfig: normalizeEvaluationConfig(lecture.evaluationConfig),
-    assistantMessages: lecture.assistantMessages ?? []
-  }));
+  data.lectures = data.lectures.map((lecture) => {
+    const slides = Array.isArray(lecture.slides) ? lecture.slides : [];
+    return {
+      ...lecture,
+      slides,
+      slideDocument: normalizeLectureSlideDocument(lecture.slideDocument, {
+        id: lecture.id,
+        title: lecture.title,
+        seriesTitle: lecture.seriesTitle,
+        language: lecture.language,
+        slides
+      }),
+      leaderboardEnabled: lecture.leaderboardEnabled ?? true,
+      learnQuestionDensity: normalizeLearnQuestionDensity(lecture.learnQuestionDensity),
+      aiDailyLimit: normalizeAiDailyLimit(lecture.aiDailyLimit, configuredDefaultAiDailyLimit()),
+      aiDailyTokenLimit: normalizeAiDailyTokenLimit(lecture.aiDailyTokenLimit, configuredDefaultAiDailyTokenLimit()),
+      seriesAiDailyLimit: normalizeAiDailyLimit(lecture.seriesAiDailyLimit, localSeriesBudget(data, lecture.seriesTitle).aiDailyLimit),
+      seriesAiDailyTokenLimit: normalizeAiDailyTokenLimit(lecture.seriesAiDailyTokenLimit, localSeriesBudget(data, lecture.seriesTitle).aiDailyTokenLimit),
+      tenantAiDailyLimit: normalizeAiDailyLimit(lecture.tenantAiDailyLimit, configuredDefaultAiDailyLimit()),
+      tenantAiDailyTokenLimit: normalizeAiDailyTokenLimit(lecture.tenantAiDailyTokenLimit, configuredDefaultAiDailyTokenLimit()),
+      tenantBudgetKey: lecture.tenantBudgetKey || "local",
+      evaluationConfig: normalizeEvaluationConfig(lecture.evaluationConfig),
+      assistantMessages: lecture.assistantMessages ?? []
+    };
+  });
   applyLocalSeriesBudgets(data);
   applyLocalTenantBudgets(data);
   return data;
@@ -296,6 +323,7 @@ export class LocalLectureStore {
     const seriesTitle = input.seriesTitle.trim();
     const seriesBudget = localSeriesBudget(store, seriesTitle);
     const tenantBudget = localTenantBudget(store, ownerEmail);
+    const defaultSlides = createDefaultSlides(title);
     const lecture: Lecture = {
       id,
       publicToken: `${slugify(title)}-${shortId}`,
@@ -317,7 +345,14 @@ export class LocalLectureStore {
       leaderboardEnabled: true,
       learnQuestionDensity: normalizeLearnQuestionDensity(undefined),
       evaluationConfig: normalizeEvaluationConfig(store.seriesEvaluationTemplates?.[seriesTitle]),
-      slides: createDefaultSlides(title),
+      slides: defaultSlides,
+      slideDocument: buildLegacyLectureSlideDocument({
+        id,
+        title,
+        seriesTitle,
+        language: "de",
+        slides: defaultSlides
+      }),
       questions: clone(demoLecture.questions),
       materials: [],
       questionReviews: [],
@@ -375,6 +410,19 @@ export class LocalLectureStore {
     if (input.slides !== undefined) {
       const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
       lecture.slides = lecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
+      if (input.slideDocument === undefined) {
+        lecture.slideDocument = buildLegacyLectureSlideDocument({
+          id: lecture.id,
+          title: lecture.title,
+          seriesTitle: lecture.seriesTitle,
+          language: lecture.language,
+          slides: lecture.slides
+        });
+      }
+    }
+    if (input.slideDocument !== undefined) {
+      lecture.slideDocument = input.slideDocument;
+      lecture.slides = legacySlidesFromSlideDocument(input.slideDocument, lecture.slides);
     }
     if (input.questions !== undefined) {
       lecture.questions = clone(input.questions);

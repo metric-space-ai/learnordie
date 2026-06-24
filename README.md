@@ -32,11 +32,20 @@ The core product principle is: **slides first, tools second**. The presentation 
 - Next.js App Router
 - React 19
 - TypeScript
+- Internal slide engine package at `packages/slide-engine`
 - Postgres with Drizzle ORM
 - Neon for managed Postgres
 - Vercel for deployment
 - Resend for lecturer magic links
 - Playwright for browser release gates
+
+## Repository Structure
+
+The canonical GitHub repository for the product is:
+
+- `metric-space-ai/learnordie`
+
+The slide engine is not a separate product repository. It is part of this monorepo as the private workspace package `@learnordie/slide-engine` under `packages/slide-engine`. The Next.js app imports it directly through the workspace dependency in `package.json`, so app UI, persistence, standalone export and engine evolution stay in one codebase.
 
 ## Local Development
 
