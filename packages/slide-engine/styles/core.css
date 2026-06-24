@@ -1,0 +1,210 @@
+@layer learnordie-slide-engine {
+  :where(.ld-deck-renderer) {
+    --slide: oklch(98.5% 0.005 230);
+    --ink: oklch(18% 0.035 235);
+    --muted: oklch(47% 0.034 235);
+    --line: oklch(82% 0.024 230);
+    --panel: oklch(98.8% 0.006 230);
+    --panel-soft: oklch(92.8% 0.017 230);
+    --accent: oklch(62% 0.14 72);
+    --accent-soft: oklch(90% 0.06 74);
+    --brand-night: oklch(18% 0.045 242);
+    --green: oklch(58% 0.13 150);
+    --green-soft: oklch(91% 0.06 150);
+    --red: oklch(57% 0.145 25);
+    --red-soft: oklch(91% 0.055 25);
+    --lb-kinematic: oklch(53% 0.095 218);
+    --lb-kinematic-soft: oklch(91% 0.035 218);
+    --lb-origin-blue: oklch(58% 0.095 218);
+    --shadow: 0 22px 70px oklch(5% 0.02 236 / 0.24);
+    --lb-radius-panel: 12px;
+    --lb-radius-stage: 18px;
+    --lb-radius-pill: 999px;
+    --ld-slide-padding: clamp(28px, 5vw, 72px);
+    --ld-slide-gap: clamp(18px, 3vw, 40px);
+    --ld-layout-max-title-lines: 3;
+    --ld-layout-max-copy-blocks: 4;
+    --ld-layout-max-visuals: 1;
+    --ld-layout-min-visual-inline-size: 300px;
+    --ld-layout-body-columns: 1fr;
+    --ld-layout-mobile-mode: hybrid;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  :where(.ld-deck-renderer[data-mobile-mode="reflow"]) {
+    --ld-layout-mobile-mode: reflow;
+  }
+
+  :where(.ld-deck-renderer[data-mobile-mode="scaled"]) {
+    --ld-layout-mobile-mode: scaled;
+  }
+
+  :where(.ld-deck-renderer[data-aspect="16:10"]) {
+    --ld-aspect-width: 16;
+    --ld-aspect-height: 10;
+  }
+
+  :where(.ld-deck-renderer[data-aspect="16:9"]) {
+    --ld-aspect-width: 16;
+    --ld-aspect-height: 9;
+  }
+
+  :where(.ld-deck-renderer[data-aspect="4:3"]) {
+    --ld-aspect-width: 4;
+    --ld-aspect-height: 3;
+  }
+
+  :where(.ld-deck-renderer, .ld-deck-renderer *) {
+    box-sizing: border-box;
+  }
+
+  :where(.ld-slide-renderer) {
+    container-type: inline-size;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+
+  :where(.ld-slide-renderer img, .ld-slide-renderer svg, .ld-slide-renderer video, .ld-slide-renderer canvas) {
+    max-inline-size: 100%;
+  }
+
+  :where(.ld-slide-renderer table) {
+    max-inline-size: 100%;
+  }
+
+  :where(.ld-slide-renderer [data-block-type]) {
+    min-inline-size: 0;
+  }
+
+  :where(.ld-slide-renderer[data-layout="title_statement"]) {
+    --ld-layout-max-title-lines: 3;
+    --ld-layout-max-copy-blocks: 1;
+    --ld-layout-max-visuals: 0;
+  }
+
+  :where(.ld-slide-renderer[data-layout="section_divider"]) {
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 1;
+    --ld-layout-max-visuals: 0;
+  }
+
+  :where(.ld-slide-renderer[data-layout="technical_one_column"]) {
+    --ld-layout-max-title-lines: 3;
+    --ld-layout-max-copy-blocks: 5;
+    --ld-layout-max-visuals: 0;
+  }
+
+  :where(.ld-slide-renderer[data-layout="technical_two_column"]) {
+    --ld-layout-body-columns: repeat(2, minmax(0, 1fr));
+    --ld-layout-max-title-lines: 3;
+    --ld-layout-max-copy-blocks: 6;
+    --ld-layout-max-visuals: 2;
+  }
+
+  :where(.ld-slide-renderer[data-layout="technical_figure_right"]),
+  :where(.ld-slide-renderer[data-layout="technical_figure_left"]) {
+    --ld-layout-body-columns: minmax(0, 1.05fr) minmax(var(--ld-layout-min-visual-inline-size), 0.8fr);
+    --ld-layout-max-title-lines: 3;
+    --ld-layout-max-copy-blocks: 4;
+    --ld-layout-max-visuals: 1;
+  }
+
+  :where(.ld-slide-renderer[data-layout="definition_with_example"]) {
+    --ld-layout-body-columns: minmax(0, 0.92fr) minmax(280px, 1fr);
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 3;
+    --ld-layout-max-visuals: 1;
+  }
+
+  :where(.ld-slide-renderer[data-layout="formula_derivation"]) {
+    --ld-layout-body-columns: minmax(0, 0.84fr) minmax(300px, 1fr);
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 4;
+    --ld-layout-max-visuals: 2;
+  }
+
+  :where(.ld-slide-renderer[data-layout="table_focus"]) {
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 1;
+    --ld-layout-max-visuals: 1;
+  }
+
+  :where(.ld-slide-renderer[data-layout="chart_focus"]) {
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 1;
+    --ld-layout-max-visuals: 1;
+  }
+
+  :where(.ld-slide-renderer[data-layout="comparison_split"]) {
+    --ld-layout-body-columns: repeat(2, minmax(0, 1fr));
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 4;
+    --ld-layout-max-visuals: 0;
+  }
+
+  :where(.ld-slide-renderer[data-layout="process_steps"]) {
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 1;
+    --ld-layout-max-visuals: 1;
+  }
+
+  :where(.ld-slide-renderer[data-layout="case_study"]) {
+    --ld-layout-body-columns: minmax(0, 0.9fr) minmax(300px, 1fr);
+    --ld-layout-max-title-lines: 3;
+    --ld-layout-max-copy-blocks: 5;
+    --ld-layout-max-visuals: 2;
+  }
+
+  :where(.ld-slide-renderer[data-layout="quiz_transition"]) {
+    --ld-layout-max-title-lines: 2;
+    --ld-layout-max-copy-blocks: 2;
+    --ld-layout-max-visuals: 0;
+  }
+
+  @container (max-width: 760px) {
+    :where(.ld-slide-renderer) {
+      min-block-size: auto;
+      padding: clamp(22px, 7vw, 34px) !important;
+    }
+
+    :where(.ld-slide-renderer h1) {
+      font-size: clamp(30px, 9vw, 44px) !important;
+    }
+
+    :where(.ld-slide-renderer [data-block-type="paragraph"]),
+    :where(.ld-slide-renderer [data-block-type="bulletList"]),
+    :where(.ld-slide-renderer [data-block-type="numberedList"]) {
+      font-size: clamp(17px, 5vw, 21px) !important;
+    }
+
+    :where(.ld-slide-renderer [data-block-type="figure"] img),
+    :where(.ld-slide-renderer [data-asset-renderer]) {
+      max-block-size: 40svh;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :where(.ld-deck-renderer[data-mobile-mode="reflow"] .ld-slide-renderer),
+    :where(.ld-deck-renderer[data-mobile-mode="hybrid"] .ld-slide-renderer) {
+      aspect-ratio: auto !important;
+      min-block-size: min(100svh, 860px);
+    }
+
+    :where(.ld-deck-renderer[data-mobile-mode="scaled"] .ld-slide-renderer) {
+      min-inline-size: 780px;
+      transform-origin: top left;
+    }
+  }
+
+  @media print {
+    :where(.ld-deck-renderer) {
+      gap: 0;
+    }
+
+    :where(.ld-slide-renderer) {
+      break-after: page;
+      box-shadow: none !important;
+    }
+  }
+}
