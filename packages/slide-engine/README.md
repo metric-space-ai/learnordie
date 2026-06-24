@@ -26,3 +26,9 @@ The vendored upstream source is treated as third-party reference/runtime materia
 ## Standalone Runtime
 
 `src/standalone.ts` renders a validated `SlideDocument` into self-contained HTML for long-term offline use. The exported document embeds the slide data JSON, manifest JSON, package CSS, package interaction script, optional inline audio sources and quiz feedback logic.
+
+## Agentic Editing Runtime
+
+`src/editing.ts` exposes the structured edit contract for agents and the future WYSIWYG editor. It applies batches of operations against stable `slideId`, `blockId`, `assetId`, `noteId` and `anchorId` targets, then validates the full `SlideDocument` before returning an accepted document.
+
+Agents should use this API instead of editing rendered HTML or app-local legacy slide data. Failed operations return repair-oriented issues so the generation loop can retry only the affected slide or block.
