@@ -48,6 +48,20 @@ test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async
   await page.locator(".studio-save-inline").click();
   const saveResponse = await saveResponsePromise;
   expect(saveResponse.ok()).toBe(true);
+  const savePayload = await saveResponse.json() as {
+    lectures?: Array<{
+      title: string;
+      slideDocument?: {
+        slides?: Array<{
+          blocks?: Array<{ type?: string; text?: string }>;
+        }>;
+      };
+    }>;
+  };
+  const savedLecture = savePayload.lectures?.find((lecture) => lecture.title === "Gleitlagerung");
+  expect(savedLecture?.slideDocument?.slides?.[0]?.blocks?.some((block) => (
+    block.type === "paragraph" && block.text === replacementText
+  ))).toBe(true);
 
   await page.reload();
   await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(replacementText);

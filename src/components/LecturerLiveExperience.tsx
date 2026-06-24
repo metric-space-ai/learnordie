@@ -244,7 +244,13 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
       data-question-origin={questionOrigin}
     >
-      <SlideEngineCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
+      <SlideEngineCanvas
+        current={slide}
+        onNext={next}
+        onPrevious={previous}
+        slideDocument={lecture.slideDocument}
+        slides={lecture.slides}
+      />
 
       <Presence show={transcriptVisible}>
         {(motionState) => (

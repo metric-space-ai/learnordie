@@ -7,18 +7,21 @@ import type { Slide } from "@/lib/types";
 import {
   DeckRenderer,
   legacyDiagramAssetId,
-  legacySlidesToSlideDocument
+  legacySlidesToSlideDocument,
+  type SlideDocument
 } from "@learnordie/slide-engine";
 import type { SlideAsset } from "@learnordie/slide-engine/components";
 import { Diagram } from "./Diagram";
 
 export function SlideEngineCanvas({
   slides,
+  slideDocument: storedSlideDocument,
   current,
   onPrevious,
   onNext
 }: {
   slides: Slide[];
+  slideDocument?: SlideDocument;
   current: number;
   onPrevious: () => void;
   onNext: () => void;
@@ -26,14 +29,14 @@ export function SlideEngineCanvas({
   const currentSlide = slides[current];
   const previousCurrent = useRef(current);
   const [direction, setDirection] = useState<"initial" | "next" | "previous">("initial");
-  const slideDocument = useMemo(
-    () => legacySlidesToSlideDocument(slides, {
+  const activeSlideDocument = useMemo(
+    () => storedSlideDocument ?? legacySlidesToSlideDocument(slides, {
       id: "legacy-live-deck",
       title: "Maschinenelemente I: Gleitlagerung",
       language: "de",
       theme: "learnordie-technical"
     }),
-    [slides]
+    [storedSlideDocument, slides]
   );
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export function SlideEngineCanvas({
         <DeckRenderer
           className="slide-engine-deck"
           currentSlideId={currentSlide.id}
-          document={slideDocument}
+          document={activeSlideDocument}
           renderAsset={renderLegacyDiagramAsset}
           renderMode="current"
         />

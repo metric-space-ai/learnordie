@@ -88,6 +88,7 @@ export const lectures = pgTable("lectures", {
   leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(true),
   learnQuestionDensity: integer("learn_question_density").notNull().default(4),
   evaluationConfig: jsonb("evaluation_config"),
+  slideDocumentJson: jsonb("slide_document_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 

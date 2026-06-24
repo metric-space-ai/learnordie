@@ -5,6 +5,11 @@ import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { demoLecture } from "@/lib/demo-data";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import {
+  buildLegacyLectureSlideDocument,
+  legacySlidesFromSlideDocument,
+  normalizeLectureSlideDocument
+} from "@/lib/slide-documents";
 import type {
   AnswerOption,
   Lecture,
@@ -128,6 +133,22 @@ function normalizeSlidePatch(slide: Slide) {
       copy,
       diagram: slide.diagram === "formula" || slide.diagram === "ramp" ? slide.diagram : "bearing"
     }
+  };
+}
+
+function normalizeSlideUpdate(existing: Slide, next?: Slide): Slide {
+  if (!next) return existing;
+  const copy = Array.isArray(next.copy)
+    ? next.copy.map((line) => line.trim()).filter(Boolean).slice(0, 4)
+    : existing.copy;
+
+  return {
+    ...existing,
+    eyebrow: next.eyebrow?.trim() || existing.eyebrow,
+    title: next.title?.trim() || existing.title,
+    topic: next.topic?.trim() || existing.topic,
+    copy: copy.length > 0 ? copy : existing.copy,
+    diagram: next.diagram === "formula" || next.diagram === "ramp" || next.diagram === "bearing" ? next.diagram : existing.diagram
   };
 }
 
@@ -512,6 +533,14 @@ export class PostgresLectureRepository implements LectureRepository {
     const owner = ownerEmail ? await this.findOrCreateUser(ownerEmail) : null;
     const series = await this.findOrCreateSeries(input.seriesTitle.trim(), owner?.id);
     const publicToken = `${slugify(title)}-${crypto.randomBytes(3).toString("hex")}`;
+    const defaultSlides = createDefaultSlides(title);
+    const slideDocument = buildLegacyLectureSlideDocument({
+      id: publicToken,
+      title,
+      seriesTitle: input.seriesTitle.trim(),
+      language: "de",
+      slides: defaultSlides
+    });
     const [lecture] = await this.db
       .insert(lectures)
       .values({
@@ -526,11 +555,12 @@ export class PostgresLectureRepository implements LectureRepository {
         aiDailyTokenLimit: configuredDefaultAiDailyTokenLimit(),
         leaderboardEnabled: true,
         learnQuestionDensity: normalizeLearnQuestionDensity(undefined),
-        evaluationConfig: normalizeEvaluationConfig(series.evaluationConfig)
+        evaluationConfig: normalizeEvaluationConfig(series.evaluationConfig),
+        slideDocumentJson: slideDocument
       })
       .returning();
 
-    await this.insertSlides(lecture.id, createDefaultSlides(title));
+    await this.insertSlides(lecture.id, defaultSlides);
     await this.replaceActiveQuestions(lecture.id, clone(demoLecture.questions), "initial_seed");
 
     const created = await this.getLectureById(lecture.id, ownerEmail);
@@ -572,12 +602,30 @@ export class PostgresLectureRepository implements LectureRepository {
     }
     if (input.evaluationConfig !== undefined) patch.evaluationConfig = normalizeEvaluationConfigForUpdate(existingLecture.evaluationConfig, input.evaluationConfig);
 
+    const effectiveTitle = input.title?.trim() || existingScopedLecture.title;
+    const effectiveSeriesTitle = input.seriesTitle?.trim() || existingScopedLecture.seriesTitle;
+    let nextSlides: Slide[] | undefined;
+    if (input.slideDocument !== undefined) {
+      patch.slideDocumentJson = input.slideDocument;
+      nextSlides = legacySlidesFromSlideDocument(input.slideDocument, existingScopedLecture.slides);
+    } else if (input.slides !== undefined) {
+      const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
+      nextSlides = existingScopedLecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
+      patch.slideDocumentJson = buildLegacyLectureSlideDocument({
+        id,
+        title: effectiveTitle,
+        seriesTitle: effectiveSeriesTitle,
+        language: existingScopedLecture.language,
+        slides: nextSlides
+      });
+    }
+
     if (Object.keys(patch).length > 0) {
       await this.db.update(lectures).set(patch).where(eq(lectures.id, id));
     }
 
-    if (input.slides !== undefined) {
-      await this.updateSlides(id, input.slides);
+    if (nextSlides !== undefined) {
+      await this.updateSlides(id, nextSlides);
     }
 
     if (input.questions !== undefined) {
@@ -1594,6 +1642,13 @@ export class PostgresLectureRepository implements LectureRepository {
     }
 
     const series = await this.findOrCreateSeries(demoLecture.seriesTitle);
+    const demoSlideDocument = buildLegacyLectureSlideDocument({
+      id: demoLecture.id,
+      title: demoLecture.title,
+      seriesTitle: demoLecture.seriesTitle,
+      language: demoLecture.language,
+      slides: demoLecture.slides
+    });
     await this.db
       .update(lectureSeries)
       .set({
@@ -1616,7 +1671,8 @@ export class PostgresLectureRepository implements LectureRepository {
         aiDailyTokenLimit: normalizeAiDailyTokenLimit(demoLecture.aiDailyTokenLimit),
         leaderboardEnabled: demoLecture.leaderboardEnabled,
         learnQuestionDensity: normalizeLearnQuestionDensity(demoLecture.learnQuestionDensity),
-        evaluationConfig: normalizeEvaluationConfig(demoLecture.evaluationConfig)
+        evaluationConfig: normalizeEvaluationConfig(demoLecture.evaluationConfig),
+        slideDocumentJson: demoSlideDocument
       })
       .returning();
 
@@ -1765,6 +1821,14 @@ export class PostgresLectureRepository implements LectureRepository {
       .filter((variant) => questionIds.has(variant.questionId))
       .map((variant) => this.variantFromRow(variant))
       .sort((left, right) => questionLevelOrder[left.level] - questionLevelOrder[right.level]);
+    const slideItems = slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide));
+    const slideDocument = normalizeLectureSlideDocument(row.lecture.slideDocumentJson, {
+      id: row.lecture.id,
+      title: row.lecture.title,
+      seriesTitle: row.series?.title ?? "Maschinenelemente I",
+      language: "de",
+      slides: slideItems
+    });
 
     return {
       id: row.lecture.id,
@@ -1786,7 +1850,8 @@ export class PostgresLectureRepository implements LectureRepository {
       leaderboardEnabled: row.lecture.leaderboardEnabled,
       learnQuestionDensity: normalizeLearnQuestionDensity(row.lecture.learnQuestionDensity),
       evaluationConfig: normalizeEvaluationConfig(row.lecture.evaluationConfig),
-      slides: slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide)),
+      slides: slideItems,
+      slideDocument,
       questions: questionsForLecture,
       materials: assetRows
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())

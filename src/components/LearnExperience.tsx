@@ -337,7 +337,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       data-question-origin={questionOrigin}
       style={originStyle}
     >
-      <SlideEngineCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
+      <SlideEngineCanvas
+        current={slide}
+        onNext={next}
+        onPrevious={previous}
+        slideDocument={lecture.slideDocument}
+        slides={lecture.slides}
+      />
       {questionOpen && questionOrigin === "hotspot" && <span className="question-origin-trace" aria-hidden="true" />}
       <div className="hotspots" aria-label="Fragen-Hotspots">
         {hotspotLevels.slice(0, density).map((level, index) => (

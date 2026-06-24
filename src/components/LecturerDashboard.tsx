@@ -12,6 +12,7 @@ import {
 } from "@/lib/learn-settings";
 import { animateStudioSlideSharedElement } from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
+import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
 import { Diagram } from "./Diagram";
@@ -31,6 +32,7 @@ import type {
   StandaloneExportJob,
   StudentChatQuestion
 } from "@/lib/types";
+import type { SlideDocument } from "@learnordie/slide-engine";
 import type { FormEvent, KeyboardEvent } from "react";
 
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
@@ -480,7 +482,8 @@ export function LecturerDashboard({
     evaluationConfig: selected?.evaluationConfig,
     saveEvaluationAsSeriesTemplate: false,
     status: selected?.status ?? "draft",
-    slides: selected?.slides ?? []
+    slides: selected?.slides ?? [],
+    slideDocument: selected?.slideDocument
   });
   const [createDraft, setCreateDraft] = useState({
     title: "Wälzlager und Lebensdauer",
@@ -507,7 +510,8 @@ export function LecturerDashboard({
       evaluationConfig: selected.evaluationConfig,
       saveEvaluationAsSeriesTemplate: false,
       status: selected.status,
-      slides: selected.slides
+      slides: selected.slides,
+      slideDocument: selected.slideDocument
     });
   }, [selected]);
 
@@ -640,7 +644,8 @@ export function LecturerDashboard({
     if (updatedLecture) {
       setEdit((current) => ({
         ...current,
-        slides: updatedLecture.slides
+        slides: updatedLecture.slides,
+        slideDocument: updatedLecture.slideDocument
       }));
     }
   }
@@ -771,6 +776,7 @@ export function LecturerDashboard({
       setEdit((current) => ({
         ...current,
         slides: updatedLecture.slides,
+        slideDocument: updatedLecture.slideDocument,
         learnQuestionDensity: String(normalizeLearnQuestionDensity(updatedLecture.learnQuestionDensity)),
         evaluationConfig: updatedLecture.evaluationConfig
       }));
@@ -822,26 +828,37 @@ export function LecturerDashboard({
 
   function visibleStageEditDraft(current: typeof edit): typeof edit {
     const root = stageFrameRef.current;
-    if (!root || !studioSlide || showCreateForm) return current;
+    if (!root || !selected || !studioSlide || showCreateForm) return current;
 
     const readText = (selector: string, fallback: string) => {
       const value = root.querySelector<HTMLElement>(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "";
       return value || fallback;
     };
 
+    const slides = current.slides.map((slide) => {
+      if (slide.id !== studioSlide.id) return slide;
+      return {
+        ...slide,
+        eyebrow: readText('[data-slide-field="eyebrow"]', slide.eyebrow),
+        title: readText('[data-slide-field="title"]', slide.title),
+        topic: readText('[data-slide-field="topic"]', slide.topic),
+        copy: slide.copy.map((line, index) => readText(`[data-slide-copy-index="${index}"]`, line))
+      };
+    });
+
     return {
       ...current,
       seriesTitle: readText('[data-lecture-field="seriesTitle"]', current.seriesTitle),
-      slides: current.slides.map((slide) => {
-        if (slide.id !== studioSlide.id) return slide;
-        return {
-          ...slide,
-          eyebrow: readText('[data-slide-field="eyebrow"]', slide.eyebrow),
-          title: readText('[data-slide-field="title"]', slide.title),
-          topic: readText('[data-slide-field="topic"]', slide.topic),
-          copy: slide.copy.map((line, index) => readText(`[data-slide-copy-index="${index}"]`, line))
-        };
-      })
+      slides,
+      slideDocument: engineEditorOpen && current.slideDocument
+        ? current.slideDocument
+        : buildLegacyLectureSlideDocument({
+            id: selected.id,
+            title: current.title,
+            seriesTitle: current.seriesTitle,
+            language: selected.language,
+            slides
+          })
     };
   }
 
@@ -879,7 +896,8 @@ export function LecturerDashboard({
         evaluationConfig: updated.evaluationConfig,
         saveEvaluationAsSeriesTemplate: false,
         status: updated.status,
-        slides: updated.slides
+        slides: updated.slides,
+        slideDocument: updated.slideDocument
       });
     }
   }
@@ -917,10 +935,11 @@ export function LecturerDashboard({
     }));
   }
 
-  function updateSlidesFromEngine(slides: Slide[]) {
+  function updateSlideDocumentFromEngine(document: SlideDocument, slides: Slide[]) {
     setEdit((current) => ({
       ...current,
-      slides
+      slides,
+      slideDocument: document
     }));
   }
 
@@ -1146,7 +1165,8 @@ export function LecturerDashboard({
     if (updatedLecture) {
       setEdit((current) => ({
         ...current,
-        slides: updatedLecture.slides
+        slides: updatedLecture.slides,
+        slideDocument: updatedLecture.slideDocument
       }));
     }
     setImprovementMessage(draft.kind === "slide" ? "Folienentwurf übernommen." : "Fragenentwurf übernommen.");
@@ -2691,8 +2711,9 @@ export function LecturerDashboard({
                     <StudioSlideDocumentEditor
                       currentIndex={activeStudioSlideIndex}
                       seriesTitle={edit.seriesTitle}
+                      slideDocument={edit.slideDocument}
                       slides={studioSlides}
-                      onSlidesChange={updateSlidesFromEngine}
+                      onSlideDocumentChange={updateSlideDocumentFromEngine}
                     />
                   )}
                   {renderStudioHotspots()}
