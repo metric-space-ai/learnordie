@@ -1,6 +1,6 @@
 import dns from "node:dns/promises";
 import net from "node:net";
-import type { Lecture, LectureMaterial } from "@/lib/types";
+import type { Lecture, LectureMaterial, PresentationAsset } from "@/lib/types";
 import { getEmbeddingProvider } from "@/server/providers/embeddings";
 import { isPreviewOrProductionDeployment } from "@/server/runtime-config";
 
@@ -17,8 +17,11 @@ export type ProcessedMaterial = {
   warnings: string[];
 };
 
+export type PresentationAssetDraft = Omit<PresentationAsset, "id" | "lectureId" | "createdAt">;
+
 const MAX_CHUNK_CHARS = 520;
 const MAX_URL_TEXT_CHARS = 12000;
+const MAX_PRESENTATION_ASSET_TEXT_CHARS = 5000;
 const MAX_URL_REDIRECTS = 3;
 const URL_FETCH_HEADERS = {
   accept: "text/html, text/plain;q=0.9, application/xhtml+xml;q=0.8"
@@ -35,6 +38,55 @@ function cleanText(value: string) {
 function compactPreview(value: string) {
   const compact = cleanText(value).replace(/\s+/g, " ");
   return compact.length > 220 ? `${compact.slice(0, 217)}...` : compact;
+}
+
+function clampAssetText(value: string) {
+  const text = cleanText(value);
+  return text.length > MAX_PRESENTATION_ASSET_TEXT_CHARS
+    ? `${text.slice(0, MAX_PRESENTATION_ASSET_TEXT_CHARS - 3)}...`
+    : text;
+}
+
+function materialBaseName(name: string) {
+  const withoutQuery = name.split(/[?#]/)[0] || name;
+  const lastSegment = withoutQuery.split("/").filter(Boolean).at(-1) ?? withoutQuery;
+  return lastSegment.replace(/\.[a-z0-9]{1,8}$/i, "").trim() || "Quelle";
+}
+
+function assetTags(material: LectureMaterial, extra: string[] = []) {
+  return [...new Set([material.kind, material.source, ...extra].map((tag) => tag.trim()).filter(Boolean))].slice(0, 20);
+}
+
+function materialQuality(processed: ProcessedMaterial, confidence: number): PresentationAsset["quality"] {
+  return {
+    extractionConfidence: confidence,
+    needsReview: processed.warnings.length > 0 || processed.chunks.length === 0,
+    reason: processed.warnings[0]
+  };
+}
+
+function hasDiagramSignal(text: string, material: LectureMaterial) {
+  return (
+    material.kind === "pptx" ||
+    /(?:diagramm|abbildung|bildposition|visuelle struktur|kurve|layoutanker|hauptdiagramm|schnittbild)/i.test(text)
+  );
+}
+
+function formulaCandidates(text: string) {
+  const candidates = text
+    .split(/\n|(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter((line) => (
+      /(?:sommerfeld|viskosität|viskositaet|eta|η|n\s*\/|S\s*=|\\frac)/i.test(line) ||
+      /[A-Za-z]\s*=\s*[^=]+/.test(line)
+    ))
+    .slice(0, 4);
+
+  return candidates.length > 0 ? candidates : [];
+}
+
+function hasTableSignal(text: string) {
+  return /(?:tabelle|spalte|zeile|kennwert|betriebszustand|reibzustand)/i.test(text);
 }
 
 function uploadExtractedSection(value: string) {
@@ -341,4 +393,127 @@ export async function processMaterialContent(input: {
     sourceRefs: chunks.map((chunk) => chunk.sourceRef),
     warnings
   };
+}
+
+export function createPresentationAssetDrafts(input: {
+  lecture: Lecture;
+  material: LectureMaterial;
+  processed: ProcessedMaterial;
+}): PresentationAssetDraft[] {
+  const { material, processed } = input;
+  const baseTitle = materialBaseName(material.originalName);
+  const combinedText = cleanText([
+    processed.preview,
+    ...processed.chunks.map((chunk) => chunk.content)
+  ].join("\n\n"));
+  const source = {
+    materialId: material.id,
+    originalName: material.originalName
+  };
+  const confidence = processed.chunks.length > 0 && processed.warnings.length === 0 ? 0.86 : processed.chunks.length > 0 ? 0.62 : 0.32;
+  const drafts: PresentationAssetDraft[] = [
+    {
+      kind: "sourceDocument",
+      title: baseTitle,
+      description: `${material.kind.toUpperCase()} als Rohquelle für Folien, Fragen und Learn-Modus.`,
+      storageKey: material.storageUrl,
+      extractedText: processed.preview || undefined,
+      structuredData: {
+        materialKind: material.kind,
+        materialSource: material.source,
+        chunkCount: processed.chunks.length,
+        sourceRefs: processed.sourceRefs
+      },
+      source,
+      tags: assetTags(material, ["source"]),
+      quality: materialQuality(processed, confidence)
+    }
+  ];
+
+  for (const [index, chunk] of processed.chunks.slice(0, 3).entries()) {
+    drafts.push({
+      kind: "text",
+      title: `${baseTitle} · Kernaussage ${index + 1}`,
+      description: "Extrahierter Fachtext, den der Agent direkt in Slide-Blöcke überführen kann.",
+      extractedText: clampAssetText(chunk.content),
+      structuredData: { sourceRef: chunk.sourceRef, order: index + 1 },
+      source: { ...source, sourceRef: chunk.sourceRef },
+      tags: assetTags(material, ["text", "chunk"]),
+      quality: {
+        extractionConfidence: confidence,
+        needsReview: false
+      }
+    });
+  }
+
+  if (combinedText && hasDiagramSignal(combinedText, material)) {
+    drafts.push({
+      kind: "diagram",
+      title: `${baseTitle} · Abbildung`,
+      description: "Visueller Inhalt oder Diagrammhinweis aus der Quelle; für Engine-Figuren vorgesehen.",
+      extractedText: clampAssetText(combinedText),
+      structuredData: {
+        detectedSignals: ["diagram", "figure"],
+        materialKind: material.kind
+      },
+      source,
+      tags: assetTags(material, ["diagram", "figure"]),
+      quality: {
+        extractionConfidence: material.kind === "pptx" ? 0.74 : 0.58,
+        needsReview: true,
+        reason: "Visuelle Assets benötigen vor der Verwendung eine Vorschau- oder OCR-Prüfung."
+      }
+    });
+  }
+
+  const formulas = combinedText ? formulaCandidates(combinedText) : [];
+  if (formulas.length > 0) {
+    drafts.push({
+      kind: "formula",
+      title: `${baseTitle} · Formel`,
+      description: "Formel- oder Kennwertkandidat aus dem Material.",
+      extractedText: clampAssetText(formulas.join("\n")),
+      structuredData: {
+        candidates: formulas,
+        suggestedLatex: formulas.some((line) => /sommerfeld/i.test(line))
+          ? "S = \\frac{\\eta \\cdot n}{p}"
+          : undefined
+      },
+      source,
+      tags: assetTags(material, ["formula"]),
+      quality: {
+        extractionConfidence: 0.55,
+        needsReview: true,
+        reason: "Formelkandidaten müssen fachlich und typografisch geprüft werden."
+      }
+    });
+  }
+
+  if (combinedText && hasTableSignal(combinedText)) {
+    drafts.push({
+      kind: "table",
+      title: `${baseTitle} · Tabelle`,
+      description: "Tabellarisch nutzbarer Strukturhinweis aus dem Material.",
+      extractedText: clampAssetText(combinedText),
+      structuredData: {
+        detectedSignals: ["table"],
+        mobileStrategy: "cards"
+      },
+      source,
+      tags: assetTags(material, ["table"]),
+      quality: {
+        extractionConfidence: 0.48,
+        needsReview: true,
+        reason: "Tabellenstruktur muss vor dem Slide-Einsatz überprüft werden."
+      }
+    });
+  }
+
+  const seen = new Set<string>();
+  return drafts.filter((draft) => {
+    const key = `${draft.kind}:${draft.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

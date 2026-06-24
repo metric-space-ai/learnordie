@@ -46,7 +46,7 @@ import {
   normalizeExamDate,
   slugify
 } from "./lecture-factory";
-import { processMaterialContent } from "./material-pipeline";
+import { createPresentationAssetDrafts, processMaterialContent } from "./material-pipeline";
 import { generateQuestionVariantsForMaterial } from "./question-generation";
 import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
@@ -513,11 +513,21 @@ export class LocalLectureStore {
           material.chunkCount = processed.chunks.length;
           material.extractedTextPreview = processed.preview;
           material.sourceRefs = processed.sourceRefs;
+          const presentationAssetDrafts = createPresentationAssetDrafts({ lecture, material, processed });
+          lecture.presentationAssets = [
+            ...presentationAssetDrafts.map((draft) => ({
+              id: `asset-${crypto.randomUUID()}`,
+              lectureId: lecture.id,
+              ...draft,
+              createdAt: new Date().toISOString()
+            })),
+            ...(lecture.presentationAssets ?? []).filter((asset) => asset.source.materialId !== material.id)
+          ];
           chunkCount += processed.chunks.length;
           steps.push({
-            label: `Chunks gespeichert: ${material.originalName}`,
+            label: `Assets gespeichert: ${material.originalName}`,
             status: "done",
-            detail: `${processed.chunks.length} ${processed.chunks.length === 1 ? "Chunk" : "Chunks"}`,
+            detail: `${processed.chunks.length} ${processed.chunks.length === 1 ? "Chunk" : "Chunks"} · ${presentationAssetDrafts.length} ${presentationAssetDrafts.length === 1 ? "Asset" : "Assets"}`,
             at: new Date().toISOString()
           });
           for (const warning of processed.warnings) {
