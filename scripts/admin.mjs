@@ -550,6 +550,7 @@ async function runPreflight(sql) {
       ["magic_login_rate_limits", "blocked_until"],
       ["lectures", "public_token"],
       ["asset_chunks", "embedding"],
+      ["presentation_assets", "source_json"],
       ["material_processing_runs", "dead_letter_at"],
       ["standalone_export_jobs", "dead_letter_at"],
       ["transcript_segments", "provider"],
@@ -1330,6 +1331,7 @@ async function retentionContentCounts(sql, cutoff, lectureFilter) {
   const [counts] = await sql`
     select
       (select count(*)::int from lecture_assets where created_at < ${cutoff} ${lectureFilter}) as lecture_assets,
+      (select count(*)::int from presentation_assets where created_at < ${cutoff} ${lectureFilter}) as presentation_assets,
       (select count(*)::int from material_processing_runs where started_at < ${cutoff} ${lectureFilter}) as material_processing_runs,
       (select count(*)::int from question_review_items where created_at < ${cutoff} ${lectureFilter}) as question_review_items,
       (select count(*)::int from questions where created_at < ${cutoff} ${lectureFilter}) as questions,

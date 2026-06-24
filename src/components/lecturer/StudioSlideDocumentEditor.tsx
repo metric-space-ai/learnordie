@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { Slide } from "@/lib/types";
+import type { PresentationAsset, Slide } from "@/lib/types";
 import {
   DeckRenderer,
   applySlideDocumentEdits,
@@ -13,6 +13,7 @@ import {
   slideDocumentToLegacySlides,
   type QuestionLevel,
   type SlideAssetKind,
+  type SlideAssetRef,
   type SlideBlock,
   type SlideBlockPatch,
   type SlideBlockSelection,
@@ -28,6 +29,7 @@ type StudioSlideDocumentEditorProps = {
   seriesTitle: string;
   slides: Slide[];
   slideDocument?: SlideDocument;
+  presentationAssets?: PresentationAsset[];
   onSlideDocumentChange: (document: SlideDocument, slides: Slide[]) => void;
 };
 
@@ -36,6 +38,7 @@ export function StudioSlideDocumentEditor({
   seriesTitle,
   slides,
   slideDocument,
+  presentationAssets = [],
   onSlideDocumentChange
 }: StudioSlideDocumentEditorProps) {
   const document = useMemo(() => slideDocument ?? legacySlidesToSlideDocument(slides, {
@@ -51,7 +54,18 @@ export function StudioSlideDocumentEditor({
   const selectedField = selectedBlock ? editableField(selectedBlock, currentSlide?.id ?? "") : null;
   const selectedTable = selectedBlock?.type === "table" ? selectedBlock : null;
   const selectedQuizAnchor = currentSlide?.quizAnchors?.find((anchor) => anchor.blockId === selectedBlock?.id);
-  const figureAssets = useMemo(() => document.assets.filter((asset) => figureCompatibleAssetKinds.has(asset.kind)), [document.assets]);
+  const figureAssets = useMemo(() => {
+    const merged = new Map<string, SlideAssetRef>();
+    document.assets
+      .filter((asset) => figureCompatibleAssetKinds.has(asset.kind))
+      .forEach((asset) => merged.set(asset.id, asset));
+    presentationAssets
+      .map(presentationAssetToSlideAssetRef)
+      .filter((asset): asset is SlideAssetRef => asset !== null)
+      .filter((asset) => figureCompatibleAssetKinds.has(asset.kind))
+      .forEach((asset) => merged.set(asset.id, asset));
+    return [...merged.values()];
+  }, [document.assets, presentationAssets]);
   const [editorValue, setEditorValue] = useState(selectedField?.value ?? "");
   const [tableRowIndex, setTableRowIndex] = useState(0);
   const [tableColumnIndex, setTableColumnIndex] = useState(0);
@@ -128,9 +142,17 @@ export function StudioSlideDocumentEditor({
 
   function updateFigureAsset(assetId: string) {
     if (!currentSlide || selectedBlock?.type !== "figure") return;
-    const asset = document.assets.find((candidate) => candidate.id === assetId);
+    const asset = figureAssets.find((candidate) => candidate.id === assetId);
     if (!asset) return;
-    applyOperations([
+    const operations: SlideDocumentEditOperation[] = [];
+    if (!document.assets.some((candidate) => candidate.id === asset.id)) {
+      operations.push({
+        operationId: `studio-engine-upsert-asset-${asset.id}`,
+        kind: "upsertAsset",
+        asset
+      });
+    }
+    operations.push(
       {
         operationId: `studio-engine-asset-${selectedBlock.id}`,
         kind: "patchBlock",
@@ -141,7 +163,8 @@ export function StudioSlideDocumentEditor({
           altText: asset.altText ?? selectedBlock.altText
         }
       }
-    ], "Engine-Asset gespeichert. Bitte Lecture speichern.");
+    );
+    applyOperations(operations, "Engine-Asset gespeichert. Bitte Lecture speichern.");
   }
 
   function saveTableCell() {
@@ -457,6 +480,53 @@ function formatLayoutLabel(layout: SlideLayoutId) {
 }
 
 const figureCompatibleAssetKinds = new Set<SlideAssetKind>(["figure", "photo", "diagram", "chart"]);
+const stableEngineIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+
+function stableEngineId(value: string, fallbackPrefix = "asset") {
+  const sanitized = value.trim().replace(/[^A-Za-z0-9.:-]/g, "-").replace(/-+/g, "-");
+  if (stableEngineIdPattern.test(sanitized)) return sanitized;
+  return `${fallbackPrefix}-${sanitized.replace(/^[^A-Za-z0-9]+/, "") || "generated"}`;
+}
+
+function boundedText(value: string | undefined, max: number) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > max ? `${trimmed.slice(0, max - 3)}...` : trimmed;
+}
+
+function presentationAssetToSlideAssetRef(asset: PresentationAsset): SlideAssetRef | null {
+  if (!figureCompatibleAssetKinds.has(asset.kind)) return null;
+  const id = stableEngineId(asset.id);
+  const sourceId = stableEngineId(`source-${asset.id}`, "source");
+  const materialId = asset.source.materialId && stableEngineIdPattern.test(asset.source.materialId)
+    ? asset.source.materialId
+    : undefined;
+  return {
+    id,
+    kind: asset.kind,
+    title: boundedText(asset.title, 160) ?? "Asset",
+    description: boundedText(asset.description, 500),
+    storageKey: boundedText(asset.storageKey, 500),
+    previewKey: boundedText(asset.previewKey, 500),
+    altText: boundedText(asset.description ?? asset.title, 320),
+    extractedText: boundedText(asset.extractedText, 10000),
+    structuredData: asset.structuredData,
+    source: {
+      id: sourceId,
+      sourceType: materialId ? "material" : "asset",
+      label: boundedText(asset.source.originalName, 220) ?? asset.title,
+      materialId,
+      assetId: id,
+      locator: boundedText(asset.source.sourceRef, 180),
+      page: asset.source.page,
+      slide: asset.source.slide,
+      bbox: asset.source.bbox
+    },
+    tags: asset.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
+    quality: asset.quality
+  };
+}
 
 function clampIndex(index: number, max: number) {
   if (max <= 0) return 0;

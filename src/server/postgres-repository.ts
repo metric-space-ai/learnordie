@@ -10,7 +10,7 @@ import {
   legacySlidesFromSlideDocument,
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
-import type { SlideDocument, SlideNode } from "@learnordie/slide-engine";
+import { slideAssetKindValues, type SlideDocument, type SlideNode } from "@learnordie/slide-engine";
 import type {
   AnswerOption,
   Lecture,
@@ -24,6 +24,9 @@ import type {
   MaterialProcessingRunStatus,
   MaterialProcessingStep,
   MaterialProcessingStepStatus,
+  PresentationAsset,
+  PresentationAssetQuality,
+  PresentationAssetSource,
   QuestionLevel,
   QuestionPromptHistoryItem,
   QuestionPromptRegistry,
@@ -56,6 +59,7 @@ import {
   lecturerAssistantMessages,
   materialProcessingRuns,
   participantSessions,
+  presentationAssets,
   questions,
   questionReviewItems,
   questionVariants,
@@ -78,7 +82,7 @@ import {
   slugify
 } from "./lecture-factory";
 import { applyQualityDecision, recordReviewEdits } from "./question-review-metadata";
-import { processMaterialContent } from "./material-pipeline";
+import { createPresentationAssetDrafts, processMaterialContent } from "./material-pipeline";
 import { generateQuestionVariantsForMaterial } from "./question-generation";
 import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
@@ -243,6 +247,54 @@ function coerceMaterialSource(value: string): LectureMaterial["source"] {
 function coerceMaterialStatus(value: string): LectureMaterial["status"] {
   if (value === "uploaded" || value === "processing" || value === "ready") return value;
   return "uploaded";
+}
+
+function coercePresentationAssetKind(value: string): PresentationAsset["kind"] {
+  return slideAssetKindValues.includes(value as PresentationAsset["kind"]) ? value as PresentationAsset["kind"] : "sourceDocument";
+}
+
+function coercePresentationAssetSource(value: unknown, row: PresentationAssetRow): PresentationAssetSource {
+  if (!value || typeof value !== "object") {
+    return {
+      materialId: row.materialId ?? undefined,
+      originalName: row.title
+    };
+  }
+
+  const source = value as Record<string, unknown>;
+  const bbox = source.bbox;
+  return {
+    materialId: typeof source.materialId === "string" ? source.materialId : row.materialId ?? undefined,
+    originalName: typeof source.originalName === "string" ? source.originalName : row.title,
+    sourceRef: typeof source.sourceRef === "string" ? source.sourceRef : undefined,
+    page: typeof source.page === "number" ? source.page : undefined,
+    slide: typeof source.slide === "number" ? source.slide : undefined,
+    bbox: bbox && typeof bbox === "object"
+      ? {
+          x: typeof (bbox as Record<string, unknown>).x === "number" ? (bbox as Record<string, number>).x : 0,
+          y: typeof (bbox as Record<string, unknown>).y === "number" ? (bbox as Record<string, number>).y : 0,
+          width: typeof (bbox as Record<string, unknown>).width === "number" ? Math.max(1, (bbox as Record<string, number>).width) : 1,
+          height: typeof (bbox as Record<string, unknown>).height === "number" ? Math.max(1, (bbox as Record<string, number>).height) : 1
+        }
+      : undefined
+  };
+}
+
+function coercePresentationAssetTags(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 20);
+}
+
+function coercePresentationAssetQuality(value: unknown): PresentationAssetQuality {
+  if (!value || typeof value !== "object") return { needsReview: true };
+  const quality = value as Record<string, unknown>;
+  return {
+    extractionConfidence: typeof quality.extractionConfidence === "number"
+      ? Math.min(1, Math.max(0, quality.extractionConfidence))
+      : undefined,
+    needsReview: typeof quality.needsReview === "boolean" ? quality.needsReview : true,
+    reason: typeof quality.reason === "string" ? quality.reason : undefined
+  };
 }
 
 function coerceProcessingRunStatus(value: string): MaterialProcessingRunStatus {
@@ -528,6 +580,7 @@ type LectureRow = typeof lectures.$inferSelect;
 type SeriesRow = typeof lectureSeries.$inferSelect;
 type AssetRow = typeof lectureAssets.$inferSelect;
 type ChunkRow = typeof assetChunks.$inferSelect;
+type PresentationAssetRow = typeof presentationAssets.$inferSelect;
 type ProcessingRunRow = typeof materialProcessingRuns.$inferSelect;
 type ChatQuestionRow = typeof studentChatQuestions.$inferSelect;
 type TranscriptSegmentRow = typeof transcriptSegments.$inferSelect;
@@ -912,11 +965,31 @@ export class PostgresLectureRepository implements LectureRepository {
             }))
           );
         }
+        const presentationAssetDrafts = createPresentationAssetDrafts({ lecture, material, processed });
+        await this.db.delete(presentationAssets).where(eq(presentationAssets.materialId, material.id));
+        if (presentationAssetDrafts.length > 0) {
+          await this.db.insert(presentationAssets).values(
+            presentationAssetDrafts.map((asset) => ({
+              lectureId: lecture.id,
+              materialId: material.id,
+              kind: asset.kind,
+              title: asset.title,
+              description: asset.description,
+              storageKey: asset.storageKey,
+              previewKey: asset.previewKey,
+              extractedText: asset.extractedText,
+              structuredData: asset.structuredData,
+              sourceJson: asset.source,
+              tagsJson: asset.tags,
+              qualityJson: asset.quality
+            }))
+          );
+        }
         chunkCount += processed.chunks.length;
         steps.push({
-          label: `Chunks gespeichert: ${material.originalName}`,
+          label: `Assets gespeichert: ${material.originalName}`,
           status: "done",
-          detail: `${processed.chunks.length} ${processed.chunks.length === 1 ? "Chunk" : "Chunks"}`,
+          detail: `${processed.chunks.length} ${processed.chunks.length === 1 ? "Chunk" : "Chunks"} · ${presentationAssetDrafts.length} ${presentationAssetDrafts.length === 1 ? "Asset" : "Assets"}`,
           at: new Date().toISOString()
         });
         for (const warning of processed.warnings) {
@@ -1814,6 +1887,7 @@ export class PostgresLectureRepository implements LectureRepository {
       slideRows,
       assetRows,
       chunkRows,
+      presentationAssetRows,
       processingRunRows,
       chatQuestionRows,
       transcriptSegmentRows,
@@ -1826,6 +1900,7 @@ export class PostgresLectureRepository implements LectureRepository {
       this.db.select().from(slides).where(inArray(slides.lectureId, lectureIds)),
       this.db.select().from(lectureAssets).where(inArray(lectureAssets.lectureId, lectureIds)),
       this.db.select().from(assetChunks).where(inArray(assetChunks.lectureId, lectureIds)),
+      this.db.select().from(presentationAssets).where(inArray(presentationAssets.lectureId, lectureIds)),
       this.db.select().from(materialProcessingRuns).where(inArray(materialProcessingRuns.lectureId, lectureIds)),
       this.db.select().from(studentChatQuestions).where(inArray(studentChatQuestions.lectureId, lectureIds)),
       this.db.select().from(transcriptSegments).where(inArray(transcriptSegments.lectureId, lectureIds)),
@@ -1847,6 +1922,7 @@ export class PostgresLectureRepository implements LectureRepository {
         slideRows.filter((slide) => slide.lectureId === row.lecture.id),
         assetRows.filter((asset) => asset.lectureId === row.lecture.id),
         chunkRows.filter((chunk) => chunk.lectureId === row.lecture.id),
+        presentationAssetRows.filter((asset) => asset.lectureId === row.lecture.id),
         processingRunRows.filter((runItem) => runItem.lectureId === row.lecture.id),
         chatQuestionRows.filter((chatQuestion) => chatQuestion.lectureId === row.lecture.id),
         transcriptSegmentRows.filter((segment) => segment.lectureId === row.lecture.id),
@@ -1865,6 +1941,7 @@ export class PostgresLectureRepository implements LectureRepository {
     slideRows: SlideRow[],
     assetRows: AssetRow[],
     chunkRows: ChunkRow[],
+    presentationAssetRows: PresentationAssetRow[],
     processingRunRows: ProcessingRunRow[],
     chatQuestionRows: ChatQuestionRow[],
     transcriptSegmentRows: TranscriptSegmentRow[],
@@ -1915,6 +1992,9 @@ export class PostgresLectureRepository implements LectureRepository {
       materials: assetRows
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
         .map((asset) => this.materialFromRow(asset, chunkRows.filter((chunk) => chunk.assetId === asset.id))),
+      presentationAssets: presentationAssetRows
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((asset) => this.presentationAssetFromRow(asset)),
       materialProcessingRuns: processingRunRows
         .sort((left, right) => right.startedAt.getTime() - left.startedAt.getTime())
         .map((runItem) => this.processingRunFromRow(runItem)),
@@ -1966,6 +2046,24 @@ export class PostgresLectureRepository implements LectureRepository {
       chunkCount: orderedChunks.length || undefined,
       extractedTextPreview: preview || undefined,
       sourceRefs: orderedChunks.length > 0 ? orderedChunks.map((chunk) => chunk.sourceRef) : undefined,
+      createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private presentationAssetFromRow(row: PresentationAssetRow): PresentationAsset {
+    return {
+      id: row.id,
+      lectureId: row.lectureId,
+      kind: coercePresentationAssetKind(row.kind),
+      title: row.title,
+      description: row.description ?? undefined,
+      storageKey: row.storageKey ?? undefined,
+      previewKey: row.previewKey ?? undefined,
+      extractedText: row.extractedText ?? undefined,
+      structuredData: row.structuredData ?? undefined,
+      source: coercePresentationAssetSource(row.sourceJson, row),
+      tags: coercePresentationAssetTags(row.tagsJson),
+      quality: coercePresentationAssetQuality(row.qualityJson),
       createdAt: row.createdAt.toISOString()
     };
   }

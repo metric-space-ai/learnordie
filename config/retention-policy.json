@@ -23,6 +23,7 @@
       "questions",
       "question_review_items",
       "lecture_assets",
+      "presentation_assets",
       "material_processing_runs"
     ],
     "description": "Vorlesungsinhalte, Fragen, Reviews und Materialien sind Kursartefakte und werden nicht durch den Lernsignal-Cleanup automatisch geloescht."

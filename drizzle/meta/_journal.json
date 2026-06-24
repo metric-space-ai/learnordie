@@ -176,6 +176,13 @@
       "when": 1782330567636,
       "tag": "0024_past_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782336080449,
+      "tag": "0025_overconfident_korath",
+      "breakpoints": true
     }
   ]
 }
