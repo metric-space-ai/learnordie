@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import { audioFileExtension, recordAudioSnippet } from "@/lib/audio-capture";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { Presence } from "./Presence";
-import { SlideCanvas } from "./SlideCanvas";
+import { SlideEngineCanvas } from "./SlideEngineCanvas";
 
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
 type QuestionOrigin = "control" | "hotspot" | "space";
@@ -244,7 +244,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
       data-question-origin={questionOrigin}
     >
-      <SlideCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
+      <SlideEngineCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
 
       <Presence show={transcriptVisible}>
         {(motionState) => (

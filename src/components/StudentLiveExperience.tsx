@@ -7,7 +7,7 @@ import type { LeaderboardEntry, Lecture } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
 import { QuizDrawer } from "./QuizDrawer";
-import { SlideCanvas } from "./SlideCanvas";
+import { SlideEngineCanvas } from "./SlideEngineCanvas";
 
 type QuestionOrigin = "control" | "hotspot" | "space";
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -177,7 +177,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
       data-question-origin={questionOrigin}
     >
-      <SlideCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
+      <SlideEngineCanvas slides={lecture.slides} current={slide} onPrevious={previous} onNext={next} />
       <div className="action-stack lb-enter-control">
         <button
           className="icon-action"
