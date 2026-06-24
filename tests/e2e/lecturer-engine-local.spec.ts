@@ -15,15 +15,32 @@ function attachDiagnostics(page: Page) {
 }
 
 async function loginLecturer(page: Page) {
-  await page.goto("/lecturer/login");
-  await page.getByLabel("E-Mail").fill(`engine-${Date.now()}@example.test`);
-  await page.getByRole("button", { name: "Magic Link senden" }).click();
-  const link = page.getByRole("link", { name: "Referentenbereich öffnen" });
-  await expect(link).toBeVisible();
-  const href = await link.getAttribute("href");
-  if (!href) throw new Error("Magic link was not rendered in local mail mode.");
-  await page.goto(href);
-  await expect(page).toHaveURL(/\/lecturer$/);
+  const candidateEmails = Array.from(new Set([
+    process.env.E2E_OWNER_EMAIL ?? "e2e@example.test",
+    process.env.LOCAL_E2E_LECTURER_EMAIL ?? "referent@example.com"
+  ]));
+
+  for (const email of candidateEmails) {
+    await page.context().clearCookies();
+    await page.goto("/lecturer/login");
+    await page.getByLabel("E-Mail").fill(email);
+    await page.getByRole("button", { name: "Magic Link senden" }).click();
+    const link = page.getByRole("link", { name: "Referentenbereich öffnen" });
+    await expect(link).toBeVisible();
+    const href = await link.getAttribute("href");
+    if (!href) throw new Error("Magic link was not rendered in local mail mode.");
+    await page.goto(href);
+    await expect(page).toHaveURL(/\/lecturer$/);
+    const titleInput = page.getByRole("textbox", { name: "Folientitel" });
+    try {
+      await expect(titleInput).toBeVisible({ timeout: 3_000 });
+      return;
+    } catch {
+      // Try the next seeded owner used by the alternate E2E repository mode.
+    }
+  }
+
+  throw new Error(`No seeded lecturer lecture found for ${candidateEmails.join(", ")}.`);
 }
 
 test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async ({ page }) => {

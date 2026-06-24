@@ -67,5 +67,3 @@ Intentionally excluded:
 - `css/theme/fonts/`
 - `dist/plugin/`
 - `external plugin examples`
-
-Do not treat https://github.com/metric-space-ai/learnordie-slide-engine as the source of truth. It was created during exploration and may only be used as a temporary comparison copy.
