@@ -15,32 +15,35 @@ function attachDiagnostics(page: Page) {
 }
 
 async function loginLecturer(page: Page) {
-  const candidateEmails = Array.from(new Set([
-    process.env.E2E_OWNER_EMAIL ?? "e2e@example.test",
-    process.env.LOCAL_E2E_LECTURER_EMAIL ?? "referent@example.com"
-  ]));
+  const email = `engine-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
+  await page.goto("/lecturer/login");
+  await page.getByLabel("E-Mail").fill(email);
+  await page.getByRole("button", { name: "Magic Link senden" }).click();
+  const link = page.getByRole("link", { name: "Referentenbereich öffnen" });
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  if (!href) throw new Error("Magic link was not rendered in local mail mode.");
+  await page.goto(href);
+  await expect(page).toHaveURL(/\/lecturer$/);
 
-  for (const email of candidateEmails) {
-    await page.context().clearCookies();
-    await page.goto("/lecturer/login");
-    await page.getByLabel("E-Mail").fill(email);
-    await page.getByRole("button", { name: "Magic Link senden" }).click();
-    const link = page.getByRole("link", { name: "Referentenbereich öffnen" });
-    await expect(link).toBeVisible();
-    const href = await link.getAttribute("href");
-    if (!href) throw new Error("Magic link was not rendered in local mail mode.");
-    await page.goto(href);
-    await expect(page).toHaveURL(/\/lecturer$/);
-    const titleInput = page.getByRole("textbox", { name: "Folientitel" });
-    try {
-      await expect(titleInput).toBeVisible({ timeout: 3_000 });
-      return;
-    } catch {
-      // Try the next seeded owner used by the alternate E2E repository mode.
-    }
+  const titleInput = page.getByRole("textbox", { name: "Folientitel" });
+  if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
+    const csrfToken = await page.locator("[data-csrf-token]").first().getAttribute("data-csrf-token");
+    if (!csrfToken) throw new Error("Lecturer CSRF token missing during isolated lecture setup.");
+    const createResponse = await page.request.post("/api/lectures", {
+      headers: { "x-learnbuddy-csrf": csrfToken },
+      data: {
+        title: "Gleitlagerung",
+        seriesTitle: "Maschinenelemente I",
+        liveAt: "2026-06-19T11:00",
+        examDate: "2026-07-24"
+      }
+    });
+    expect(createResponse.ok()).toBe(true);
+    await page.reload();
   }
 
-  throw new Error(`No seeded lecturer lecture found for ${candidateEmails.join(", ")}.`);
+  await expect(titleInput).toBeVisible();
 }
 
 test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async ({ page }) => {
