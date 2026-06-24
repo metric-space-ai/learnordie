@@ -10,6 +10,7 @@ import {
   lectureAssets,
   materialProcessingRuns,
   participantSessions,
+  presentationAssets,
   questionReviewItems,
   questions,
   standaloneExportJobs,
@@ -125,6 +126,11 @@ async function buildPostgresRetentionSummary(lecture: Lecture, years: number, as
       count: await count(lectureAssets, and(eq(lectureAssets.lectureId, lecture.id), lt(lectureAssets.createdAt, cutoff)))
     },
     {
+      key: "presentation_assets",
+      label: "Präsentationsassets",
+      count: await count(presentationAssets, and(eq(presentationAssets.lectureId, lecture.id), lt(presentationAssets.createdAt, cutoff)))
+    },
+    {
       key: "material_processing_runs",
       label: "Materialläufe",
       count: await count(materialProcessingRuns, and(eq(materialProcessingRuns.lectureId, lecture.id), lt(materialProcessingRuns.startedAt, cutoff)))
@@ -195,6 +201,11 @@ async function buildLocalRetentionSummary(lecture: Lecture, years: number, asOf:
       key: "lecture_assets",
       label: "Materialien",
       count: (lecture.materials ?? []).filter((item) => olderThan(item.createdAt, cutoff)).length
+    },
+    {
+      key: "presentation_assets",
+      label: "Präsentationsassets",
+      count: (lecture.presentationAssets ?? []).filter((item) => olderThan(item.createdAt, cutoff)).length
     },
     {
       key: "material_processing_runs",

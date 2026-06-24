@@ -93,6 +93,7 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   const runId = Date.now();
   const formulaLatex = `S_${runId} = \\frac{\\eta \\cdot n}{p}`;
   const tableCell = `Mischreibung ${runId}`;
+  const libraryNote = `Stribeck-Diagramm ${runId}: Diagramm der Stribeck-Kurve mit Mischreibung, hydrodynamischer Gleitlagerung und Sommerfeldzahl.`;
 
   await loginLecturer(page);
   const csrfToken = await page.locator("[data-csrf-token]").first().getAttribute("data-csrf-token");
@@ -111,7 +112,28 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   });
   expect(patchResponse.ok()).toBe(true);
 
+  const materialResponse = await page.request.post(`/api/lectures/${lecture.id}/materials`, {
+    headers: { "x-learnbuddy-csrf": csrfToken },
+    multipart: { notes: libraryNote }
+  });
+  expect(materialResponse.status()).toBe(201);
+  const processingResponse = await page.request.post(`/api/lectures/${lecture.id}/process-materials`, {
+    headers: { "x-learnbuddy-csrf": csrfToken }
+  });
+  expect(processingResponse.ok()).toBe(true);
+  const libraryResponse = await page.request.get("/api/lectures");
+  expect(libraryResponse.ok()).toBe(true);
+  const libraryPayload = await libraryResponse.json() as { lectures?: Array<LectureApiShape> };
+  const libraryLecture = libraryPayload.lectures?.find((item) => item.id === lecture.id);
+  const libraryAsset = libraryLecture?.presentationAssets?.find((asset) => asset.kind === "diagram" && asset.extractedText?.includes(`Stribeck-Diagramm ${runId}`));
+  if (!libraryAsset) throw new Error("Processed presentation diagram asset was not returned by /api/lectures.");
+
   await page.reload();
+  await page.getByLabel("Quellen für diese Folie").click();
+  await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Diagramm");
+  await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Prüfen");
+  await page.getByLabel("Quellen schließen").click();
+
   await page.getByRole("button", { name: "Engine" }).click();
   const editor = page.locator('[data-studio-engine-editor="true"]');
   await expect(editor).toBeVisible();
@@ -120,7 +142,7 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   await expect(page.getByText("Engine-Layout gespeichert. Bitte Lecture speichern.")).toBeVisible();
 
   await editor.locator('[data-editor-block-type="figure"]').first().click();
-  await page.getByLabel("Engine Asset").selectOption("asset-product-bearing-detail");
+  await page.getByLabel("Engine Asset").selectOption(libraryAsset.id);
   await expect(page.getByText("Engine-Asset gespeichert. Bitte Lecture speichern.")).toBeVisible();
 
   await editor.locator('[data-editor-block-id="product-formula-test"]').click();
@@ -161,8 +183,16 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
     ])
   });
   expect(savedSlide?.blocks?.find((block) => block.type === "figure")).toMatchObject({
-    assetId: "asset-product-bearing-detail"
+    assetId: libraryAsset.id
   });
+  expect(savedLecture?.slideDocument?.assets).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: libraryAsset.id,
+      kind: "diagram",
+      title: libraryAsset.title,
+      quality: expect.objectContaining({ needsReview: true })
+    })
+  ]));
   expect(savedSlide?.quizAnchors).toEqual(expect.arrayContaining([
     expect.objectContaining({
       blockId: "product-table-test",
@@ -173,6 +203,8 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   await page.reload();
   await page.getByRole("button", { name: "Engine" }).click();
   await expect(page.getByLabel("Engine Layout")).toHaveValue("technical_two_column");
+  await editor.locator('[data-editor-block-type="figure"]').first().click();
+  await expect(page.getByLabel("Engine Asset")).toHaveValue(libraryAsset.id);
   await editor.locator('[data-editor-block-id="product-formula-test"]').click();
   await expect(page.getByLabel("Engine Formel")).toHaveValue(formulaLatex);
   assertClean();
@@ -182,6 +214,12 @@ type LectureApiShape = {
   id: string;
   title: string;
   slideDocument?: SlideDocumentApiShape;
+  presentationAssets?: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    extractedText?: string;
+  }>;
 };
 
 type SlideDocumentApiShape = {

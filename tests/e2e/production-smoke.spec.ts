@@ -2980,6 +2980,8 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     await expect(page.getByText("Materialverarbeitung abgeschlossen.")).toBeVisible();
     await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("Materialien");
     await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("URL-Abruf blockiert");
+    await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Assets");
+    await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Quelle");
 
     const chunks = await sql<{ content: string; source_ref: string }[]>`
       select ac.content, ac.source_ref
@@ -3024,6 +3026,13 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
       order by started_at desc
       limit 1
     `;
+    const presentationAssetRows = await sql<{ kind: string; title: string; source_json: { originalName?: string }; quality_json: { needsReview?: boolean } }[]>`
+      select pa.kind, pa.title, pa.source_json, pa.quality_json
+      from presentation_assets pa
+      join lecture_assets la on la.id = pa.material_id
+      where la.original_name in (${pdfName}, ${scannedPdfName}, ${ocrPdfName}, ${pptxName}, ${imageOnlyPdfName}, ${blockedLoopbackUrlText})
+      order by pa.created_at, pa.kind
+    `;
     const combined = chunks.map((chunk) => chunk.content).join("\n");
     expect(combined).toContain("Stribeck-Kurve aus PDF");
     expect(combined).toContain("Mischreibung");
@@ -3047,6 +3056,10 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     expect(ocrReviews[0].count).toBe(1);
     expect(blockedUrlChunks[0].count).toBe(0);
     expect(blockedUrlReviews[0].count).toBe(0);
+    expect(presentationAssetRows.length).toBeGreaterThanOrEqual(6);
+    expect(presentationAssetRows.map((row) => row.kind)).toEqual(expect.arrayContaining(["sourceDocument", "text", "diagram", "formula"]));
+    expect(presentationAssetRows.some((row) => row.source_json.originalName === pptxName)).toBe(true);
+    expect(presentationAssetRows.some((row) => row.quality_json.needsReview === true)).toBe(true);
     expect(blockedUrlTrap.requestCount()).toBe(0);
     expect(latestRuns[0].steps_json.some((step) => (
       step.label === `Review-Vorschlag übersprungen: ${imageOnlyPdfName}` &&

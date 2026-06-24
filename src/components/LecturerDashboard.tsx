@@ -24,6 +24,7 @@ import type {
   LectureStatus,
   LecturerAssistantToolPlanItem,
   MaterialProcessingRun,
+  PresentationAsset,
   QuestionLevel,
   QuestionReviewItem,
   QuestionVariant,
@@ -32,7 +33,7 @@ import type {
   StandaloneExportJob,
   StudentChatQuestion
 } from "@/lib/types";
-import type { SlideDocument } from "@learnordie/slide-engine";
+import type { SlideAssetRef, SlideDocument } from "@learnordie/slide-engine";
 import type { FormEvent, KeyboardEvent } from "react";
 
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
@@ -140,6 +141,42 @@ function formatRunStatus(status: MaterialProcessingRun["status"]) {
     failed: "Fehlgeschlagen",
     dead_letter: "Eingriff nötig"
   } as const)[status];
+}
+
+function formatPresentationAssetKind(kind: PresentationAsset["kind"]) {
+  return ({
+    text: "Text",
+    figure: "Abbildung",
+    photo: "Foto",
+    diagram: "Diagramm",
+    chart: "Chart",
+    formula: "Formel",
+    table: "Tabelle",
+    audio: "Audio",
+    video: "Video",
+    sourceDocument: "Quelle"
+  } as const)[kind] ?? kind;
+}
+
+function formatPresentationAssetQuality(asset: PresentationAsset) {
+  if (asset.quality.needsReview) return "Prüfen";
+  if (typeof asset.quality.extractionConfidence === "number") {
+    return `${Math.round(asset.quality.extractionConfidence * 100)}%`;
+  }
+  return "Bereit";
+}
+
+function assetPreview(asset: PresentationAsset) {
+  const preview = asset.extractedText?.replace(/\s+/g, " ").trim();
+  if (!preview) return asset.description ?? "Für den Folienaufbau verfügbar.";
+  return preview.length > 130 ? `${preview.slice(0, 127)}...` : preview;
+}
+
+function mergeSlideDocumentAssets(base: SlideDocument, previous?: SlideDocument): SlideDocument {
+  if (!previous || previous.assets.length === 0) return base;
+  const assets = new Map<string, SlideAssetRef>();
+  [...base.assets, ...previous.assets].forEach((asset) => assets.set(asset.id, asset));
+  return { ...base, assets: [...assets.values()] };
 }
 
 function isTechnicalProviderMessage(message: string) {
@@ -846,19 +883,21 @@ export function LecturerDashboard({
       };
     });
 
+    const rebuiltSlideDocument = buildLegacyLectureSlideDocument({
+      id: selected.id,
+      title: current.title,
+      seriesTitle: current.seriesTitle,
+      language: selected.language,
+      slides
+    });
+
     return {
       ...current,
       seriesTitle: readText('[data-lecture-field="seriesTitle"]', current.seriesTitle),
       slides,
       slideDocument: engineEditorOpen && current.slideDocument
         ? current.slideDocument
-        : buildLegacyLectureSlideDocument({
-            id: selected.id,
-            title: current.title,
-            seriesTitle: current.seriesTitle,
-            language: selected.language,
-            slides
-          })
+        : mergeSlideDocumentAssets(rebuiltSlideDocument, current.slideDocument)
     };
   }
 
@@ -1034,7 +1073,7 @@ export function LecturerDashboard({
       return;
     }
     setProcessingLectureId(selected.id);
-    setProcessingMessage("Materialverarbeitung läuft. Quellen werden gelesen, Chunks gespeichert und Review-Vorschläge erzeugt.");
+    setProcessingMessage("Materialverarbeitung läuft. Quellen werden gelesen, Assets gespeichert und Review-Vorschläge erzeugt.");
     const response = await fetch(`/api/lectures/${selected.id}/process-materials`, { method: "POST", headers: csrfHeaders });
     const payload = (await response.json()) as { lectures?: Lecture[]; error?: string; queued?: boolean };
     setProcessingLectureId("");
@@ -1538,7 +1577,9 @@ export function LecturerDashboard({
   function renderSlideSourceOverlay(motionState: PresenceState) {
     const lastRun = selected.materialProcessingRuns?.[0];
     const materials = selected.materials ?? [];
+    const presentationAssets = selected.presentationAssets ?? [];
     const materialLabel = materials.length === 1 ? "1 Quelle" : `${materials.length} Quellen`;
+    const assetLabel = presentationAssets.length === 1 ? "1 Asset" : `${presentationAssets.length} Assets`;
     const lastRunCountLabel = lastRun
       ? lastRun.materialCount > 0
         ? `${lastRun.materialCount} Materialien · ${lastRun.chunkCount} Chunks · ${lastRun.reviewCount} Reviews`
@@ -1552,7 +1593,7 @@ export function LecturerDashboard({
         <header className="slide-overlay-head">
           <div>
             <strong>Quellen</strong>
-            <span>{materialLabel}</span>
+            <span>{materialLabel} · {assetLabel}</span>
           </div>
           {materials.length > 0 && (
             <button
@@ -1576,6 +1617,32 @@ export function LecturerDashboard({
             {extractionWarning && <small>{extractionWarning}</small>}
           </div>
         )}
+        <section className="studio-asset-library" aria-label="Asset-Bibliothek">
+          <div className="studio-asset-library-head">
+            <strong>Asset-Bibliothek</strong>
+            <span>{assetLabel}</span>
+          </div>
+          {presentationAssets.length === 0 ? (
+            <p className="muted">Noch keine extrahierten Präsentationsassets. Quellen verarbeiten erzeugt Text-, Diagramm-, Formel- und Tabellenkandidaten.</p>
+          ) : (
+            <div className="studio-asset-list compact">
+              {presentationAssets.slice(0, 6).map((asset) => (
+                <article className="studio-asset-card" key={asset.id}>
+                  <header>
+                    <span>{formatPresentationAssetKind(asset.kind)}</span>
+                    <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
+                  </header>
+                  <strong>{asset.title}</strong>
+                  <p>{assetPreview(asset)}</p>
+                  <footer>
+                    <span>{asset.source.originalName}</span>
+                    {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
+                  </footer>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
         <div className="studio-source-list compact" aria-label="Hinterlegte Quellen">
           {materials.length === 0 ? (
             <p className="muted">Noch keine Quelle an dieser Folie.</p>
@@ -2710,6 +2777,7 @@ export function LecturerDashboard({
                   {engineEditorOpen && (
                     <StudioSlideDocumentEditor
                       currentIndex={activeStudioSlideIndex}
+                      presentationAssets={selected.presentationAssets}
                       seriesTitle={edit.seriesTitle}
                       slideDocument={edit.slideDocument}
                       slides={studioSlides}

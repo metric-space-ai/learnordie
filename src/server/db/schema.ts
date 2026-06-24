@@ -134,6 +134,23 @@ export const assetChunks = pgTable("asset_chunks", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 
+export const presentationAssets = pgTable("presentation_assets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  materialId: uuid("material_id").references(() => lectureAssets.id),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  storageKey: text("storage_key"),
+  previewKey: text("preview_key"),
+  extractedText: text("extracted_text"),
+  structuredData: jsonb("structured_data"),
+  sourceJson: jsonb("source_json").notNull().default({}),
+  tagsJson: jsonb("tags_json").notNull().default([]),
+  qualityJson: jsonb("quality_json").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
+
 export const slides = pgTable("slides", {
   id: uuid("id").defaultRandom().primaryKey(),
   lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),

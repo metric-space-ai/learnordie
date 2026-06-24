@@ -860,6 +860,8 @@ Deliverables:
 - Asset-Quelle/Provenienz.
 - UI im Studio.
 
+Status 2026-06-24: `presentation_assets` ist als eigene DB-Ebene neben `lecture_assets` und `asset_chunks` eingeführt. `Lecture.presentationAssets` ist im App-Typ, Local Store, Postgres-Repository, Materialprocessing, Retention-Policy und Admin-Readiness verdrahtet. Die Materialpipeline erzeugt aus verarbeiteten Quellen deterministische Asset-Drafts für `sourceDocument`, `text` sowie heuristische Diagramm-/Formel-/Tabellenkandidaten mit Provenienz, Tags und Review-Qualität. Das Dozentenstudio zeigt im Quellen-Drawer eine kompakte Asset-Bibliothek; der Engine-Editor kann kompatible Bibliotheksassets in `SlideDocument.assets` übernehmen und in Figure-Blöcken referenzieren. Browser-Tests prüfen den lokalen Editorpfad sowie den Postgres-Materialupload mit sichtbarer Asset-Bibliothek. Noch offen für spätere Importtiefe: echte persistierte Bild-/Thumbnail-Dateien aus PPTX/PDF statt nur heuristischer visueller Kandidaten.
+
 ### Track E: Agent Pipeline
 
 Ziel: Agent erzeugt aus Material ein validiertes SlideDocument.

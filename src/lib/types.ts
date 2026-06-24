@@ -1,4 +1,4 @@
-import type { SlideDocument } from "@learnordie/slide-engine";
+import type { SlideAssetKind, SlideBBox, SlideDocument } from "@learnordie/slide-engine";
 
 export type QuestionLevel = "4.0" | "3.0" | "2.0" | "1.0";
 export type QuestionVariantReviewStatus = "draft" | "reviewed" | "approved" | "rejected";
@@ -121,6 +121,37 @@ export type LectureMaterial = {
   chunkCount?: number;
   extractedTextPreview?: string;
   sourceRefs?: string[];
+  createdAt: string;
+};
+
+export type PresentationAssetSource = {
+  materialId?: string;
+  originalName: string;
+  sourceRef?: string;
+  page?: number;
+  slide?: number;
+  bbox?: SlideBBox;
+};
+
+export type PresentationAssetQuality = {
+  extractionConfidence?: number;
+  needsReview: boolean;
+  reason?: string;
+};
+
+export type PresentationAsset = {
+  id: string;
+  lectureId: string;
+  kind: SlideAssetKind;
+  title: string;
+  description?: string;
+  storageKey?: string;
+  previewKey?: string;
+  extractedText?: string;
+  structuredData?: unknown;
+  source: PresentationAssetSource;
+  tags: string[];
+  quality: PresentationAssetQuality;
   createdAt: string;
 };
 
@@ -326,6 +357,7 @@ export type Lecture = {
   slideDocument?: SlideDocument;
   questions: QuestionVariant[];
   materials?: LectureMaterial[];
+  presentationAssets?: PresentationAsset[];
   questionReviews?: QuestionReviewItem[];
   materialProcessingRuns?: MaterialProcessingRun[];
   studentChatQuestions?: StudentChatQuestion[];
