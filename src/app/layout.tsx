@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next";
 
+import "@learnordie/slide-engine/styles/core.css";
+import "@learnordie/slide-engine/styles/themes/learnordie-north.css";
+import "@learnordie/slide-engine/styles/themes/learnordie-technical.css";
+import "@learnordie/slide-engine/styles/themes/learnordie-dark-room.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

@@ -8,6 +8,10 @@ import {
   summarizeSlideDocumentForEditing
 } from "@learnordie/slide-engine/editing";
 import {
+  generateSlideDocumentDraft,
+  SLIDE_AGENT_PROMPT_CONTRACT_VERSION
+} from "@learnordie/slide-engine/agent";
+import {
   legacySlidesToSlideDocument,
   slideDocumentToLegacySlides,
   type LegacySlide
@@ -16,6 +20,7 @@ import {
   renderStandaloneSlideDocumentHtml,
   SLIDE_STANDALONE_RENDERER_VERSION
 } from "@learnordie/slide-engine/standalone";
+import { slideLayoutIdValues, slideThemeIdValues } from "@learnordie/slide-engine/schema";
 
 type ViewportCase = {
   name: string;
@@ -358,6 +363,26 @@ test("Slide Engine Track H QA contract is documented", async () => {
   expect(missing, `Missing Track H plan anchors:\n${missing.join("\n")}`).toEqual([]);
 });
 
+test("Slide Engine CSS contract exports every schema layout and theme", async () => {
+  const [coreCss, packageJsonText, ...themeCssFiles] = await Promise.all([
+    readFile(path.resolve("packages/slide-engine/styles/core.css"), "utf8"),
+    readFile(path.resolve("packages/slide-engine/package.json"), "utf8"),
+    ...slideThemeIdValues.map((theme) => readFile(path.resolve(`packages/slide-engine/styles/themes/${theme}.css`), "utf8"))
+  ]);
+  const packageJson = JSON.parse(packageJsonText) as { exports?: Record<string, unknown> };
+
+  const missingLayoutSelectors = slideLayoutIdValues.filter((layout) => !coreCss.includes(`data-layout="${layout}"`));
+  const missingThemeFiles = slideThemeIdValues.filter((theme, index) => !themeCssFiles[index]?.includes(`data-theme="${theme}"`));
+  const missingStyleExports = [
+    "./styles/core.css",
+    ...slideThemeIdValues.map((theme) => `./styles/themes/${theme}.css`)
+  ].filter((exportPath) => !Object.prototype.hasOwnProperty.call(packageJson.exports ?? {}, exportPath));
+
+  expect(missingLayoutSelectors, `Missing layout CSS selectors: ${missingLayoutSelectors.join(", ")}`).toEqual([]);
+  expect(missingThemeFiles, `Missing theme CSS selectors: ${missingThemeFiles.join(", ")}`).toEqual([]);
+  expect(missingStyleExports, `Missing package CSS exports: ${missingStyleExports.join(", ")}`).toEqual([]);
+});
+
 test.describe("SlideDocument renderer QA harness", () => {
   for (const target of qaTargets) {
     for (const viewport of viewportMatrix) {
@@ -564,6 +589,49 @@ test.describe("SlideDocument renderer QA harness", () => {
     expect(AGENTIC_SLIDE_EDIT_CONTRACT.stableTargets).toContain("blockId");
   });
 
+  test("agentic material pipeline creates a valid sourced SlideDocument draft", async () => {
+    const result = generateSlideDocumentDraft({
+      id: "qa-agent-draft",
+      title: "Hydrodynamische Gleitlagerung",
+      language: "de",
+      sources: [
+        {
+          id: "pptx-slide-18",
+          title: "Stribeck-Kurve",
+          sourceType: "material",
+          materialId: "material-pptx-qa",
+          slide: 18,
+          locator: "Folie 18",
+          text: "Ein tragender Schmierfilm entsteht durch Relativbewegung und einen keilförmigen Spalt. Mischreibung ist kritisch, weil Schmierfilm und Festkörperkontakt gleichzeitig auftreten.",
+          assetIds: ["asset-bearing-schematic"]
+        },
+        {
+          id: "transcript-01",
+          title: "Anlaufphase",
+          sourceType: "material",
+          materialId: "material-transcript-qa",
+          text: "Beim Start ist die Relativgeschwindigkeit niedrig. Deshalb muss die Phase erhöhter Reibung konstruktiv abgefangen werden."
+        }
+      ],
+      assets: allBlockTypesSlideDocument.assets,
+      model: "qa-agent",
+      promptVersion: SLIDE_AGENT_PROMPT_CONTRACT_VERSION
+    });
+
+    expect(result.ok, JSON.stringify(result.issues, null, 2)).toBe(true);
+    if (!result.ok) throw new Error("Agent draft should have been valid.");
+    expect(result.document.createdBy).toMatchObject({
+      mode: "agent",
+      model: "qa-agent",
+      promptVersion: SLIDE_AGENT_PROMPT_CONTRACT_VERSION
+    });
+    expect(result.briefing.learningGoals.length).toBeGreaterThanOrEqual(2);
+    expect(result.outline.sections[0]?.slides.length).toBe(2);
+    expect(result.document.slides.some((slide) => slide.quizAnchors?.length)).toBe(true);
+    expect(result.document.slides.flatMap((slide) => slide.sourceRefs).some((source) => source.locator === "Folie 18")).toBe(true);
+    expect(result.document.slides.flatMap((slide) => slide.blocks).some((block) => block.type === "figure")).toBe(true);
+  });
+
   test("agentic SlideDocument edits return repair issues for invalid operations", async () => {
     const missingTarget = applySlideDocumentEdits(allBlockTypesSlideDocument, [
       {
@@ -600,6 +668,28 @@ test.describe("SlideDocument renderer QA harness", () => {
     if (invalidDocument.ok) throw new Error("Expected invalid document edit to fail validation.");
     expect(invalidDocument.appliedOperations).toEqual(["agent-break-formula"]);
     expect(invalidDocument.issues.some((issue) => issue.code === "formula.source_ambiguity" && issue.blockId === "media-formula")).toBe(true);
+  });
+
+  test("unsafe free HTML is rejected by the SlideDocument validation and repair contract", async () => {
+    const result = applySlideDocumentEdits(allBlockTypesSlideDocument, [
+      {
+        kind: "insertBlock",
+        operationId: "agent-insert-unsafe-html",
+        slideId: "blocks-text",
+        block: {
+          id: "unsafe-html-sandbox",
+          type: "htmlSandbox",
+          html: "<img src=x onerror=alert(1)>"
+        } as never
+      }
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((issue) => (
+      issue.severity === "error" &&
+      issue.path.includes("blocks") &&
+      issue.repairHint.includes("SlideDocument v1 schema")
+    )), JSON.stringify(result.issues, null, 2)).toBe(true);
   });
 
   test("legacy lectures can round-trip through SlideDocument edit operations", async () => {
