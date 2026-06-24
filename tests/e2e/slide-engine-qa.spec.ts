@@ -647,4 +647,29 @@ test.describe("SlideDocument renderer QA harness", () => {
     expect(horizontalOverflow).toBeLessThanOrEqual(2);
     assertClean();
   });
+
+  test("SlideDocument editor QA edits table cells, rows, and columns as structured data", async ({ page }) => {
+    const assertClean = attachSlideEngineConsoleGuard(page);
+    const table = page.locator("figure[data-block-id='media-table']");
+
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.goto("/slide-engine/qa/editor?slide=blocks-media", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("load");
+
+    await page.getByLabel("Block media-table bearbeiten").click();
+    await expect(page.locator("[aria-label='SlideDocument Editor']")).toHaveAttribute("data-selected-block-id", "media-table");
+    await page.getByLabel("Tabellenzeile").selectOption("1");
+    await page.getByLabel("Tabellenspalte").selectOption("1");
+    await page.getByLabel("Tabellenzelle bearbeiten").fill("Film wird sehr dünn");
+    await page.getByRole("button", { name: "Zelle speichern" }).click();
+    await expect(table.locator("tbody tr").nth(1).locator("td").nth(1)).toHaveText("Film wird sehr dünn");
+
+    await page.getByRole("button", { name: "Spalte hinzufügen" }).click();
+    await expect(table.locator("thead th").last()).toHaveText("Spalte 4");
+
+    await page.getByRole("button", { name: "Zeile hinzufügen" }).click();
+    await expect(table.locator("tbody tr").last().locator("td").first()).toHaveText("Neue Zeile");
+
+    assertClean();
+  });
 });

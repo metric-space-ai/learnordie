@@ -32,7 +32,11 @@ export function SlideEngineEditorFixture({
   const [selectedBlockId, setSelectedBlockId] = useState(firstEditableBlock?.id ?? "");
   const selectedBlock = currentSlide?.blocks.find((block) => block.id === selectedBlockId) ?? firstEditableBlock;
   const selectedField = selectedBlock ? editableField(selectedBlock) : null;
+  const selectedTable = selectedBlock?.type === "table" ? selectedBlock : null;
   const [editorValue, setEditorValue] = useState(selectedField?.value ?? "");
+  const [tableRowIndex, setTableRowIndex] = useState(0);
+  const [tableColumnIndex, setTableColumnIndex] = useState(0);
+  const [tableCellValue, setTableCellValue] = useState("");
   const [status, setStatus] = useState("Bereit.");
   const [issue, setIssue] = useState("");
 
@@ -47,6 +51,19 @@ export function SlideEngineEditorFixture({
   useEffect(() => {
     setEditorValue(selectedField?.value ?? "");
   }, [selectedField?.key, selectedField?.value, selectedBlock?.id]);
+
+  useEffect(() => {
+    if (!selectedTable) {
+      setTableCellValue("");
+      return;
+    }
+
+    const nextRowIndex = clampIndex(tableRowIndex, selectedTable.rows.length - 1);
+    const nextColumnIndex = clampIndex(tableColumnIndex, selectedTable.columns.length - 1);
+    if (nextRowIndex !== tableRowIndex) setTableRowIndex(nextRowIndex);
+    if (nextColumnIndex !== tableColumnIndex) setTableColumnIndex(nextColumnIndex);
+    setTableCellValue(selectedTable.rows[nextRowIndex]?.[nextColumnIndex] ?? "");
+  }, [selectedTable, tableColumnIndex, tableRowIndex]);
 
   const previous = useCallback(() => {
     setCurrent((index) => (index + draft.slides.length - 1) % draft.slides.length);
@@ -138,6 +155,61 @@ export function SlideEngineEditorFixture({
     ], "Bildasset ersetzt und validiert.");
   };
 
+  const saveTableCell = () => {
+    if (!currentSlide || !selectedTable) return;
+    const columnCount = selectedTable.columns.length;
+    const rows = selectedTable.rows.map((row, rowIndex) => (
+      normalizeTableRow(row, columnCount).map((cell, columnIndex) => (
+        rowIndex === tableRowIndex && columnIndex === tableColumnIndex ? tableCellValue : cell
+      ))
+    ));
+    applyOperations([
+      {
+        operationId: `manual-table-cell-${selectedTable.id}`,
+        kind: "patchBlock",
+        slideId: currentSlide.id,
+        blockId: selectedTable.id,
+        patch: { rows }
+      }
+    ], "Tabellenzelle gespeichert und validiert.");
+  };
+
+  const addTableRow = () => {
+    if (!currentSlide || !selectedTable) return;
+    const nextRow = selectedTable.columns.map((_, index) => (index === 0 ? "Neue Zeile" : ""));
+    const nextRowIndex = selectedTable.rows.length;
+    if (applyOperations([
+      {
+        operationId: `manual-table-row-${selectedTable.id}`,
+        kind: "patchBlock",
+        slideId: currentSlide.id,
+        blockId: selectedTable.id,
+        patch: { rows: [...selectedTable.rows, nextRow] }
+      }
+    ], "Tabellenzeile ergänzt und validiert.")) {
+      setTableRowIndex(nextRowIndex);
+      setTableColumnIndex(0);
+    }
+  };
+
+  const addTableColumn = () => {
+    if (!currentSlide || !selectedTable || selectedTable.columns.length >= 8) return;
+    const nextColumnIndex = selectedTable.columns.length;
+    const columns = [...selectedTable.columns, `Spalte ${nextColumnIndex + 1}`];
+    const rows = selectedTable.rows.map((row) => [...normalizeTableRow(row, selectedTable.columns.length), ""]);
+    if (applyOperations([
+      {
+        operationId: `manual-table-column-${selectedTable.id}`,
+        kind: "patchBlock",
+        slideId: currentSlide.id,
+        blockId: selectedTable.id,
+        patch: { columns, rows }
+      }
+    ], "Tabellenspalte ergänzt und validiert.")) {
+      setTableColumnIndex(nextColumnIndex);
+    }
+  };
+
   const upsertQuizAnchor = () => {
     if (!currentSlide || !selectedBlock) return;
     applyOperations([
@@ -219,16 +291,61 @@ export function SlideEngineEditorFixture({
           </select>
         </label>
 
-        <label style={fieldStyle}>
-          <span>{selectedField?.label ?? "Blockinhalt"}</span>
-          <textarea
-            aria-label="Blockinhalt bearbeiten"
-            disabled={!selectedField}
-            rows={6}
-            value={editorValue}
-            onChange={(event) => setEditorValue(event.currentTarget.value)}
-          />
-        </label>
+        {selectedField ? (
+          <label style={fieldStyle}>
+            <span>{selectedField.label}</span>
+            <textarea
+              aria-label="Blockinhalt bearbeiten"
+              rows={6}
+              value={editorValue}
+              onChange={(event) => setEditorValue(event.currentTarget.value)}
+            />
+          </label>
+        ) : null}
+
+        {selectedTable ? (
+          <div aria-label="Tabelleneditor" style={tableEditorStyle}>
+            <label style={fieldStyle}>
+              <span>Zeile</span>
+              <select
+                aria-label="Tabellenzeile"
+                value={tableRowIndex}
+                onChange={(event) => setTableRowIndex(Number(event.currentTarget.value))}
+              >
+                {selectedTable.rows.map((_, rowIndex) => (
+                  <option key={rowIndex} value={rowIndex}>Zeile {rowIndex + 1}</option>
+                ))}
+              </select>
+            </label>
+            <label style={fieldStyle}>
+              <span>Spalte</span>
+              <select
+                aria-label="Tabellenspalte"
+                value={tableColumnIndex}
+                onChange={(event) => setTableColumnIndex(Number(event.currentTarget.value))}
+              >
+                {selectedTable.columns.map((column, columnIndex) => (
+                  <option key={`${column}-${columnIndex}`} value={columnIndex}>{column}</option>
+                ))}
+              </select>
+            </label>
+            <label style={fieldStyle}>
+              <span>Zelle</span>
+              <input
+                aria-label="Tabellenzelle bearbeiten"
+                value={tableCellValue}
+                onChange={(event) => setTableCellValue(event.currentTarget.value)}
+              />
+            </label>
+            <div style={buttonGridStyle}>
+              <button type="button" onClick={saveTableCell}>Zelle speichern</button>
+              <button type="button" onClick={addTableRow}>Zeile hinzufügen</button>
+              <button type="button" disabled={selectedTable.columns.length >= 8} onClick={addTableColumn}>
+                Spalte hinzufügen
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div style={buttonGridStyle}>
           <button type="button" disabled={!selectedField} onClick={saveText}>Block speichern</button>
@@ -294,6 +411,15 @@ function editableField(block: SlideBlock): {
 
 function cloneDocument(document: SlideDocument): SlideDocument {
   return JSON.parse(JSON.stringify(document)) as SlideDocument;
+}
+
+function clampIndex(index: number, max: number) {
+  if (max <= 0) return 0;
+  return Math.max(0, Math.min(index, max));
+}
+
+function normalizeTableRow(row: string[], columnCount: number) {
+  return Array.from({ length: columnCount }, (_, index) => row[index] ?? "");
 }
 
 const editorDemoAssetUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
@@ -374,6 +500,15 @@ const buttonGridStyle: CSSProperties = {
   display: "grid",
   gap: 8,
   gridTemplateColumns: "1fr 1fr"
+};
+
+const tableEditorStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  padding: 12,
+  border: "1px solid var(--line)",
+  borderRadius: "var(--lb-radius-panel)",
+  background: "var(--panel-soft)"
 };
 
 const statusStyle: CSSProperties = {
