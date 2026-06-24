@@ -101,7 +101,7 @@ function inferMaterialScenario(concept: string) {
 export function createDefaultSlides(title: string): Slide[] {
   return clone(demoLecture.slides).map((slide, index) => ({
     ...slide,
-    id: `slide_${crypto.randomUUID()}`,
+    id: crypto.randomUUID(),
     eyebrow: `Folie ${index + 1}`,
     title: index === 0 ? title : slide.title
   }));
