@@ -6780,6 +6780,121 @@ textarea.review-live-explanation {
   font-size: clamp(16px, 1.45vw, 23px);
 }
 
+.studio-engine-editor {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 78px;
+  z-index: 64;
+  display: grid;
+  grid-template-rows: minmax(170px, 0.72fr) minmax(0, 1fr);
+  gap: 10px;
+  width: min(460px, calc(100% - 32px));
+  min-height: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--lb-radius-sheet);
+  background: oklch(98.6% 0.006 230 / 0.96);
+  box-shadow: 0 20px 62px oklch(10% 0.03 236 / 0.22);
+  overflow: hidden;
+}
+
+.studio-engine-editor-preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--lb-radius-panel);
+  background: var(--slide);
+}
+
+.studio-engine-editor-preview .ld-deck-renderer {
+  height: 100%;
+}
+
+.studio-engine-editor-preview .ld-slide-renderer {
+  width: 100% !important;
+  min-height: 100%;
+  padding: 18px !important;
+  box-shadow: none !important;
+}
+
+.studio-engine-editor-preview .ld-slide-renderer h1 {
+  font-size: 28px !important;
+}
+
+.studio-engine-editor-preview [data-editor-block-id] {
+  outline-offset: 3px !important;
+}
+
+.studio-engine-editor-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+}
+
+.studio-engine-editor-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.studio-engine-editor-heading span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.studio-engine-editor-heading strong {
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.studio-engine-editor-heading small,
+.studio-engine-editor-panel p {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.studio-engine-editor-panel label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.studio-engine-editor-panel textarea,
+.studio-engine-editor-panel select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.studio-engine-editor-panel textarea {
+  resize: vertical;
+}
+
+.studio-engine-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.studio-engine-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
 .studio-bottom-bar {
   position: absolute;
   left: 50%;
@@ -9747,6 +9862,23 @@ textarea.review-live-explanation {
     padding: 62px 8px 84px;
   }
 
+  .studio-engine-editor {
+    left: 9px;
+    right: 9px;
+    top: 58px;
+    bottom: 74px;
+    width: auto;
+    grid-template-rows: 170px minmax(0, 1fr);
+  }
+
+  .studio-engine-editor-preview .ld-slide-renderer {
+    padding: 14px !important;
+  }
+
+  .studio-engine-editor-preview .ld-slide-renderer h1 {
+    font-size: 22px !important;
+  }
+
   .studio-editor-frame {
     align-self: flex-start;
     width: 100%;
@@ -9812,9 +9944,9 @@ textarea.review-live-explanation {
     right: auto;
     bottom: 10px;
     display: grid;
-    grid-template-columns: 86px minmax(0, 1fr) 82px 76px;
+    grid-template-columns: 76px minmax(0, 1fr) 62px 62px 68px;
     grid-template-areas:
-      "stepper plan tools save";
+      "stepper plan tools engine save";
     justify-content: stretch;
     gap: 6px;
     width: calc(100vw - 18px);
@@ -9879,6 +10011,13 @@ textarea.review-live-explanation {
   .studio-tool-menu {
     grid-area: tools;
     width: 100%;
+  }
+
+  .studio-engine-toggle {
+    grid-area: engine;
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
   }
 
   .studio-save-inline {

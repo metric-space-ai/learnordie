@@ -20,6 +20,10 @@
       "types": "./src/fixtures.ts",
       "default": "./src/fixtures.ts"
     },
+    "./legacy": {
+      "types": "./src/legacy.ts",
+      "default": "./src/legacy.ts"
+    },
     "./schema": {
       "types": "./src/schema.ts",
       "default": "./src/schema.ts"

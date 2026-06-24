@@ -33,6 +33,10 @@ The vendored upstream source is treated as third-party reference/runtime materia
 
 Agents should use this API instead of editing rendered HTML or app-local legacy slide data. Failed operations return repair-oriented issues so the generation loop can retry only the affected slide or block.
 
+## Legacy Bridge
+
+`src/legacy.ts` is the temporary compatibility bridge between the existing app `Slide[]` model and the new `SlideDocument` runtime. It supports both directions: legacy lectures can render and edit through the engine, and accepted `SlideDocument` edits can be synchronized back into the current lecture storage until native `SlideDocument` persistence replaces the legacy model.
+
 ## Editor QA
 
 `DeckRenderer` and `SlideRenderer` expose optional block-selection hooks for editor surfaces. The app-level QA route `/slide-engine/qa/editor` uses those hooks together with `applySlideDocumentEdits` to prove text edits, layout changes, figure asset replacement, formula edits, table cell/row/column edits, quiz-anchor updates and invalid-patch repair feedback in a real browser.
