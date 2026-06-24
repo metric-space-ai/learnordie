@@ -24,6 +24,8 @@ Aktueller Umsetzungsstand:
 - `/api/lecture/[token]/export` migriert Legacy-Lectures vor dem Export in ein validiertes `SlideDocument`; ZIP und HTML enthalten `data-slide-engine="learnordie-slide-standalone-v1"` und `learnordie.slide.v1` im Manifest.
 - `npm run test:slide-engine` enthält zusätzlich einen browserbasierten Offline-Test, der Standalone-HTML ohne externe Runtime-Requests lädt.
 - `packages/slide-engine/src/editing.ts` stellt den agentenfähigen Editiervertrag bereit: strukturierte Batches ändern Dokumente, Slides, Blöcke, Assets, Speaker Notes und Quizanker über stabile IDs und werden danach vollständig gegen das `SlideDocument`-Schema validiert.
+- `DeckRenderer`/`SlideRenderer` besitzen optionale Block-Selection-Hooks, damit Editor und Agent-QA sichtbare Blöcke über dieselben stabilen `blockId`s adressieren.
+- `/slide-engine/qa/editor` ist ein browserbasierter SlideDocument-Editor-Harness für Text-, Layout-, Bildasset-, Formel- und Quizanker-Änderungen inklusive Repair-Fehleranzeige und Mobile-Overflow-Gate.
 
 ## 0. Entscheidung
 
@@ -878,6 +880,8 @@ Deliverables:
 - Asset-Picker.
 - Formel-/Tabelleneditor.
 - Quizanker-Editor.
+
+Status 2026-06-24: Block-Auswahl, Textbearbeitung, Layoutwechsel, Bildasset-Austausch, Formeledit, Quizanker-Setzen und Repair-Fehleranzeige sind als Engine-QA-Harness unter `/slide-engine/qa/editor` umgesetzt und mit Playwright abgedeckt. Offen bleiben die Übernahme in den produktiven Studio-Editor und der vollwertige Tabelleneditor.
 
 ### Track G: Export & Compatibility
 

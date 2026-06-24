@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 import { BlockRenderer } from "./BlockRenderer";
 import type {
@@ -6,6 +6,7 @@ import type {
   SlideAssetCollection,
   SlideAssetRenderer,
   SlideAssetUrlResolver,
+  SlideBlockSelection,
   SlideBlock,
   SlideNode
 } from "./types";
@@ -19,6 +20,8 @@ export type SlideRendererProps = {
   slideNumber?: number;
   slideCount?: number;
   showSlideNumber?: boolean;
+  selectedBlockId?: string;
+  onBlockSelect?: (selection: SlideBlockSelection) => void;
   className?: string;
   style?: CSSProperties;
 };
@@ -50,6 +53,7 @@ const slideShellStyle: CSSProperties = {
 
 const slideInnerStyle: CSSProperties = {
   display: "grid",
+  height: "100%",
   minHeight: 0,
   gridTemplateRows: "auto minmax(0, 1fr) auto",
   gap: "clamp(18px, 3vw, 40px)"
@@ -110,21 +114,51 @@ const footerStyle: CSSProperties = {
   alignSelf: "end"
 };
 
+const blockFrameStyle: CSSProperties = {
+  minWidth: 0,
+  borderRadius: "var(--lb-radius-panel)",
+  outlineColor: "transparent",
+  outlineOffset: 5,
+  outlineStyle: "solid",
+  outlineWidth: 2,
+  transition: "outline-color 140ms ease, background-color 140ms ease"
+};
+
+const selectableBlockFrameStyle: CSSProperties = {
+  cursor: "pointer"
+};
+
+const selectedBlockFrameStyle: CSSProperties = {
+  background: "oklch(91% 0.027 230 / 0.46)",
+  outlineColor: "var(--accent)"
+};
+
 export function SlideRenderer({
   aspect = "16:9",
   assets,
   className,
   renderAsset,
   resolveAssetUrl,
+  selectedBlockId,
   showSlideNumber = true,
   slide,
   slideCount,
   slideNumber,
+  onBlockSelect,
   style
 }: SlideRendererProps) {
   const layoutMode = getLayoutMode(slide.layout);
   const bodyBlocks = visibleBodyBlocks(slide);
-  const body = renderSlideBody(slide, bodyBlocks, layoutMode, assets, renderAsset, resolveAssetUrl);
+  const body = renderSlideBody(
+    slide,
+    bodyBlocks,
+    layoutMode,
+    assets,
+    renderAsset,
+    resolveAssetUrl,
+    selectedBlockId,
+    onBlockSelect
+  );
 
   return (
     <section
@@ -161,18 +195,23 @@ function renderSlideBody(
   layoutMode: SlideLayoutMode,
   assets: SlideAssetCollection | undefined,
   renderAsset: SlideAssetRenderer | undefined,
-  resolveAssetUrl: SlideAssetUrlResolver | undefined
+  resolveAssetUrl: SlideAssetUrlResolver | undefined,
+  selectedBlockId: string | undefined,
+  onBlockSelect: ((selection: SlideBlockSelection) => void) | undefined
 ) {
   if (layoutMode === "center") {
     return (
       <div style={centerBodyStyle}>
         {blocks.map((block) => (
-          <BlockRenderer
+          <RenderedBlock
             assets={assets}
             block={block}
             key={block.id}
             renderAsset={renderAsset}
             resolveAssetUrl={resolveAssetUrl}
+            selectedBlockId={selectedBlockId}
+            slideId={slide.id}
+            onBlockSelect={onBlockSelect}
           />
         ))}
       </div>
@@ -193,12 +232,15 @@ function renderSlideBody(
           {orderedColumns.map((blocks, index) => (
             <div key={index} style={columnStyle}>
               {blocks.map((block) => (
-                <BlockRenderer
+                <RenderedBlock
                   assets={assets}
                   block={block}
                   key={block.id}
                   renderAsset={renderAsset}
                   resolveAssetUrl={resolveAssetUrl}
+                  selectedBlockId={selectedBlockId}
+                  slideId={slide.id}
+                  onBlockSelect={onBlockSelect}
                 />
               ))}
             </div>
@@ -211,14 +253,74 @@ function renderSlideBody(
   return (
     <div style={layoutMode === "focus" ? centerBodyStyle : stackBodyStyle}>
       {blocks.map((block) => (
-        <BlockRenderer
+        <RenderedBlock
           assets={assets}
           block={block}
           key={block.id}
           renderAsset={renderAsset}
           resolveAssetUrl={resolveAssetUrl}
+          selectedBlockId={selectedBlockId}
+          slideId={slide.id}
+          onBlockSelect={onBlockSelect}
         />
       ))}
+    </div>
+  );
+}
+
+function RenderedBlock({
+  assets,
+  block,
+  renderAsset,
+  resolveAssetUrl,
+  selectedBlockId,
+  slideId,
+  onBlockSelect
+}: {
+  assets: SlideAssetCollection | undefined;
+  block: SlideBlock;
+  renderAsset: SlideAssetRenderer | undefined;
+  resolveAssetUrl: SlideAssetUrlResolver | undefined;
+  selectedBlockId: string | undefined;
+  slideId: string;
+  onBlockSelect: ((selection: SlideBlockSelection) => void) | undefined;
+}) {
+  const rendered = (
+    <BlockRenderer
+      assets={assets}
+      block={block}
+      renderAsset={renderAsset}
+      resolveAssetUrl={resolveAssetUrl}
+    />
+  );
+
+  if (!onBlockSelect && !selectedBlockId) return rendered;
+
+  const selected = selectedBlockId === block.id;
+  const selectBlock = () => onBlockSelect?.({ slideId, blockId: block.id, blockType: block.type });
+  const keySelectBlock = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    selectBlock();
+  };
+
+  return (
+    <div
+      aria-label={`Block ${block.id} bearbeiten`}
+      data-editor-block-id={block.id}
+      data-editor-block-type={block.type}
+      data-selected={selected ? "true" : undefined}
+      role={onBlockSelect ? "button" : undefined}
+      style={{
+        ...blockFrameStyle,
+        ...(onBlockSelect ? selectableBlockFrameStyle : null),
+        ...(selected ? selectedBlockFrameStyle : null)
+      }}
+      tabIndex={onBlockSelect ? 0 : undefined}
+      onClick={selectBlock}
+      onKeyDown={keySelectBlock}
+    >
+      {rendered as ReactNode}
     </div>
   );
 }

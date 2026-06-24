@@ -5457,6 +5457,30 @@ textarea.review-live-explanation {
   max-height: min(44svh, 420px);
 }
 
+.slide-engine-editor-screen {
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+}
+
+.slide-engine-editor-stage {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+}
+
+.slide-engine-editor-stage .ld-deck-renderer {
+  width: 100%;
+}
+
+.slide-engine-editor-stage .ld-slide-renderer {
+  width: min(100%, 1120px);
+}
+
+@media (max-width: 980px) {
+  .slide-engine-editor-screen {
+    grid-template-columns: 1fr;
+  }
+}
+
 .slide-content[data-direction="next"] {
   animation: lb-slide-content-next 320ms var(--lb-ease-out) both;
 }

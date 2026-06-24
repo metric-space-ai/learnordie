@@ -58,6 +58,11 @@ export type SlideAsset = SlideAssetRef;
 export type SlideAssetCollection = SlideAsset[] | Record<string, SlideAsset | undefined>;
 export type SlideAssetUrlResolver = (asset: SlideAsset, block: FigureBlock) => string | undefined;
 export type SlideAssetRenderer = (asset: SlideAsset, block: FigureBlock) => ReactNode;
+export type SlideBlockSelection = {
+  slideId: string;
+  blockId: string;
+  blockType: SlideBlock["type"];
+};
 export type SlideTransition = "none" | "fade" | "slide";
 export type SlideMobileMode = "reflow" | "scaled" | "hybrid";
 export type TableCellValue = string;
