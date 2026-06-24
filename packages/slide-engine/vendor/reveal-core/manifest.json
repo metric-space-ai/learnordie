@@ -1,0 +1,8 @@
+{
+  "upstream": "https://github.com/hakimel/reveal.js",
+  "targetRelease": "6.0.1",
+  "pinnedCommit": null,
+  "copiedPaths": [],
+  "localPatches": [],
+  "status": "not-imported"
+}
