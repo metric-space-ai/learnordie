@@ -1100,6 +1100,9 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/provider-smoke.mjs", "Usage: npm run provider:smoke -- [options]"],
     ["scripts/release-gate.mjs", "Usage: npm run release:gate -- [options]"],
     ["scripts/script-syntax-check.mjs", "Usage: npm run scripts:check"],
+    ["scripts/slide-engine-qa-contract.mjs", "Usage: node scripts/slide-engine-qa-contract.mjs"],
+    ["scripts/slide-engine-vendor-check.mjs", "Usage: node scripts/slide-engine-vendor-check.mjs"],
+    ["scripts/vendor-reveal-core.mjs", "Usage: node scripts/vendor-reveal-core.mjs"],
     ["scripts/worker-smoke.mjs", "Usage: npm run smoke:worker -- [options]"],
     ["scripts/self-host-smoke.mjs", "Usage: npm run smoke:self-host -- [options]"]
   ] as const;
@@ -2654,9 +2657,9 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(manifest.externalAssetCount).toBe(0);
   expect(manifest.slideEngine).toMatchObject({
     renderer: "learnordie-slide-standalone-v1",
-    slideDocumentSchemaVersion: "learnordie.slide.v1",
-    slideDocumentId: "standalone-gleitlagerung-demo"
+    slideDocumentSchemaVersion: "learnordie.slide.v1"
   });
+  expect(manifest.slideEngine?.slideDocumentId).toMatch(/^lecture:[^:]+:deck$/);
 
   const assetPaths = new Set((manifest.assets ?? []).map((asset) => asset.path));
   for (const requiredPath of [

@@ -84,7 +84,7 @@ Aktueller Bezugspunkt:
 - Kanonisches Produktrepo: <https://github.com/metric-space-ai/learnordie>
 - Engine-Zielpfad im Produktrepo: `packages/slide-engine`
 - Upstream-Quelle: `hakimel/reveal.js`
-- Hinweis: Ein temporärer externer Fork unter <https://github.com/metric-space-ai/learnordie-slide-engine> wurde während der Analyse angelegt. Er ist nicht die kanonische Produktquelle und wird nur als Zwischenablage/Upstream-Arbeitskopie verwendet, falls wir ihn bewusst behalten.
+- Repository-Regel: Die Engine wird ausschließlich im `learnordie`-Monorepo entwickelt. Externe Arbeitskopien oder Forks dürfen nicht als Produktquelle verwendet werden.
 
 Relevante reveal.js-Fähigkeiten:
 
@@ -523,17 +523,16 @@ In diesem Repository liegen:
 - Datenbank- und Agent-Code;
 - Standalone-Exporter;
 - Slide Engine;
-- reveal.js-Fork-/Vendor-Kern.
+- reveal.js-Vendor-Kern.
 
 Upstream:
 
 - `hakimel/reveal.js`
 
-Nicht-kanonisch:
+Repository-Regel:
 
-- `metric-space-ai/learnordie-slide-engine`
-
-Status 2026-06-24: Der externe Fork wurde während der Recherche angelegt. Er darf nicht als Produktrepo behandelt werden. Falls er bestehen bleibt, dient er nur als technische Arbeitskopie für Upstream-Diffs. Die produktive Engine wird im `learnordie` Monorepo entwickelt.
+- Die produktive Engine wird im `metric-space-ai/learnordie`-Monorepo unter `packages/slide-engine` entwickelt.
+- Externe Arbeitskopien oder Forks sind keine Produktquelle und dürfen nicht in CI, Deployment oder Dokumentation als kanonisch referenziert werden.
 
 ### 10.2 Package-Struktur
 
