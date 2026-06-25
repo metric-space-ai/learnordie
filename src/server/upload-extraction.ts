@@ -3,6 +3,9 @@ import zlib from "node:zlib";
 import { getOCRProvider, type OCRImageInput, type OCRLayoutRegion } from "@/server/providers/ocr";
 
 const MAX_EXTRACTED_TEXT_CHARS = 12000;
+const UPLOAD_ARTIFACTS_MARKER = "LEARNBUDDY_UPLOAD_ARTIFACTS_JSON:";
+const UPLOAD_ARTIFACT_SCHEMA_VERSION = "learnordie.upload-artifacts.v1";
+const MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS = 24;
 
 type ZipEntry = {
   name: string;
@@ -14,6 +17,7 @@ type ZipEntry = {
 type ExtractedUploadContent = {
   text: string;
   images: OCRImageInput[];
+  artifacts: ExtractedUploadArtifact[];
 };
 
 type PptxSlideSize = {
@@ -33,6 +37,34 @@ type PptxImageReference = {
   description: string;
   placement?: PptxImagePlacement;
   visualLine?: string;
+};
+
+export type UploadArtifactSourceKind = "pptx" | "pdf" | "image";
+
+export type UploadArtifactPlacement = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type ExtractedUploadArtifact = {
+  kind: "image";
+  sourceKind: UploadArtifactSourceKind;
+  name: string;
+  mimeType: string;
+  bytes: Buffer;
+  sizeBytes: number;
+  page?: number;
+  slide?: number;
+  placement?: UploadArtifactPlacement;
+  description?: string;
+  visualLine?: string;
+};
+
+export type StoredUploadArtifact = Omit<ExtractedUploadArtifact, "bytes"> & {
+  storageUrl: string;
+  previewUrl?: string;
 };
 
 const DEFAULT_PPTX_SLIDE_SIZE: PptxSlideSize = {
@@ -308,6 +340,32 @@ function mimeTypeFromPath(name: string) {
   return "application/octet-stream";
 }
 
+function extensionForMimeType(mimeType: string) {
+  if (mimeType === "image/png") return ".png";
+  if (mimeType === "image/jpeg") return ".jpg";
+  if (mimeType === "image/webp") return ".webp";
+  if (mimeType === "image/gif") return ".gif";
+  if (mimeType === "image/bmp") return ".bmp";
+  if (mimeType === "image/tiff") return ".tif";
+  if (mimeType === "image/svg+xml") return ".svg";
+  return "";
+}
+
+function artifactNameWithExtension(name: string, mimeType: string) {
+  if (/\.[a-z0-9]{2,5}$/i.test(name)) return name;
+  return `${name}${extensionForMimeType(mimeType)}`;
+}
+
+function imageInputFromArtifact(artifact: ExtractedUploadArtifact): OCRImageInput {
+  return {
+    name: artifact.name,
+    mimeType: artifact.mimeType,
+    bytes: artifact.bytes,
+    ...(artifact.page !== undefined ? { page: artifact.page } : {}),
+    ...(artifact.placement ? { placement: artifact.placement } : {})
+  };
+}
+
 function isOfficePlaceholderText(value: string) {
   const normalized = value.toLowerCase();
   return normalized === "click to add notes"
@@ -330,6 +388,7 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
 
   const slides: string[] = [];
   const images: OCRImageInput[] = [];
+  const artifacts: ExtractedUploadArtifact[] = [];
   const seenImageTargets = new Set<string>();
   for (const entry of slideEntries) {
     const slideNumber = slideNumberFromPath(entry.name);
@@ -358,13 +417,21 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
       const imageEntry = entriesByName.get(target);
       const imageContent = imageEntry ? readZipEntry(buffer, imageEntry) : null;
       if (imageContent && imageContent.byteLength > 0) {
-        images.push({
+        const artifact: ExtractedUploadArtifact = {
+          kind: "image",
+          sourceKind: "pptx",
           name: path.posix.basename(target),
           mimeType: mimeTypeFromPath(target),
           bytes: Buffer.from(imageContent),
+          sizeBytes: imageContent.byteLength,
           page: slideNumber,
+          slide: slideNumber,
+          description: reference.description,
+          ...(reference.visualLine ? { visualLine: reference.visualLine } : {}),
           ...(reference.placement ? { placement: reference.placement } : {})
-        });
+        };
+        artifacts.push(artifact);
+        images.push(imageInputFromArtifact(artifact));
       }
     }
     const visualStructure = imageReferences
@@ -382,7 +449,8 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
 
   return {
     text: cleanText(slides.join("\n\n")),
-    images
+    images,
+    artifacts
   };
 }
 
@@ -649,9 +717,9 @@ function mimeTypeFromPdfImageDictionary(dictionary: string) {
   return "application/octet-stream";
 }
 
-function extractPdfImagePayloads(buffer: Buffer) {
+function extractPdfImageArtifacts(buffer: Buffer) {
   const raw = buffer.toString("latin1");
-  const images: OCRImageInput[] = [];
+  const artifacts: ExtractedUploadArtifact[] = [];
   let cursor = 0;
   let index = 1;
 
@@ -678,10 +746,15 @@ function extractPdfImagePayloads(buffer: Buffer) {
         }
       }
       if (content && content.byteLength > 0) {
-        images.push({
-          name: `pdf-image-${index}`,
-          mimeType: mimeTypeFromPdfImageDictionary(dictionary),
-          bytes: Buffer.from(content)
+        const mimeType = mimeTypeFromPdfImageDictionary(dictionary);
+        artifacts.push({
+          kind: "image",
+          sourceKind: "pdf",
+          name: artifactNameWithExtension(`pdf-image-${index}`, mimeType),
+          mimeType,
+          bytes: Buffer.from(content),
+          sizeBytes: content.byteLength,
+          description: `Eingebettetes PDF-Bild ${index}`
         });
         index += 1;
       }
@@ -690,7 +763,7 @@ function extractPdfImagePayloads(buffer: Buffer) {
     cursor = streamEnd + "endstream".length;
   }
 
-  return images;
+  return artifacts;
 }
 
 function extractPdfAccessibleText(raw: string) {
@@ -733,6 +806,7 @@ function dedupeTextParts(parts: string[]) {
 function extractPdfContent(buffer: Buffer): ExtractedUploadContent {
   const raw = buffer.toString("latin1");
   const imageCount = countPdfImages(buffer);
+  const artifacts = extractPdfImageArtifacts(buffer);
   const parts = dedupeTextParts([
     ...extractPdfAccessibleText(raw),
     ...extractPdfStreams(buffer).flatMap((stream) => extractPdfStringsFromContent(stream))
@@ -744,7 +818,8 @@ function extractPdfContent(buffer: Buffer): ExtractedUploadContent {
 
   return {
     text: cleanText(parts.join(" ")),
-    images: extractPdfImagePayloads(buffer)
+    artifacts,
+    images: artifacts.map(imageInputFromArtifact)
   };
 }
 
@@ -776,6 +851,126 @@ function metadataForUpload(file: File, extractedText: string) {
   }
 
   return cleanText(lines.join("\n"));
+}
+
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function previewLine(value: string, maxLength = 54) {
+  const normalized = cleanText(value).replace(/\s+/g, " ");
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized;
+}
+
+function artifactSourceLabel(artifact: Pick<ExtractedUploadArtifact, "sourceKind" | "page" | "slide">) {
+  if (artifact.sourceKind === "pptx" && artifact.slide !== undefined) return `Folie ${artifact.slide}`;
+  if (artifact.sourceKind === "pdf" && artifact.page !== undefined) return `Seite ${artifact.page}`;
+  if (artifact.sourceKind === "pdf") return "PDF-Bild";
+  if (artifact.sourceKind === "image") return "Upload-Bild";
+  return "Bild";
+}
+
+function storedArtifactValue(value: unknown): StoredUploadArtifact | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  if (item.kind !== "image") return null;
+  if (item.sourceKind !== "pptx" && item.sourceKind !== "pdf" && item.sourceKind !== "image") return null;
+  if (typeof item.name !== "string" || typeof item.mimeType !== "string" || typeof item.storageUrl !== "string") return null;
+  if (typeof item.sizeBytes !== "number" || !Number.isFinite(item.sizeBytes) || item.sizeBytes < 0) return null;
+
+  const placementCandidate = item.placement && typeof item.placement === "object"
+    ? item.placement as Record<string, unknown>
+    : null;
+  const placement = placementCandidate
+    && typeof placementCandidate.x === "number"
+    && typeof placementCandidate.y === "number"
+    && typeof placementCandidate.width === "number"
+    && typeof placementCandidate.height === "number"
+    ? {
+        x: placementCandidate.x,
+        y: placementCandidate.y,
+        width: placementCandidate.width,
+        height: placementCandidate.height
+      }
+    : undefined;
+
+  return {
+    kind: "image",
+    sourceKind: item.sourceKind,
+    name: item.name,
+    mimeType: item.mimeType,
+    sizeBytes: item.sizeBytes,
+    storageUrl: item.storageUrl,
+    ...(typeof item.previewUrl === "string" ? { previewUrl: item.previewUrl } : {}),
+    ...(typeof item.page === "number" && Number.isFinite(item.page) ? { page: item.page } : {}),
+    ...(typeof item.slide === "number" && Number.isFinite(item.slide) ? { slide: item.slide } : {}),
+    ...(placement ? { placement } : {}),
+    ...(typeof item.description === "string" ? { description: item.description } : {}),
+    ...(typeof item.visualLine === "string" ? { visualLine: item.visualLine } : {})
+  };
+}
+
+export function stripUploadArtifactManifest(value: string) {
+  return cleanText(value
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith(UPLOAD_ARTIFACTS_MARKER))
+    .join("\n"));
+}
+
+export function parseUploadArtifactManifest(value: string): StoredUploadArtifact[] {
+  const artifacts: StoredUploadArtifact[] = [];
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(UPLOAD_ARTIFACTS_MARKER)) continue;
+    try {
+      const manifest = JSON.parse(trimmed.slice(UPLOAD_ARTIFACTS_MARKER.length)) as unknown;
+      if (!manifest || typeof manifest !== "object") continue;
+      const record = manifest as Record<string, unknown>;
+      if (record.schemaVersion !== UPLOAD_ARTIFACT_SCHEMA_VERSION || !Array.isArray(record.artifacts)) continue;
+      for (const artifact of record.artifacts) {
+        const parsed = storedArtifactValue(artifact);
+        if (parsed) artifacts.push(parsed);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return artifacts.slice(0, MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS);
+}
+
+export function appendUploadArtifactManifest(text: string, artifacts: StoredUploadArtifact[]) {
+  if (artifacts.length === 0) return text;
+  const manifest = {
+    schemaVersion: UPLOAD_ARTIFACT_SCHEMA_VERSION,
+    artifacts: artifacts.slice(0, MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS)
+  };
+  return cleanText([
+    text,
+    `${UPLOAD_ARTIFACTS_MARKER}${JSON.stringify(manifest)}`
+  ].join("\n\n"));
+}
+
+export function renderUploadArtifactPreviewSvg(artifact: Pick<ExtractedUploadArtifact, "name" | "mimeType" | "sourceKind" | "page" | "slide" | "description" | "visualLine">, index: number) {
+  const source = artifactSourceLabel(artifact);
+  const title = previewLine(artifact.description || artifact.name, 46);
+  const detail = previewLine(artifact.visualLine || artifact.mimeType, 62);
+  const ordinal = String(index + 1).padStart(2, "0");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="${escapeSvgText(title)}">
+  <rect width="640" height="360" rx="28" fill="#f5fafc"/>
+  <rect x="28" y="28" width="584" height="304" rx="22" fill="#e7f1f5" stroke="#aac1cc" stroke-width="3"/>
+  <path d="M120 246 C166 172 218 290 274 218 S386 144 430 236" fill="none" stroke="#0b84a5" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="428" cy="132" r="48" fill="#f4fbfd" stroke="#243b46" stroke-width="12"/>
+  <path d="M386 162 C430 208 500 184 522 126" fill="none" stroke="#c98610" stroke-width="16" stroke-linecap="round"/>
+  <text x="54" y="74" fill="#4d6370" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800">${escapeSvgText(source)} · ${ordinal}</text>
+  <text x="54" y="290" fill="#061823" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="900">${escapeSvgText(title)}</text>
+  <text x="54" y="318" fill="#4d6370" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">${escapeSvgText(detail)}</text>
+</svg>`;
 }
 
 async function extractOCRText(file: File, images: OCRImageInput[]) {
@@ -824,32 +1019,63 @@ function ocrLayoutText(layout?: OCRLayoutRegion[]) {
   ].join("\n");
 }
 
-export async function extractUploadText(file: File) {
+export async function extractUploadContent(file: File) {
   const name = file.name.toLowerCase();
   const buffer = Buffer.from(await file.arrayBuffer());
   let extractedText = "";
   let images: OCRImageInput[] = [];
+  let artifacts: ExtractedUploadArtifact[] = [];
 
   if (name.endsWith(".pptx")) {
     const extracted = extractPptxContent(buffer);
     extractedText = extracted.text;
     images = extracted.images;
+    artifacts = extracted.artifacts;
   } else if (name.endsWith(".ppt")) {
     extractedText = extractLegacyOfficeText(buffer);
   } else if (name.endsWith(".pdf")) {
     const extracted = extractPdfContent(buffer);
     extractedText = extracted.text;
     images = extracted.images;
+    artifacts = extracted.artifacts;
   } else if (file.type.startsWith("text/")) {
     extractedText = buffer.toString("utf8");
   } else if (file.type.startsWith("image/")) {
-    images = [{ name: file.name, mimeType: file.type, bytes: buffer }];
+    const artifact: ExtractedUploadArtifact = {
+      kind: "image",
+      sourceKind: "image",
+      name: file.name,
+      mimeType: file.type || mimeTypeFromPath(file.name),
+      bytes: buffer,
+      sizeBytes: buffer.byteLength,
+      description: "Direkt hochgeladenes Bild"
+    };
+    artifacts = [artifact];
+    images = [imageInputFromArtifact(artifact)];
   }
 
   const ocrText = await extractOCRText(file, images);
-  return metadataForUpload(file, cleanText([extractedText, ocrText].filter(Boolean).join("\n\n")));
+  return {
+    text: metadataForUpload(file, cleanText([extractedText, ocrText].filter(Boolean).join("\n\n"))),
+    artifacts
+  };
+}
+
+export async function extractUploadText(file: File) {
+  return (await extractUploadContent(file)).text;
 }
 
 export function uploadStoragePath(lectureId: string, fileName: string) {
   return `lectures/${lectureId}/uploads/${safeFileName(fileName)}.txt`;
+}
+
+export function uploadArtifactStoragePath(lectureId: string, fileName: string, artifactName: string, index: number) {
+  const ordinal = String(index + 1).padStart(2, "0");
+  return `lectures/${lectureId}/extracted-assets/${safeFileName(fileName)}/${ordinal}-${safeFileName(artifactName)}`;
+}
+
+export function uploadArtifactPreviewStoragePath(lectureId: string, fileName: string, artifactName: string, index: number) {
+  const baseName = artifactName.replace(/\.[a-z0-9]{2,5}$/i, "");
+  const ordinal = String(index + 1).padStart(2, "0");
+  return `lectures/${lectureId}/extracted-assets/${safeFileName(fileName)}/${ordinal}-${safeFileName(baseName)}.preview.svg`;
 }

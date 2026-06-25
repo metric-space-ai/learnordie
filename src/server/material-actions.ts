@@ -1,10 +1,19 @@
 import type { LectureMaterial } from "@/lib/types";
 import { getStorageProvider } from "@/server/providers/storage";
 import { getLectureRepository } from "@/server/repository";
-import { extractUploadText, uploadStoragePath } from "./upload-extraction";
+import {
+  appendUploadArtifactManifest,
+  extractUploadContent,
+  renderUploadArtifactPreviewSvg,
+  uploadArtifactPreviewStoragePath,
+  uploadArtifactStoragePath,
+  uploadStoragePath,
+  type StoredUploadArtifact
+} from "./upload-extraction";
 
 const DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MULTIPART_FORM_OVERHEAD_BYTES = 256 * 1024;
+const MAX_STORED_UPLOAD_ARTIFACTS = 24;
 
 function inferKind(name: string): LectureMaterial["kind"] {
   const lower = name.toLowerCase();
@@ -20,6 +29,44 @@ function safeFileName(name: string) {
 
 function audioStoragePath(lectureId: string, fileName: string) {
   return `lectures/${lectureId}/audio/${safeFileName(fileName)}`;
+}
+
+async function storeExtractedUpload(lectureId: string, file: File, storage: ReturnType<typeof getStorageProvider>) {
+  const extracted = await extractUploadContent(file);
+  const storedArtifacts: StoredUploadArtifact[] = [];
+
+  for (const [index, artifact] of extracted.artifacts.slice(0, MAX_STORED_UPLOAD_ARTIFACTS).entries()) {
+    const artifactResult = await storage.putBytes(
+      uploadArtifactStoragePath(lectureId, file.name, artifact.name, index),
+      artifact.bytes,
+      artifact.mimeType
+    );
+    const previewResult = await storage.putText(
+      uploadArtifactPreviewStoragePath(lectureId, file.name, artifact.name, index),
+      renderUploadArtifactPreviewSvg(artifact, index),
+      "image/svg+xml"
+    );
+    storedArtifacts.push({
+      kind: artifact.kind,
+      sourceKind: artifact.sourceKind,
+      name: artifact.name,
+      mimeType: artifact.mimeType,
+      sizeBytes: artifact.sizeBytes,
+      ...(artifact.page !== undefined ? { page: artifact.page } : {}),
+      ...(artifact.slide !== undefined ? { slide: artifact.slide } : {}),
+      ...(artifact.placement ? { placement: artifact.placement } : {}),
+      ...(artifact.description ? { description: artifact.description } : {}),
+      ...(artifact.visualLine ? { visualLine: artifact.visualLine } : {}),
+      storageUrl: artifactResult.url,
+      previewUrl: previewResult.url
+    });
+  }
+
+  return storage.putText(
+    uploadStoragePath(lectureId, file.name),
+    appendUploadArtifactManifest(extracted.text, storedArtifacts),
+    "text/plain"
+  );
 }
 
 export class MaterialUploadLimitError extends Error {
@@ -88,11 +135,7 @@ export async function addLectureMaterialsFromForm(lectureId: string, formData: F
           Buffer.from(await file.arrayBuffer()),
           file.type || "application/octet-stream"
         )
-      : await storage.putText(
-          uploadStoragePath(lectureId, file.name),
-          await extractUploadText(file),
-          "text/plain"
-        );
+      : await storeExtractedUpload(lectureId, file, storage);
     const material = await repository.addMaterial(lectureId, {
       kind,
       source: "upload",
