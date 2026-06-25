@@ -374,6 +374,8 @@ PPTX-Import soll in Phasen erfolgen:
 
 Wir versuchen nicht, PowerPoint 1:1 als editierbares Modell nachzubauen. Wir nutzen PowerPoint als Rohmaterial.
 
+Status 2026-06-25: PPTX-Uploads extrahieren neben Text, Notizen, Chart-Text und Bildpositionen auch eine grobe Folienstruktur mit Titel-/Body-Textboxen, Tabellen, Charts und Bildreferenzen. Diese Struktur wird im Upload-Manifest gespeichert, aus Embeddings/Fragen bereinigt und in Präsentationsassets für Folienstruktur, Tabellen und Charts mit vorgeschlagenen `SlideDocument`-Blocktypen überführt. Der Import bleibt bewusst heuristisch und als reviewpflichtiger Rohmaterialpfad markiert.
+
 ### 8.4 PDF-Import
 
 PDF-Import:
@@ -860,7 +862,7 @@ Deliverables:
 - Asset-Quelle/Provenienz.
 - UI im Studio.
 
-Status 2026-06-25: `presentation_assets` ist als eigene DB-Ebene neben `lecture_assets` und `asset_chunks` eingeführt. `Lecture.presentationAssets` ist im App-Typ, Local Store, Postgres-Repository, Materialprocessing, Retention-Policy und Admin-Readiness verdrahtet. Die Materialpipeline erzeugt aus verarbeiteten Quellen deterministische Asset-Drafts für `sourceDocument`, `text` sowie Diagramm-/Formel-/Tabellenkandidaten mit Provenienz, Tags und Review-Qualität. PPTX-/PDF-Uploads persistieren extrahierte Bildartefakte als Storage-Objekte, speichern SVG-Previews/Thumbnails und hängen ein maschinenlesbares Upload-Artefaktmanifest an den Materialtext; das Manifest wird aus Embeddings und Fragen bereinigt, aber beim Präsentationsasset-Aufbau ausgewertet. Das Dozentenstudio zeigt im Quellen-Drawer eine kompakte Asset-Bibliothek mit visuellen Previews; der Engine-Editor kann kompatible Bibliotheksassets in `SlideDocument.assets` übernehmen und in Figure-Blöcken referenzieren. Browser-Tests prüfen den lokalen Editorpfad sowie den Postgres-Materialupload mit persistierten Storage-/Preview-Keys und sichtbarer Asset-Vorschau.
+Status 2026-06-25: `presentation_assets` ist als eigene DB-Ebene neben `lecture_assets` und `asset_chunks` eingeführt. `Lecture.presentationAssets` ist im App-Typ, Local Store, Postgres-Repository, Materialprocessing, Retention-Policy und Admin-Readiness verdrahtet. Die Materialpipeline erzeugt aus verarbeiteten Quellen deterministische Asset-Drafts für `sourceDocument`, `text` sowie Diagramm-/Formel-/Tabellenkandidaten mit Provenienz, Tags und Review-Qualität. PPTX-/PDF-Uploads persistieren extrahierte Bildartefakte als Storage-Objekte, speichern SVG-Previews/Thumbnails und hängen ein maschinenlesbares Upload-Artefaktmanifest an den Materialtext; das Manifest wird aus Embeddings und Fragen bereinigt, aber beim Präsentationsasset-Aufbau ausgewertet. PPTX-Folienstrukturen werden zusätzlich als reviewpflichtige Asset-Kandidaten für Folienstruktur, Tabellen und Charts abgelegt, damit Agenten kontrolliert aus importiertem Rohmaterial neue `SlideDocument`-Blöcke planen können. Das Dozentenstudio zeigt im Quellen-Drawer eine kompakte Asset-Bibliothek mit visuellen Previews; der Engine-Editor kann kompatible Bibliotheksassets in `SlideDocument.assets` übernehmen und in Figure-Blöcken referenzieren. Browser-Tests prüfen den lokalen Editorpfad sowie den Postgres-Materialupload mit persistierten Storage-/Preview-Keys, strukturierter PPTX-Tabelle/Chart und sichtbarer Asset-Vorschau.
 
 ### Track E: Agent Pipeline
 

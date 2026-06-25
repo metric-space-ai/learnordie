@@ -64,7 +64,7 @@ async function storeExtractedUpload(lectureId: string, file: File, storage: Retu
 
   return storage.putText(
     uploadStoragePath(lectureId, file.name),
-    appendUploadArtifactManifest(extracted.text, storedArtifacts),
+    appendUploadArtifactManifest(extracted.text, storedArtifacts, extracted.slideStructures),
     "text/plain"
   );
 }

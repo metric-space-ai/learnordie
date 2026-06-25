@@ -987,8 +987,9 @@ function pptxUploadFixture() {
       name: "ppt/slides/slide1.xml",
       data: Buffer.from([
         "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><p:cSld><p:spTree>",
-        "<a:p><a:r><a:t>Hydrodynamische Gleitlagerung aus PPTX</a:t></a:r></a:p>",
-        "<a:p><a:r><a:t>Oelkeil und Tragfilm bleiben als Fachbegriffe erhalten.</a:t></a:r></a:p>",
+        "<p:sp><p:nvSpPr><p:cNvPr id=\"1\" name=\"Titel\"/><p:nvPr><p:ph type=\"title\"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"609600\" y=\"457200\"/><a:ext cx=\"6096000\" cy=\"914400\"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>Hydrodynamische Gleitlagerung aus PPTX</a:t></a:r></a:p></p:txBody></p:sp>",
+        "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Body Text\"/><p:nvPr><p:ph type=\"body\"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"609600\" y=\"1828800\"/><a:ext cx=\"5486400\" cy=\"1828800\"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>Oelkeil und Tragfilm bleiben als Fachbegriffe erhalten.</a:t></a:r></a:p></p:txBody></p:sp>",
+        "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"3\" name=\"Betriebszustand Tabelle\"/></p:nvGraphicFramePr><p:xfrm><a:off x=\"609600\" y=\"3962400\"/><a:ext cx=\"5486400\" cy=\"1371600\"/></p:xfrm><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Betriebszustand</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Reibzustand</a:t></a:r></a:p></a:txBody></a:tc></a:tr><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Anlauf</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Mischreibung</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>",
         "<p:pic><p:nvPicPr><p:cNvPr id=\"4\" name=\"Stribeck-Diagramm\" descr=\"Stribeck-Bild: Reibungszahl ueber Sommerfeldzahl\" /></p:nvPicPr><p:blipFill><a:blip r:embed=\"rId2\" /></p:blipFill><p:spPr><a:xfrm><a:off x=\"7315200\" y=\"1828800\"/><a:ext cx=\"3048000\" cy=\"2133600\"/></a:xfrm></p:spPr></p:pic>",
         "</p:spTree></p:cSld></p:sld>"
       ].join(""))
@@ -1007,7 +1008,7 @@ function pptxUploadFixture() {
       name: "ppt/charts/chart1.xml",
       data: Buffer.from([
         "<c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">",
-        "<c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>Diagramm: Reibungszahl und Sommerfeldzahl</a:t></a:r></a:p></c:rich></c:tx></c:title></c:chart>",
+        "<c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>Diagramm: Reibungszahl und Sommerfeldzahl</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:barChart><c:ser><c:cat><c:strLit><c:pt idx=\"0\"><c:v>Anlauf</c:v></c:pt><c:pt idx=\"1\"><c:v>Nennbetrieb</c:v></c:pt></c:strLit></c:cat><c:val><c:numLit><c:pt idx=\"0\"><c:v>0.22</c:v></c:pt><c:pt idx=\"1\"><c:v>0.04</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart></c:plotArea></c:chart>",
         "</c:chartSpace>"
       ].join(""))
     },
@@ -3045,7 +3046,18 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
       storage_key: string | null;
       preview_key: string | null;
       source_json: { originalName?: string; sourceRef?: string; slide?: number; page?: number };
-      structured_data: { sourceKind?: string; mimeType?: string; visualLine?: string } | null;
+      structured_data: {
+        importKind?: string;
+        labels?: string[];
+        mimeType?: string;
+        pptxSlideStructures?: Array<{ charts?: unknown[]; slide?: number; tables?: unknown[]; title?: string }>;
+        rows?: string[][];
+        slideStructureCount?: number;
+        sourceKind?: string;
+        suggestedBlocks?: string[];
+        values?: number[];
+        visualLine?: string;
+      } | null;
       quality_json: { needsReview?: boolean };
     }[]>`
       select pa.kind, pa.title, pa.storage_key, pa.preview_key, pa.source_json, pa.structured_data, pa.quality_json
@@ -3066,6 +3078,8 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     expect(combined).toContain("Stribeck-Layoutanker");
     expect(combined).toContain("Hydrodynamische Gleitlagerung aus PPTX");
     expect(combined).toContain("Diagramm: Reibungszahl und Sommerfeldzahl");
+    expect(combined).toContain("Tabelle 1:");
+    expect(combined).toContain("Betriebszustand | Reibzustand");
     expect(combined).toContain("Stribeck-Bild: Reibungszahl ueber Sommerfeldzahl");
     expect(combined).toContain("Visuelle Struktur:");
     expect(combined).toContain("Bildposition: Folie 1");
@@ -3078,9 +3092,37 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     expect(blockedUrlChunks[0].count).toBe(0);
     expect(blockedUrlReviews[0].count).toBe(0);
     expect(presentationAssetRows.length).toBeGreaterThanOrEqual(6);
-    expect(presentationAssetRows.map((row) => row.kind)).toEqual(expect.arrayContaining(["sourceDocument", "text", "diagram", "formula"]));
+    expect(presentationAssetRows.map((row) => row.kind)).toEqual(expect.arrayContaining(["sourceDocument", "text", "diagram", "formula", "table", "chart"]));
     expect(presentationAssetRows.some((row) => row.source_json.originalName === pptxName)).toBe(true);
     expect(presentationAssetRows.some((row) => row.quality_json.needsReview === true)).toBe(true);
+    const pptxSourceAsset = presentationAssetRows.find((row) => (
+      row.source_json.originalName === pptxName &&
+      row.kind === "sourceDocument"
+    ));
+    expect(pptxSourceAsset?.structured_data?.slideStructureCount).toBe(1);
+    expect(pptxSourceAsset?.structured_data?.pptxSlideStructures?.[0]?.slide).toBe(1);
+    expect(pptxSourceAsset?.structured_data?.pptxSlideStructures?.[0]?.title).toBe("Hydrodynamische Gleitlagerung aus PPTX");
+    expect(pptxSourceAsset?.structured_data?.pptxSlideStructures?.[0]?.tables?.length).toBe(1);
+    expect(pptxSourceAsset?.structured_data?.pptxSlideStructures?.[0]?.charts?.length).toBe(1);
+    const pptxStructureAsset = presentationAssetRows.find((row) => (
+      row.source_json.originalName === pptxName &&
+      row.structured_data?.importKind === "pptxSlideStructure"
+    ));
+    expect(pptxStructureAsset?.structured_data?.suggestedBlocks).toEqual(expect.arrayContaining(["heading", "paragraph", "table", "chart", "figure", "speakerNote"]));
+    const pptxTableAsset = presentationAssetRows.find((row) => (
+      row.source_json.originalName === pptxName &&
+      row.structured_data?.importKind === "pptxTable"
+    ));
+    expect(pptxTableAsset?.kind).toBe("table");
+    expect(pptxTableAsset?.structured_data?.rows?.[0]).toEqual(["Betriebszustand", "Reibzustand"]);
+    expect(pptxTableAsset?.structured_data?.rows?.[1]).toEqual(["Anlauf", "Mischreibung"]);
+    const pptxChartAsset = presentationAssetRows.find((row) => (
+      row.source_json.originalName === pptxName &&
+      row.structured_data?.importKind === "pptxChart"
+    ));
+    expect(pptxChartAsset?.kind).toBe("chart");
+    expect(pptxChartAsset?.structured_data?.labels).toEqual(["Anlauf", "Nennbetrieb"]);
+    expect(pptxChartAsset?.structured_data?.values).toEqual([0.22, 0.04]);
     const pptxVisualAsset = presentationAssetRows.find((row) => (
       row.source_json.originalName === pptxName &&
       row.kind === "diagram" &&

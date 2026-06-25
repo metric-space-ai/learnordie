@@ -3,7 +3,15 @@ import net from "node:net";
 import type { Lecture, LectureMaterial, PresentationAsset } from "@/lib/types";
 import { getEmbeddingProvider } from "@/server/providers/embeddings";
 import { isPreviewOrProductionDeployment } from "@/server/runtime-config";
-import { parseUploadArtifactManifest, stripUploadArtifactManifest, type StoredUploadArtifact } from "@/server/upload-extraction";
+import {
+  parseUploadArtifactManifest,
+  parseUploadSlideStructures,
+  stripUploadArtifactManifest,
+  type PptxChartStructure,
+  type PptxSlideStructure,
+  type PptxTableStructure,
+  type StoredUploadArtifact
+} from "@/server/upload-extraction";
 
 export type MaterialChunk = {
   sourceRef: string;
@@ -17,6 +25,7 @@ export type ProcessedMaterial = {
   sourceRefs: string[];
   warnings: string[];
   artifacts: StoredUploadArtifact[];
+  slideStructures: PptxSlideStructure[];
 };
 
 export type PresentationAssetDraft = Omit<PresentationAsset, "id" | "lectureId" | "createdAt">;
@@ -149,6 +158,43 @@ function uploadArtifactText(artifact: StoredUploadArtifact) {
     `Datei: ${artifact.name}`,
     `Typ: ${artifact.mimeType}`
   ].filter(Boolean).join("\n"));
+}
+
+function pptxTableAssetText(table: PptxTableStructure) {
+  return cleanText(table.rows.map((row) => row.filter(Boolean).join(" | ")).filter(Boolean).join("\n"));
+}
+
+function pptxChartAssetText(chart: PptxChartStructure) {
+  return cleanText([
+    chart.title,
+    chart.text,
+    chart.labels && chart.labels.length > 0 ? `Labels: ${chart.labels.join(", ")}` : "",
+    chart.values && chart.values.length > 0 ? `Werte: ${chart.values.join(", ")}` : ""
+  ].filter(Boolean).join("\n"));
+}
+
+function pptxSlideStructureAssetText(structure: PptxSlideStructure) {
+  return cleanText([
+    structure.title ? `Titel: ${structure.title}` : "",
+    ...structure.textBoxes.map((box) => `${box.role}: ${box.text}`),
+    ...structure.tables.map((table, index) => `Tabelle ${index + 1}:\n${pptxTableAssetText(table)}`),
+    ...structure.charts.map((chart, index) => `Chart ${index + 1}: ${pptxChartAssetText(chart)}`),
+    ...structure.images.map((image, index) => `Bild ${index + 1}: ${image.description || image.name}`),
+    structure.notes ? `Notizen: ${structure.notes}` : "",
+    structure.layoutHints.length > 0 ? `Layout-Hints: ${structure.layoutHints.join(", ")}` : ""
+  ].filter(Boolean).join("\n"));
+}
+
+function pptxSuggestedBlocks(structure: PptxSlideStructure) {
+  const blocks = [
+    structure.title ? "heading" : "",
+    structure.textBoxes.some((box) => box.role !== "title") ? "paragraph" : "",
+    structure.tables.length > 0 ? "table" : "",
+    structure.charts.length > 0 ? "chart" : "",
+    structure.images.length > 0 ? "figure" : "",
+    structure.notes ? "speakerNote" : ""
+  ].filter(Boolean);
+  return [...new Set(blocks)];
 }
 
 function hasUsableContent(value: string) {
@@ -393,6 +439,9 @@ export async function processMaterialContent(input: {
   const artifacts = input.material.source === "upload"
     ? parseUploadArtifactManifest(rawExtracted)
     : [];
+  const slideStructures = input.material.source === "upload"
+    ? parseUploadSlideStructures(rawExtracted)
+    : [];
   const extracted = input.material.source === "upload"
     ? stripUploadArtifactManifest(uploadExtractedSection(rawExtracted))
     : rawExtracted;
@@ -407,7 +456,8 @@ export async function processMaterialContent(input: {
       warnings: warnings.length > 0
         ? warnings
         : ["Keine verwertbaren Fachinhalte extrahiert. Quelle manuell nachpflegen oder OCR/visuelle Analyse nutzen."],
-      artifacts
+      artifacts,
+      slideStructures
     };
   }
 
@@ -423,7 +473,8 @@ export async function processMaterialContent(input: {
     chunks,
     sourceRefs: chunks.map((chunk) => chunk.sourceRef),
     warnings,
-    artifacts
+    artifacts,
+    slideStructures
   };
 }
 
@@ -455,6 +506,8 @@ export function createPresentationAssetDrafts(input: {
         materialSource: material.source,
         chunkCount: processed.chunks.length,
         artifactCount: processed.artifacts.length,
+        slideStructureCount: processed.slideStructures.length,
+        pptxSlideStructures: processed.slideStructures.slice(0, 12),
         sourceRefs: processed.sourceRefs
       },
       source,
@@ -477,6 +530,90 @@ export function createPresentationAssetDrafts(input: {
         needsReview: false
       }
     });
+  }
+
+  for (const structure of processed.slideStructures.slice(0, 8)) {
+    const structureText = pptxSlideStructureAssetText(structure);
+    drafts.push({
+      kind: "text",
+      title: `${baseTitle} · Folienstruktur ${structure.slide}`,
+      description: "Grobe PPTX-Folienstruktur als kontrollierter Importvorschlag für den Agenten.",
+      extractedText: structureText ? clampAssetText(structureText) : undefined,
+      structuredData: {
+        importKind: "pptxSlideStructure",
+        slide: structure.slide,
+        title: structure.title,
+        layoutHints: structure.layoutHints,
+        suggestedBlocks: pptxSuggestedBlocks(structure),
+        textBoxes: structure.textBoxes,
+        images: structure.images,
+        notes: structure.notes
+      },
+      source: { ...source, sourceRef: `Folie ${structure.slide}`, slide: structure.slide },
+      tags: assetTags(material, ["pptx", "slide-structure", "import"]),
+      quality: {
+        extractionConfidence: 0.68,
+        needsReview: true,
+        reason: "PPTX-Folienstruktur ist heuristisch und muss vor Übernahme geprüft werden."
+      }
+    });
+
+    for (const [tableIndex, table] of structure.tables.entries()) {
+      drafts.push({
+        kind: "table",
+        title: `${baseTitle} · Tabelle Folie ${structure.slide}.${tableIndex + 1}`,
+        description: "Aus PPTX-Tabellenzellen extrahierte Tabellenstruktur.",
+        extractedText: clampAssetText(pptxTableAssetText(table)),
+        structuredData: {
+          importKind: "pptxTable",
+          slide: structure.slide,
+          rows: table.rows,
+          placement: table.placement,
+          mobileStrategy: "cards"
+        },
+        source: {
+          ...source,
+          sourceRef: `Folie ${structure.slide} · Tabelle ${tableIndex + 1}`,
+          slide: structure.slide,
+          bbox: table.placement
+        },
+        tags: assetTags(material, ["pptx", "table", "structured-import"]),
+        quality: {
+          extractionConfidence: 0.7,
+          needsReview: true,
+          reason: "PPTX-Tabellenstruktur wurde heuristisch extrahiert."
+        }
+      });
+    }
+
+    for (const [chartIndex, chart] of structure.charts.entries()) {
+      drafts.push({
+        kind: "chart",
+        title: `${baseTitle} · Chart Folie ${structure.slide}.${chartIndex + 1}`,
+        description: "Aus PPTX-Chart-XML extrahierter Chart-Kandidat.",
+        extractedText: clampAssetText(pptxChartAssetText(chart)),
+        structuredData: {
+          importKind: "pptxChart",
+          slide: structure.slide,
+          title: chart.title,
+          labels: chart.labels,
+          values: chart.values,
+          sourceRef: chart.sourceRef,
+          chartType: "bar"
+        },
+        source: {
+          ...source,
+          sourceRef: `Folie ${structure.slide} · Chart ${chartIndex + 1}`,
+          slide: structure.slide
+        },
+        tags: assetTags(material, ["pptx", "chart", "structured-import"]),
+        quality: {
+          extractionConfidence: chart.labels?.length && chart.values?.length ? 0.66 : 0.52,
+          needsReview: true,
+          reason: "PPTX-Chartdaten wurden heuristisch aus OOXML extrahiert."
+        }
+      });
+    }
   }
 
   for (const [index, artifact] of processed.artifacts.entries()) {
