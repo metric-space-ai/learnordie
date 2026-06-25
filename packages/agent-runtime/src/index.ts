@@ -685,7 +685,7 @@ function resolveBlock(blocks: SlideBlock[], blockId?: string) {
 function buildReplacementText(prompt: string, block?: SlideBlock, assistantRationale?: string) {
   const current = block ? blockText(block) : "";
   const llmText = assistantRationale?.trim();
-  if (llmText) return truncate(llmText, 1200) ?? llmText;
+  if (llmText) return truncate(`${llmText}\n\nKI-Auftrag: ${prompt}`, 1200) ?? llmText;
   const base = current || "Dieser Abschnitt bekommt einen fokussierten KI-Vorschlag.";
   return truncate(`${base}\n\nKI-Vorschlag: ${prompt}`, 1200) ?? base;
 }
