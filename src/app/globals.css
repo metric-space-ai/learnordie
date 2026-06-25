@@ -7365,6 +7365,23 @@ textarea.review-live-explanation {
   background: color-mix(in oklch, var(--panel) 82%, white);
 }
 
+.studio-asset-card.has-preview {
+  gap: 7px;
+}
+
+.studio-asset-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  background-position: center;
+  background-size: cover;
+}
+
 .studio-asset-card header,
 .studio-asset-card footer {
   display: flex;

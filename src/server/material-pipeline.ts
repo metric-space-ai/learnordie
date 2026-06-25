@@ -3,6 +3,7 @@ import net from "node:net";
 import type { Lecture, LectureMaterial, PresentationAsset } from "@/lib/types";
 import { getEmbeddingProvider } from "@/server/providers/embeddings";
 import { isPreviewOrProductionDeployment } from "@/server/runtime-config";
+import { parseUploadArtifactManifest, stripUploadArtifactManifest, type StoredUploadArtifact } from "@/server/upload-extraction";
 
 export type MaterialChunk = {
   sourceRef: string;
@@ -15,6 +16,7 @@ export type ProcessedMaterial = {
   chunks: MaterialChunk[];
   sourceRefs: string[];
   warnings: string[];
+  artifacts: StoredUploadArtifact[];
 };
 
 export type PresentationAssetDraft = Omit<PresentationAsset, "id" | "lectureId" | "createdAt">;
@@ -51,6 +53,11 @@ function materialBaseName(name: string) {
   const withoutQuery = name.split(/[?#]/)[0] || name;
   const lastSegment = withoutQuery.split("/").filter(Boolean).at(-1) ?? withoutQuery;
   return lastSegment.replace(/\.[a-z0-9]{1,8}$/i, "").trim() || "Quelle";
+}
+
+function compactAssetTitle(value: string, maxLength = 84) {
+  const text = cleanText(value).replace(/\s+/g, " ");
+  return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
 }
 
 function assetTags(material: LectureMaterial, extra: string[] = []) {
@@ -111,7 +118,7 @@ function extractionWarnings(value: string) {
 }
 
 function textWithoutExtractionWarnings(value: string) {
-  return cleanText(value
+  return cleanText(stripUploadArtifactManifest(value)
     .replace(/Keine verwertbaren Textinhalte gefunden\.[\s\S]*?Materialquelle gespeichert\./gi, " ")
     .replace(/Bildbasierte PDF-Inhalte erkannt:\s*\d+\s*eingebettete Bilder\.\s*F(?:ue|ü)r nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich\./gi, " ")
     .replace(/Bildbasierte PPTX-Inhalte erkannt:.*?F(?:ue|ü)r nicht getaggte Bildinhalte ist OCR oder visuelle Analyse erforderlich\./gi, " ")
@@ -122,6 +129,26 @@ function textWithoutExtractionWarnings(value: string) {
     .replace(/^Typ:.*$/gim, " ")
     .replace(/^Groesse:.*$/gim, " ")
     .replace(/^URL-Quelle:.*$/gim, " "));
+}
+
+function uploadArtifactSourceRef(artifact: StoredUploadArtifact, index: number) {
+  if (artifact.slide !== undefined) return `Folie ${artifact.slide}: ${artifact.name}`;
+  if (artifact.page !== undefined) return `Seite ${artifact.page}: ${artifact.name}`;
+  return `Bild ${index + 1}: ${artifact.name}`;
+}
+
+function uploadArtifactAssetKind(material: LectureMaterial, artifact: StoredUploadArtifact): PresentationAsset["kind"] {
+  if (artifact.sourceKind === "image" || material.kind === "other") return "figure";
+  return "diagram";
+}
+
+function uploadArtifactText(artifact: StoredUploadArtifact) {
+  return cleanText([
+    artifact.description,
+    artifact.visualLine,
+    `Datei: ${artifact.name}`,
+    `Typ: ${artifact.mimeType}`
+  ].filter(Boolean).join("\n"));
 }
 
 function hasUsableContent(value: string) {
@@ -363,8 +390,11 @@ export async function processMaterialContent(input: {
     ? await fetchUrlText(storedText || input.material.originalName)
     : "";
   const rawExtracted = cleanText(fetchedUrlText || storedText);
+  const artifacts = input.material.source === "upload"
+    ? parseUploadArtifactManifest(rawExtracted)
+    : [];
   const extracted = input.material.source === "upload"
-    ? uploadExtractedSection(rawExtracted)
+    ? stripUploadArtifactManifest(uploadExtractedSection(rawExtracted))
     : rawExtracted;
   const warnings = extractionWarnings(extracted);
 
@@ -376,7 +406,8 @@ export async function processMaterialContent(input: {
       sourceRefs: [],
       warnings: warnings.length > 0
         ? warnings
-        : ["Keine verwertbaren Fachinhalte extrahiert. Quelle manuell nachpflegen oder OCR/visuelle Analyse nutzen."]
+        : ["Keine verwertbaren Fachinhalte extrahiert. Quelle manuell nachpflegen oder OCR/visuelle Analyse nutzen."],
+      artifacts
     };
   }
 
@@ -391,7 +422,8 @@ export async function processMaterialContent(input: {
     preview: compactPreview(extracted),
     chunks,
     sourceRefs: chunks.map((chunk) => chunk.sourceRef),
-    warnings
+    warnings,
+    artifacts
   };
 }
 
@@ -422,6 +454,7 @@ export function createPresentationAssetDrafts(input: {
         materialKind: material.kind,
         materialSource: material.source,
         chunkCount: processed.chunks.length,
+        artifactCount: processed.artifacts.length,
         sourceRefs: processed.sourceRefs
       },
       source,
@@ -446,7 +479,41 @@ export function createPresentationAssetDrafts(input: {
     });
   }
 
-  if (combinedText && hasDiagramSignal(combinedText, material)) {
+  for (const [index, artifact] of processed.artifacts.entries()) {
+    const sourceRef = uploadArtifactSourceRef(artifact, index);
+    const artifactText = uploadArtifactText(artifact);
+    drafts.push({
+      kind: uploadArtifactAssetKind(material, artifact),
+      title: `${baseTitle} · ${compactAssetTitle(artifact.description || artifact.name, 42)}`,
+      description: "Aus dem Upload extrahiertes Bild mit persistierter Originaldatei und Vorschau.",
+      storageKey: artifact.storageUrl,
+      previewKey: artifact.previewUrl,
+      extractedText: artifactText ? clampAssetText(artifactText) : undefined,
+      structuredData: {
+        artifactKind: artifact.kind,
+        sourceKind: artifact.sourceKind,
+        mimeType: artifact.mimeType,
+        sizeBytes: artifact.sizeBytes,
+        placement: artifact.placement,
+        visualLine: artifact.visualLine
+      },
+      source: {
+        ...source,
+        sourceRef,
+        page: artifact.page,
+        slide: artifact.slide,
+        bbox: artifact.placement
+      },
+      tags: assetTags(material, ["visual", "extracted", artifact.sourceKind, artifact.mimeType.split("/").at(-1) ?? "image"]),
+      quality: {
+        extractionConfidence: artifact.description ? 0.72 : 0.58,
+        needsReview: true,
+        reason: "Aus Upload extrahiertes Bild; vor dem Folieneinsatz fachlich prüfen."
+      }
+    });
+  }
+
+  if (combinedText && processed.artifacts.length === 0 && hasDiagramSignal(combinedText, material)) {
     drafts.push({
       kind: "diagram",
       title: `${baseTitle} · Abbildung`,
