@@ -6,6 +6,7 @@ const MAX_EXTRACTED_TEXT_CHARS = 12000;
 const UPLOAD_ARTIFACTS_MARKER = "LEARNBUDDY_UPLOAD_ARTIFACTS_JSON:";
 const UPLOAD_ARTIFACT_SCHEMA_VERSION = "learnordie.upload-artifacts.v1";
 const MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS = 24;
+const MAX_UPLOAD_SLIDE_STRUCTURE_ITEMS = 64;
 
 type ZipEntry = {
   name: string;
@@ -18,6 +19,7 @@ type ExtractedUploadContent = {
   text: string;
   images: OCRImageInput[];
   artifacts: ExtractedUploadArtifact[];
+  slideStructures: PptxSlideStructure[];
 };
 
 type PptxSlideSize = {
@@ -37,6 +39,47 @@ type PptxImageReference = {
   description: string;
   placement?: PptxImagePlacement;
   visualLine?: string;
+};
+
+type PptxTextBoxRole = "title" | "body" | "shape";
+
+export type PptxTextBoxStructure = {
+  text: string;
+  role: PptxTextBoxRole;
+  name?: string;
+  placement?: UploadArtifactPlacement;
+};
+
+export type PptxTableStructure = {
+  rows: string[][];
+  placement?: UploadArtifactPlacement;
+};
+
+export type PptxChartStructure = {
+  title?: string;
+  text: string;
+  labels?: string[];
+  values?: number[];
+  sourceRef?: string;
+};
+
+export type PptxImageStructure = {
+  name: string;
+  description?: string;
+  target?: string;
+  placement?: UploadArtifactPlacement;
+  visualLine?: string;
+};
+
+export type PptxSlideStructure = {
+  slide: number;
+  title?: string;
+  textBoxes: PptxTextBoxStructure[];
+  tables: PptxTableStructure[];
+  charts: PptxChartStructure[];
+  images: PptxImageStructure[];
+  notes?: string;
+  layoutHints: string[];
 };
 
 export type UploadArtifactSourceKind = "pptx" | "pdf" | "image";
@@ -233,7 +276,7 @@ function readPptxSlideSize(buffer: Buffer, entriesByName: Map<string, ZipEntry>)
 }
 
 function extractPptxPicturePlacement(pictureXml: string): PptxImagePlacement | undefined {
-  const transformMatch = pictureXml.match(/<a:xfrm\b[\s\S]*?<\/a:xfrm>/);
+  const transformMatch = pictureXml.match(/<(?:a|p):xfrm\b[\s\S]*?<\/(?:a|p):xfrm>/);
   if (!transformMatch) return undefined;
   const offsetMatch = transformMatch[0].match(/<a:off\b([^>]*)\/?>/);
   const extentMatch = transformMatch[0].match(/<a:ext\b([^>]*)\/?>/);
@@ -268,6 +311,151 @@ function pptxPlacementZone(placement: PptxImagePlacement, slideSize: PptxSlideSi
 
 function pptxPlacementText(placement: PptxImagePlacement) {
   return `x=${Math.round(placement.x)} y=${Math.round(placement.y)} w=${Math.round(placement.width)} h=${Math.round(placement.height)} EMU`;
+}
+
+function compactOfficeText(value: string) {
+  return cleanText(value).replace(/\s+/g, " ");
+}
+
+function extractPptxShapeStructures(xml: string): PptxTextBoxStructure[] {
+  const shapes: PptxTextBoxStructure[] = [];
+  const shapeRegex = /<p:sp\b[\s\S]*?<\/p:sp>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = shapeRegex.exec(xml))) {
+    const shapeXml = match[0];
+    const text = compactOfficeText(extractTextFromOfficeXml(shapeXml));
+    if (!text || isOfficePlaceholderText(text)) continue;
+
+    const propertyMatch = shapeXml.match(/<p:cNvPr\b([^>]*)\/?>/);
+    const attrs = propertyMatch ? parseXmlAttributes(propertyMatch[1]) : new Map<string, string>();
+    const name = cleanText(attrs.get("name") ?? "");
+    const placeholderType = shapeXml.match(/<p:ph\b([^>]*)\/?>/)?.[1];
+    const placeholderAttrs = placeholderType ? parseXmlAttributes(placeholderType) : new Map<string, string>();
+    const type = placeholderAttrs.get("type") ?? "";
+    const role: PptxTextBoxRole = /title|ctrTitle/i.test(type) || /title|titel/i.test(name)
+      ? "title"
+      : /body|content|text/i.test(type) || /body|inhalt|text/i.test(name)
+        ? "body"
+        : "shape";
+    const placement = extractPptxPicturePlacement(shapeXml);
+    shapes.push({
+      text,
+      role,
+      ...(name ? { name } : {}),
+      ...(placement ? { placement } : {})
+    });
+  }
+
+  return shapes;
+}
+
+function extractPptxTableStructures(xml: string): PptxTableStructure[] {
+  const tables: PptxTableStructure[] = [];
+  const frameRegex = /<p:graphicFrame\b[\s\S]*?<\/p:graphicFrame>/g;
+  let frameMatch: RegExpExecArray | null;
+
+  while ((frameMatch = frameRegex.exec(xml))) {
+    const frameXml = frameMatch[0];
+    const tableMatch = frameXml.match(/<a:tbl\b[\s\S]*?<\/a:tbl>/);
+    if (!tableMatch) continue;
+    const rows: string[][] = [];
+    const rowRegex = /<a:tr\b[\s\S]*?<\/a:tr>/g;
+    let rowMatch: RegExpExecArray | null;
+    while ((rowMatch = rowRegex.exec(tableMatch[0]))) {
+      const cells: string[] = [];
+      const cellRegex = /<a:tc\b[\s\S]*?<\/a:tc>/g;
+      let cellMatch: RegExpExecArray | null;
+      while ((cellMatch = cellRegex.exec(rowMatch[0]))) {
+        cells.push(compactOfficeText(extractTextFromOfficeXml(cellMatch[0])));
+      }
+      if (cells.some(Boolean)) rows.push(cells);
+    }
+    if (rows.length > 0) {
+      const placement = extractPptxPicturePlacement(frameXml);
+      tables.push({
+        rows,
+        ...(placement ? { placement } : {})
+      });
+    }
+  }
+
+  return tables;
+}
+
+function pptxChartStringPoints(xml: string) {
+  const literals = xml.match(/<c:strLit\b[\s\S]*?<\/c:strLit>/g) ?? [];
+  return literals.flatMap((literal) => {
+    const values: string[] = [];
+    const valueRegex = /<c:v(?:\s[^>]*)?>([\s\S]*?)<\/c:v>/g;
+    let match: RegExpExecArray | null;
+    while ((match = valueRegex.exec(literal))) {
+      const value = compactOfficeText(decodeXmlEntities(match[1]));
+      if (value) values.push(value);
+    }
+    return values;
+  });
+}
+
+function pptxChartNumberPoints(xml: string) {
+  const literals = xml.match(/<c:numLit\b[\s\S]*?<\/c:numLit>/g) ?? [];
+  return literals.flatMap((literal) => {
+    const values: number[] = [];
+    const valueRegex = /<c:v(?:\s[^>]*)?>([\s\S]*?)<\/c:v>/g;
+    let match: RegExpExecArray | null;
+    while ((match = valueRegex.exec(literal))) {
+      const value = Number(decodeXmlEntities(match[1]).replace(",", "."));
+      if (Number.isFinite(value)) values.push(value);
+    }
+    return values;
+  });
+}
+
+function extractPptxChartStructure(xml: string, sourceRef: string): PptxChartStructure | null {
+  const text = compactOfficeText(extractTextFromOfficeXml(xml));
+  const labels = pptxChartStringPoints(xml);
+  const values = pptxChartNumberPoints(xml);
+  const title = text.split(/\n|Diagramm:/).map((part) => cleanText(part)).find(Boolean);
+  if (!text && labels.length === 0 && values.length === 0) return null;
+
+  return {
+    text,
+    ...(title ? { title } : {}),
+    ...(labels.length > 0 ? { labels } : {}),
+    ...(values.length > 0 ? { values } : {}),
+    sourceRef
+  };
+}
+
+function pptxSlideLayoutHints(structure: Omit<PptxSlideStructure, "layoutHints">, slideSize: PptxSlideSize): string[] {
+  const hints: string[] = [];
+  if (structure.tables.length > 0) hints.push("table_focus");
+  if (structure.charts.length > 0) hints.push("chart_focus");
+  if (structure.images.some((image) => image.placement && pptxPlacementZone(image.placement, slideSize).includes("rechts"))) {
+    hints.push("technical_figure_right");
+  }
+  if (structure.images.length > 0 && hints.length === 0) hints.push("technical_figure_left");
+  if (structure.textBoxes.length > 1 && hints.length === 0) hints.push("technical_two_column");
+  if (hints.length === 0) hints.push("technical_one_column");
+  return [...new Set(hints)].slice(0, 4);
+}
+
+function pptxTableText(table: PptxTableStructure) {
+  return table.rows.map((row) => row.filter(Boolean).join(" | ")).filter(Boolean).join("\n");
+}
+
+function pptxSlideStructureText(structure: PptxSlideStructure) {
+  const parts = [
+    structure.title ? `Titel: ${structure.title}` : "",
+    ...structure.textBoxes
+      .filter((box) => box.role !== "title")
+      .map((box, index) => `Textbox ${index + 1}: ${box.text}`),
+    ...structure.tables.map((table, index) => `Tabelle ${index + 1}:\n${pptxTableText(table)}`),
+    ...structure.charts.map((chart, index) => `Chart ${index + 1}: ${chart.text || chart.title || chart.sourceRef}`),
+    ...structure.images.map((image, index) => `Bild ${index + 1}: ${image.description || image.name}`),
+    structure.notes ? `Notizen: ${structure.notes}` : ""
+  ].filter(Boolean);
+  return cleanText(parts.join("\n"));
 }
 
 function extractImageReferencesFromSlideXml(xml: string, relationships: Map<string, string>, slideNumber: number, slideSize: PptxSlideSize) {
@@ -389,6 +577,7 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
   const slides: string[] = [];
   const images: OCRImageInput[] = [];
   const artifacts: ExtractedUploadArtifact[] = [];
+  const slideStructures: PptxSlideStructure[] = [];
   const seenImageTargets = new Set<string>();
   for (const entry of slideEntries) {
     const slideNumber = slideNumberFromPath(entry.name);
@@ -405,10 +594,11 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
       : noteEntries.get(slideNumber)
         ? extractTextFromOfficeXml(readZipEntry(buffer, noteEntries.get(slideNumber)!)?.toString("utf8") ?? "")
         : "";
-    const chartTexts = relationships
+    const chartStructures = relationships
       .filter((relationship) => relationship.type.includes("/chart"))
-      .map((relationship) => extractTextFromOfficeXml(readZipText(buffer, entriesByName, relationship.target)))
-      .filter(Boolean);
+      .map((relationship) => extractPptxChartStructure(readZipText(buffer, entriesByName, relationship.target), relationship.target))
+      .filter((chart): chart is PptxChartStructure => Boolean(chart));
+    const chartTexts = chartStructures.map((chart) => chart.text).filter(Boolean);
     const imageReferences = extractImageReferencesFromSlideXml(slideXml, relationshipTargets, slideNumber, slideSize);
     for (const reference of imageReferences.filter((item) => item.target)) {
       const target = reference.target;
@@ -437,11 +627,45 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
     const visualStructure = imageReferences
       .map((reference) => reference.visualLine)
       .filter(Boolean);
+    const textBoxes = extractPptxShapeStructures(slideXml);
+    const tables = extractPptxTableStructures(slideXml);
+    const title = textBoxes.find((box) => box.role === "title")?.text
+      ?? slideText.split("\n").map(cleanText).find(Boolean);
+    const structureBase: Omit<PptxSlideStructure, "layoutHints"> = {
+      slide: slideNumber,
+      ...(title ? { title } : {}),
+      textBoxes,
+      tables,
+      charts: chartStructures,
+      images: imageReferences.map((reference) => ({
+        name: reference.target ? path.posix.basename(reference.target) : reference.description.replace(/^Bild:\s*/i, "Bild"),
+        description: reference.description,
+        ...(reference.target ? { target: reference.target } : {}),
+        ...(reference.placement ? { placement: reference.placement } : {}),
+        ...(reference.visualLine ? { visualLine: reference.visualLine } : {})
+      })),
+      ...(noteText ? { notes: noteText } : {})
+    };
+    const slideStructure: PptxSlideStructure = {
+      ...structureBase,
+      layoutHints: pptxSlideLayoutHints(structureBase, slideSize)
+    };
+    if (
+      slideStructure.textBoxes.length > 0 ||
+      slideStructure.tables.length > 0 ||
+      slideStructure.charts.length > 0 ||
+      slideStructure.images.length > 0 ||
+      slideStructure.notes
+    ) {
+      slideStructures.push(slideStructure);
+    }
     const parts = [
       slideText,
       ...chartTexts.map((chartText) => `Diagramm: ${chartText}`),
+      ...tables.map((table, index) => `Tabelle ${index + 1}: ${pptxTableText(table)}`),
       ...imageReferences.map((reference) => reference.description),
       visualStructure.length > 0 ? `Visuelle Struktur:\n${visualStructure.join("\n")}` : "",
+      pptxSlideStructureText(slideStructure) ? `Grobe Folienstruktur:\n${pptxSlideStructureText(slideStructure)}` : "",
       noteText ? `Notizen: ${noteText}` : ""
     ].filter(Boolean);
     if (parts.length > 0) slides.push(`Folie ${slideNumber}: ${parts.join("\n")}`);
@@ -450,7 +674,8 @@ function extractPptxContent(buffer: Buffer): ExtractedUploadContent {
   return {
     text: cleanText(slides.join("\n\n")),
     images,
-    artifacts
+    artifacts,
+    slideStructures
   };
 }
 
@@ -819,7 +1044,8 @@ function extractPdfContent(buffer: Buffer): ExtractedUploadContent {
   return {
     text: cleanText(parts.join(" ")),
     artifacts,
-    images: artifacts.map(imageInputFromArtifact)
+    images: artifacts.map(imageInputFromArtifact),
+    slideStructures: []
   };
 }
 
@@ -914,6 +1140,86 @@ function storedArtifactValue(value: unknown): StoredUploadArtifact | null {
   };
 }
 
+function placementValue(value: unknown): UploadArtifactPlacement | undefined {
+  const candidate = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  return candidate
+    && typeof candidate.x === "number"
+    && typeof candidate.y === "number"
+    && typeof candidate.width === "number"
+    && typeof candidate.height === "number"
+    ? {
+        x: candidate.x,
+        y: candidate.y,
+        width: candidate.width,
+        height: candidate.height
+      }
+    : undefined;
+}
+
+function pptxTextBoxValue(value: unknown): PptxTextBoxStructure | null {
+  const item = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!item || typeof item.text !== "string") return null;
+  const role = item.role === "title" || item.role === "body" || item.role === "shape" ? item.role : "shape";
+  return {
+    text: item.text,
+    role,
+    ...(typeof item.name === "string" ? { name: item.name } : {}),
+    ...(placementValue(item.placement) ? { placement: placementValue(item.placement) } : {})
+  };
+}
+
+function pptxTableValue(value: unknown): PptxTableStructure | null {
+  const item = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!item || !Array.isArray(item.rows)) return null;
+  const rows = item.rows
+    .filter((row): row is unknown[] => Array.isArray(row))
+    .map((row) => row.map((cell) => typeof cell === "string" ? cell : String(cell ?? "")));
+  if (rows.length === 0) return null;
+  return {
+    rows,
+    ...(placementValue(item.placement) ? { placement: placementValue(item.placement) } : {})
+  };
+}
+
+function pptxChartValue(value: unknown): PptxChartStructure | null {
+  const item = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!item || typeof item.text !== "string") return null;
+  return {
+    text: item.text,
+    ...(typeof item.title === "string" ? { title: item.title } : {}),
+    ...(Array.isArray(item.labels) ? { labels: item.labels.map(String).slice(0, 24) } : {}),
+    ...(Array.isArray(item.values) ? { values: item.values.map(Number).filter(Number.isFinite).slice(0, 24) } : {}),
+    ...(typeof item.sourceRef === "string" ? { sourceRef: item.sourceRef } : {})
+  };
+}
+
+function pptxImageValue(value: unknown): PptxImageStructure | null {
+  const item = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!item || typeof item.name !== "string") return null;
+  return {
+    name: item.name,
+    ...(typeof item.description === "string" ? { description: item.description } : {}),
+    ...(typeof item.target === "string" ? { target: item.target } : {}),
+    ...(placementValue(item.placement) ? { placement: placementValue(item.placement) } : {}),
+    ...(typeof item.visualLine === "string" ? { visualLine: item.visualLine } : {})
+  };
+}
+
+function pptxSlideStructureValue(value: unknown): PptxSlideStructure | null {
+  const item = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!item || typeof item.slide !== "number" || !Number.isFinite(item.slide)) return null;
+  return {
+    slide: item.slide,
+    ...(typeof item.title === "string" ? { title: item.title } : {}),
+    textBoxes: Array.isArray(item.textBoxes) ? item.textBoxes.map(pptxTextBoxValue).filter((entry): entry is PptxTextBoxStructure => Boolean(entry)) : [],
+    tables: Array.isArray(item.tables) ? item.tables.map(pptxTableValue).filter((entry): entry is PptxTableStructure => Boolean(entry)) : [],
+    charts: Array.isArray(item.charts) ? item.charts.map(pptxChartValue).filter((entry): entry is PptxChartStructure => Boolean(entry)) : [],
+    images: Array.isArray(item.images) ? item.images.map(pptxImageValue).filter((entry): entry is PptxImageStructure => Boolean(entry)) : [],
+    ...(typeof item.notes === "string" ? { notes: item.notes } : {}),
+    layoutHints: Array.isArray(item.layoutHints) ? item.layoutHints.map(String).slice(0, 8) : []
+  };
+}
+
 export function stripUploadArtifactManifest(value: string) {
   return cleanText(value
     .split(/\r?\n/)
@@ -943,11 +1249,34 @@ export function parseUploadArtifactManifest(value: string): StoredUploadArtifact
   return artifacts.slice(0, MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS);
 }
 
-export function appendUploadArtifactManifest(text: string, artifacts: StoredUploadArtifact[]) {
-  if (artifacts.length === 0) return text;
+export function parseUploadSlideStructures(value: string): PptxSlideStructure[] {
+  const structures: PptxSlideStructure[] = [];
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(UPLOAD_ARTIFACTS_MARKER)) continue;
+    try {
+      const manifest = JSON.parse(trimmed.slice(UPLOAD_ARTIFACTS_MARKER.length)) as unknown;
+      if (!manifest || typeof manifest !== "object") continue;
+      const record = manifest as Record<string, unknown>;
+      if (record.schemaVersion !== UPLOAD_ARTIFACT_SCHEMA_VERSION || !Array.isArray(record.slideStructures)) continue;
+      for (const structure of record.slideStructures) {
+        const parsed = pptxSlideStructureValue(structure);
+        if (parsed) structures.push(parsed);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return structures.slice(0, MAX_UPLOAD_SLIDE_STRUCTURE_ITEMS);
+}
+
+export function appendUploadArtifactManifest(text: string, artifacts: StoredUploadArtifact[], slideStructures: PptxSlideStructure[] = []) {
+  if (artifacts.length === 0 && slideStructures.length === 0) return text;
   const manifest = {
     schemaVersion: UPLOAD_ARTIFACT_SCHEMA_VERSION,
-    artifacts: artifacts.slice(0, MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS)
+    artifacts: artifacts.slice(0, MAX_UPLOAD_ARTIFACT_MANIFEST_ITEMS),
+    slideStructures: slideStructures.slice(0, MAX_UPLOAD_SLIDE_STRUCTURE_ITEMS)
   };
   return cleanText([
     text,
@@ -1025,12 +1354,14 @@ export async function extractUploadContent(file: File) {
   let extractedText = "";
   let images: OCRImageInput[] = [];
   let artifacts: ExtractedUploadArtifact[] = [];
+  let slideStructures: PptxSlideStructure[] = [];
 
   if (name.endsWith(".pptx")) {
     const extracted = extractPptxContent(buffer);
     extractedText = extracted.text;
     images = extracted.images;
     artifacts = extracted.artifacts;
+    slideStructures = extracted.slideStructures;
   } else if (name.endsWith(".ppt")) {
     extractedText = extractLegacyOfficeText(buffer);
   } else if (name.endsWith(".pdf")) {
@@ -1057,7 +1388,8 @@ export async function extractUploadContent(file: File) {
   const ocrText = await extractOCRText(file, images);
   return {
     text: metadataForUpload(file, cleanText([extractedText, ocrText].filter(Boolean).join("\n\n"))),
-    artifacts
+    artifacts,
+    slideStructures
   };
 }
 
