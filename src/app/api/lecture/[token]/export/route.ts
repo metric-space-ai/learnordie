@@ -31,6 +31,13 @@ const ACCESSIBILITY_BASELINE = {
     "self-contained-no-external-fonts"
   ]
 };
+const PRINT_BASELINE = {
+  profile: "browser-pdf-a4",
+  pageSize: "A4 portrait",
+  pageBreaks: "slide-and-question",
+  generation: "browser-print-css",
+  serverPdfBinary: false
+};
 
 type AudioAsset = {
   path: string;
@@ -313,6 +320,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
         externalAssets: 0,
         serverFeaturesExcluded: ["server-ki", "analytics-sync", "live-realtime"]
       },
+      print: PRINT_BASELINE,
       accessibility: ACCESSIBILITY_BASELINE,
       audio: {
         mode: audioAssets.some((asset) => asset.source === "upload") ? "bundled-upload" : "inline-fallback",
@@ -362,6 +370,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     createdAt: exportedAt,
     selfContained: true,
     externalAssetCount: 0,
+    print: PRINT_BASELINE,
     accessibility: ACCESSIBILITY_BASELINE,
     assets,
     integrity: {
