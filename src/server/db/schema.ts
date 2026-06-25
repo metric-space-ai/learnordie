@@ -32,6 +32,14 @@ export const enrollmentSource = pgEnum("enrollment_source", [
   "lecturer_invite"
 ]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["active", "removed"]);
+export const agentThreadStatus = pgEnum("agent_thread_status", [
+  "draft",
+  "running",
+  "awaiting_review",
+  "accepted",
+  "rejected",
+  "failed"
+]);
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -244,6 +252,80 @@ export const lecturerAssistantMessages = pgTable("lecturer_assistant_messages", 
   content: text("content").notNull(),
   sourceRefs: jsonb("source_refs").notNull().default([]),
   metadataJson: jsonb("metadata_json").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const agentThreads = pgTable("agent_threads", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  mode: text("mode").notNull(),
+  status: agentThreadStatus("status").notNull().default("draft"),
+  skillId: text("skill_id"),
+  prompt: text("prompt").notNull(),
+  slideId: uuid("slide_id").references(() => slides.id),
+  blockId: text("block_id"),
+  assetId: text("asset_id"),
+  studentContextJson: jsonb("student_context_json"),
+  reviewPatchJson: jsonb("review_patch_json"),
+  contextJson: jsonb("context_json").notNull().default({}),
+  provider: text("provider"),
+  model: text("model"),
+  usageJson: jsonb("usage_json"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true })
+});
+
+export const agentMessages = pgTable("agent_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  threadId: uuid("thread_id").references(() => agentThreads.id).notNull(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  metadataJson: jsonb("metadata_json").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const agentEvents = pgTable("agent_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  threadId: uuid("thread_id").references(() => agentThreads.id).notNull(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  eventType: text("event_type").notNull(),
+  label: text("label").notNull(),
+  detail: text("detail"),
+  status: text("status").notNull(),
+  toolName: text("tool_name"),
+  payloadJson: jsonb("payload_json"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const agentToolCalls = pgTable("agent_tool_calls", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  threadId: uuid("thread_id").references(() => agentThreads.id).notNull(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  toolName: text("tool_name").notNull(),
+  skillId: text("skill_id").notNull(),
+  inputJson: jsonb("input_json").notNull().default({}),
+  outputJson: jsonb("output_json"),
+  status: text("status").notNull(),
+  durationMs: integer("duration_ms").notNull().default(0),
+  provider: text("provider"),
+  model: text("model"),
+  usageJson: jsonb("usage_json"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const agentArtifacts = pgTable("agent_artifacts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  threadId: uuid("thread_id").references(() => agentThreads.id).notNull(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  artifactType: text("artifact_type").notNull(),
+  title: text("title").notNull(),
+  payloadJson: jsonb("payload_json").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 

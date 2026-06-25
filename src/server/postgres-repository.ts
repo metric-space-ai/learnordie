@@ -10,8 +10,22 @@ import {
   legacySlidesFromSlideDocument,
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
-import { slideAssetKindValues, type SlideDocument, type SlideNode } from "@learnordie/slide-engine";
+import {
+  applySlideDocumentEdits,
+  slideAssetKindValues,
+  type SlideDocument,
+  type SlideDocumentEditOperation,
+  type SlideNode
+} from "@learnordie/slide-engine";
 import type {
+  AgentArtifact,
+  AgentMessage,
+  AgentRunEvent,
+  AgentThread,
+  AgentThreadMode,
+  AgentThreadStatus,
+  AgentToolCall,
+  AgentUsage,
   AnswerOption,
   Lecture,
   LecturerAssistantMetadata,
@@ -52,6 +66,11 @@ import { moderateStudentChatQuestion as moderateChatQuestionWithProvider } from 
 import { evaluateStudentChatQuestion } from "./chat-question-filter";
 import { getDb } from "./db/client";
 import {
+  agentArtifacts,
+  agentEvents,
+  agentMessages,
+  agentThreads,
+  agentToolCalls,
   assetChunks,
   lectureAssets,
   lectureSeries,
@@ -92,6 +111,7 @@ import type {
   ApplyLecturerAssistantEvaluationFocusInput,
   ApplyLecturerAssistantLearnDensityInput,
   ApplyLecturerAssistantSlidePointInput,
+  CreateAgentThreadInput,
   CreateLecturerAssistantSourceNoteInput,
   CreateLecturerAssistantReviewInput,
   CreateStandaloneExportJobInput,
@@ -99,6 +119,7 @@ import type {
   LectureRepository,
   ModerateChatQuestionInput,
   RecordStandaloneExportInput,
+  DecideAgentThreadInput,
   SubmitLecturerAssistantMessageInput,
   SubmitChatQuestionInput,
   SubmitTranscriptSegmentInput,
@@ -106,6 +127,7 @@ import type {
   UpdateLectureInput
 } from "./repository";
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
+import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
 
 const questionLevelOrder: Record<QuestionLevel, number> = {
   "4.0": 0,
@@ -216,6 +238,114 @@ function toIso(value: Date | null) {
 function normalizeOwnerEmail(value?: string) {
   const clean = value?.trim().toLowerCase();
   return clean || undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+const agentThreadModes = new Set<AgentThreadMode>([
+  "studio_slide_edit",
+  "lecturer_assistant",
+  "quiz_authoring",
+  "material_processing",
+  "qa_repair"
+]);
+
+const agentThreadStatuses = new Set<AgentThreadStatus>([
+  "draft",
+  "running",
+  "awaiting_review",
+  "accepted",
+  "rejected",
+  "failed"
+]);
+
+const agentSkillIds = new Set<NonNullable<AgentThread["skillId"]>>([
+  "slide-editor",
+  "quiz-author",
+  "asset-curator",
+  "lecture-planner",
+  "qa-repair"
+]);
+
+const agentToolNames = new Set<AgentToolCall["toolName"]>([
+  "getSlideContext",
+  "getLectureContext",
+  "getSelectedBlock",
+  "queryPresentationAssets",
+  "getTranscriptWindow",
+  "getAcceptedChatQuestions",
+  "proposeSlideEditBatch",
+  "validateSlideDocumentEdits",
+  "renderSlidePreview",
+  "runSlideRenderQA",
+  "repairSlideEditBatch",
+  "createQuestionFamily",
+  "createLearnHotspots",
+  "createSpeakerNotes",
+  "summarizeMaterial",
+  "createSourceNote",
+  "createReviewDiff",
+  "acceptAgentPatch",
+  "rejectAgentPatch"
+]);
+
+function coerceAgentThreadMode(value: string): AgentThreadMode {
+  return agentThreadModes.has(value as AgentThreadMode) ? value as AgentThreadMode : "studio_slide_edit";
+}
+
+function coerceAgentThreadStatus(value: string): AgentThreadStatus {
+  return agentThreadStatuses.has(value as AgentThreadStatus) ? value as AgentThreadStatus : "failed";
+}
+
+function coerceAgentSkillId(value: string | null): AgentThread["skillId"] {
+  return value && agentSkillIds.has(value as NonNullable<AgentThread["skillId"]>)
+    ? value as NonNullable<AgentThread["skillId"]>
+    : undefined;
+}
+
+function coerceAgentMessageRole(value: string): AgentMessage["role"] {
+  if (value === "lecturer" || value === "assistant" || value === "system" || value === "tool") return value;
+  return "assistant";
+}
+
+function coerceAgentEventType(value: string): AgentRunEvent["type"] {
+  if (
+    value === "agent_start" ||
+    value === "message_start" ||
+    value === "message_end" ||
+    value === "tool_execution_start" ||
+    value === "tool_execution_end" ||
+    value === "review_patch_created" ||
+    value === "agent_end"
+  ) return value;
+  return "agent_end";
+}
+
+function coerceAgentEventStatus(value: string): AgentRunEvent["status"] {
+  if (value === "running" || value === "done" || value === "failed" || value === "blocked") return value;
+  return "done";
+}
+
+function coerceAgentToolName(value: string | null): AgentToolCall["toolName"] | undefined {
+  return value && agentToolNames.has(value as AgentToolCall["toolName"]) ? value as AgentToolCall["toolName"] : undefined;
+}
+
+function coerceAgentToolCallStatus(value: string): AgentToolCall["status"] {
+  if (value === "running" || value === "succeeded" || value === "failed") return value;
+  return "failed";
+}
+
+function coerceAgentArtifactType(value: string): AgentArtifact["artifactType"] {
+  if (
+    value === "review_patch" ||
+    value === "slide_preview" ||
+    value === "source_note" ||
+    value === "question_family" ||
+    value === "learn_hotspots"
+  ) return value;
+  return "review_patch";
 }
 
 function coerceLectureStatus(value: string): LectureStatus {
@@ -585,6 +715,11 @@ type ProcessingRunRow = typeof materialProcessingRuns.$inferSelect;
 type ChatQuestionRow = typeof studentChatQuestions.$inferSelect;
 type TranscriptSegmentRow = typeof transcriptSegments.$inferSelect;
 type AssistantMessageRow = typeof lecturerAssistantMessages.$inferSelect;
+type AgentThreadRow = typeof agentThreads.$inferSelect;
+type AgentMessageRow = typeof agentMessages.$inferSelect;
+type AgentEventRow = typeof agentEvents.$inferSelect;
+type AgentToolCallRow = typeof agentToolCalls.$inferSelect;
+type AgentArtifactRow = typeof agentArtifacts.$inferSelect;
 type SlideRow = typeof slides.$inferSelect;
 type QuestionRow = typeof questions.$inferSelect;
 type VariantRow = typeof questionVariants.$inferSelect;
@@ -1301,6 +1436,192 @@ export class PostgresLectureRepository implements LectureRepository {
     return this.getLectureById(input.lectureId, ownerEmail);
   }
 
+  async createAgentThread(input: CreateAgentThreadInput, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(input.lectureId, ownerEmail);
+    if (!lecture) return null;
+
+    const cleanPrompt = input.prompt.replace(/\s+/g, " ").trim();
+    if (!cleanPrompt) return null;
+    const slideId = input.slideId && lecture.slides.some((slide) => slide.id === input.slideId) ? input.slideId : undefined;
+    const threadId = crypto.randomUUID();
+    const run = await createAgentThreadRun({
+      lecture,
+      mode: input.mode,
+      prompt: cleanPrompt,
+      slideId,
+      blockId: input.blockId,
+      assetId: input.assetId
+    });
+    const createdAt = new Date();
+    const completedAt = run.status === "draft" || run.status === "running" ? undefined : createdAt;
+    const skillId = run.toolCalls[0]?.skillId ?? "slide-editor";
+
+    await this.db.transaction(async (tx) => {
+      await tx.insert(agentThreads).values({
+        id: threadId,
+        lectureId: lecture.id,
+        mode: input.mode,
+        status: run.status,
+        skillId,
+        prompt: cleanPrompt,
+        slideId,
+        blockId: input.blockId,
+        assetId: input.assetId,
+        studentContextJson: input.studentContext,
+        reviewPatchJson: run.reviewPatch,
+        contextJson: {
+          upstream: "earendil-works/pi",
+          upstreamTag: "v0.80.2",
+          upstreamCommit: "0201806adfa825ab3d7957a4267d46e5030fd357"
+        },
+        provider: run.provider,
+        model: run.model,
+        usageJson: run.usage,
+        errorMessage: run.error,
+        createdAt,
+        updatedAt: createdAt,
+        completedAt
+      });
+
+      if (run.messages.length > 0) {
+        await tx.insert(agentMessages).values(run.messages.map((message: AgentMessage) => ({
+          threadId,
+          lectureId: lecture.id,
+          role: message.role,
+          content: message.content,
+          metadataJson: {},
+          createdAt: toTimestamp(message.createdAt)
+        })));
+      }
+
+      if (run.events.length > 0) {
+        await tx.insert(agentEvents).values(run.events.map((event: AgentRunEvent) => ({
+          threadId,
+          lectureId: lecture.id,
+          eventType: event.type,
+          label: event.label,
+          detail: event.detail,
+          status: event.status,
+          toolName: event.toolName,
+          payloadJson: event.payload,
+          createdAt: toTimestamp(event.at)
+        })));
+      }
+
+      if (run.toolCalls.length > 0) {
+        await tx.insert(agentToolCalls).values(run.toolCalls.map((call: AgentToolCall) => ({
+          threadId,
+          lectureId: lecture.id,
+          toolName: call.toolName,
+          skillId: call.skillId,
+          inputJson: call.input,
+          outputJson: call.output,
+          status: call.status,
+          durationMs: call.durationMs,
+          provider: call.provider ?? run.provider,
+          model: call.model ?? run.model,
+          usageJson: call.usage,
+          errorMessage: call.error,
+          createdAt: toTimestamp(call.createdAt)
+        })));
+      }
+
+      if (run.reviewPatch) {
+        await tx.insert(agentArtifacts).values({
+          threadId,
+          lectureId: lecture.id,
+          artifactType: "review_patch",
+          title: "Review-Diff",
+          payloadJson: run.reviewPatch,
+          createdAt
+        });
+      }
+    });
+
+    return this.getAgentThread(lecture.id, threadId, ownerEmail);
+  }
+
+  async getAgentThread(lectureId: string, threadId: string, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    return lecture.agentThreads?.find((thread) => thread.id === threadId) ?? null;
+  }
+
+  async acceptAgentThread(input: DecideAgentThreadInput, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(input.lectureId, ownerEmail);
+    if (!lecture) return null;
+    const [thread] = await this.db
+      .select()
+      .from(agentThreads)
+      .where(and(eq(agentThreads.id, input.threadId), eq(agentThreads.lectureId, input.lectureId)))
+      .limit(1);
+    if (!thread || !isRecord(thread.reviewPatchJson)) return null;
+
+    const reviewPatch = thread.reviewPatchJson as NonNullable<AgentThread["reviewPatch"]>;
+    const selectedOperationIds = new Set(input.operationIds ?? []);
+    const operations = selectedOperationIds.size > 0
+      ? reviewPatch.operations.filter((operation: SlideDocumentEditOperation) => operation.operationId && selectedOperationIds.has(operation.operationId))
+      : reviewPatch.operations;
+    const baseDocument = normalizeLectureSlideDocument(lecture.slideDocument, {
+      id: lecture.id,
+      title: lecture.title,
+      seriesTitle: lecture.seriesTitle,
+      language: lecture.language,
+      slides: lecture.slides
+    });
+    const result = applySlideDocumentEdits(baseDocument, operations);
+    const now = new Date();
+
+    if (!result.ok || !result.document) {
+      await this.db
+        .update(agentThreads)
+        .set({
+          status: "failed",
+          errorMessage: result.issues[0]?.repairHint ?? "Agent-Patch konnte nicht uebernommen werden.",
+          updatedAt: now,
+          completedAt: now
+        })
+        .where(and(eq(agentThreads.id, input.threadId), eq(agentThreads.lectureId, input.lectureId)));
+      return this.getLectureById(input.lectureId, ownerEmail);
+    }
+
+    const lecturePatch = applyAgentReviewPatchToLecture(lecture, result.document);
+    await this.db.update(lectures).set({ slideDocumentJson: lecturePatch.slideDocument }).where(eq(lectures.id, input.lectureId));
+    await this.updateSlides(input.lectureId, lecturePatch.slides);
+    await this.db
+      .update(agentThreads)
+      .set({
+        status: "accepted",
+        acceptedAt: now,
+        updatedAt: now,
+        completedAt: now
+      })
+      .where(and(eq(agentThreads.id, input.threadId), eq(agentThreads.lectureId, input.lectureId)));
+
+    return this.getLectureById(input.lectureId, ownerEmail);
+  }
+
+  async rejectAgentThread(input: DecideAgentThreadInput, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(input.lectureId, ownerEmail);
+    if (!lecture) return null;
+    const now = new Date();
+    await this.db
+      .update(agentThreads)
+      .set({
+        status: "rejected",
+        rejectedAt: now,
+        updatedAt: now,
+        completedAt: now
+      })
+      .where(and(eq(agentThreads.id, input.threadId), eq(agentThreads.lectureId, input.lectureId)));
+
+    return this.getLectureById(input.lectureId, ownerEmail);
+  }
+
   async createLecturerAssistantReview(input: CreateLecturerAssistantReviewInput, ownerEmail?: string) {
     await this.ensureSeeded();
     const lecture = await this.getLectureById(input.lectureId, ownerEmail);
@@ -1892,6 +2213,7 @@ export class PostgresLectureRepository implements LectureRepository {
       chatQuestionRows,
       transcriptSegmentRows,
       assistantMessageRows,
+      agentThreadRows,
       standaloneExportRows,
       standaloneExportJobRows,
       reviewRows,
@@ -1905,6 +2227,7 @@ export class PostgresLectureRepository implements LectureRepository {
       this.db.select().from(studentChatQuestions).where(inArray(studentChatQuestions.lectureId, lectureIds)),
       this.db.select().from(transcriptSegments).where(inArray(transcriptSegments.lectureId, lectureIds)),
       this.db.select().from(lecturerAssistantMessages).where(inArray(lecturerAssistantMessages.lectureId, lectureIds)),
+      this.db.select().from(agentThreads).where(inArray(agentThreads.lectureId, lectureIds)),
       this.db.select().from(standaloneExports).where(inArray(standaloneExports.lectureId, lectureIds)),
       this.db.select().from(standaloneExportJobs).where(inArray(standaloneExportJobs.lectureId, lectureIds)),
       this.db.select().from(questionReviewItems).where(inArray(questionReviewItems.lectureId, lectureIds)),
@@ -1915,6 +2238,20 @@ export class PostgresLectureRepository implements LectureRepository {
     const variantRows = questionIds.length > 0
       ? await this.db.select().from(questionVariants).where(inArray(questionVariants.questionId, questionIds))
       : [];
+    const agentThreadIds = agentThreadRows.map((thread) => thread.id);
+    const [
+      agentMessageRows,
+      agentEventRows,
+      agentToolCallRows,
+      agentArtifactRows
+    ] = agentThreadIds.length > 0
+      ? await Promise.all([
+          this.db.select().from(agentMessages).where(inArray(agentMessages.threadId, agentThreadIds)),
+          this.db.select().from(agentEvents).where(inArray(agentEvents.threadId, agentThreadIds)),
+          this.db.select().from(agentToolCalls).where(inArray(agentToolCalls.threadId, agentThreadIds)),
+          this.db.select().from(agentArtifacts).where(inArray(agentArtifacts.threadId, agentThreadIds))
+        ])
+      : [[], [], [], []] as [AgentMessageRow[], AgentEventRow[], AgentToolCallRow[], AgentArtifactRow[]];
 
     return rows.map((row) =>
       this.lectureFromRows(
@@ -1927,6 +2264,11 @@ export class PostgresLectureRepository implements LectureRepository {
         chatQuestionRows.filter((chatQuestion) => chatQuestion.lectureId === row.lecture.id),
         transcriptSegmentRows.filter((segment) => segment.lectureId === row.lecture.id),
         assistantMessageRows.filter((message) => message.lectureId === row.lecture.id),
+        agentThreadRows.filter((thread) => thread.lectureId === row.lecture.id),
+        agentMessageRows,
+        agentEventRows,
+        agentToolCallRows,
+        agentArtifactRows,
         standaloneExportRows.filter((exportRecord) => exportRecord.lectureId === row.lecture.id),
         standaloneExportJobRows.filter((job) => job.lectureId === row.lecture.id),
         reviewRows.filter((review) => review.lectureId === row.lecture.id),
@@ -1946,6 +2288,11 @@ export class PostgresLectureRepository implements LectureRepository {
     chatQuestionRows: ChatQuestionRow[],
     transcriptSegmentRows: TranscriptSegmentRow[],
     assistantMessageRows: AssistantMessageRow[],
+    agentThreadRows: AgentThreadRow[],
+    agentMessageRows: AgentMessageRow[],
+    agentEventRows: AgentEventRow[],
+    agentToolCallRows: AgentToolCallRow[],
+    agentArtifactRows: AgentArtifactRow[],
     standaloneExportRows: StandaloneExportRow[],
     standaloneExportJobRows: StandaloneExportJobRow[],
     reviewRows: ReviewRow[],
@@ -2007,6 +2354,15 @@ export class PostgresLectureRepository implements LectureRepository {
       assistantMessages: assistantMessageRows
         .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
         .map((message) => this.assistantMessageFromRow(message)),
+      agentThreads: agentThreadRows
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((thread) => this.agentThreadFromRow(
+          thread,
+          agentMessageRows.filter((message) => message.threadId === thread.id),
+          agentEventRows.filter((event) => event.threadId === thread.id),
+          agentToolCallRows.filter((call) => call.threadId === thread.id),
+          agentArtifactRows.filter((artifact) => artifact.threadId === thread.id)
+        )),
       standaloneExports: standaloneExportRows
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
         .map((exportRecord) => this.standaloneExportFromRow(exportRecord)),
@@ -2134,6 +2490,100 @@ export class PostgresLectureRepository implements LectureRepository {
       slideId: row.slideId ?? undefined,
       sourceRefs: coerceStringArray(row.sourceRefs),
       metadata: coerceAssistantMetadata(row.metadataJson),
+      createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private agentThreadFromRow(
+    row: AgentThreadRow,
+    messageRows: AgentMessageRow[],
+    eventRows: AgentEventRow[],
+    toolCallRows: AgentToolCallRow[],
+    artifactRows: AgentArtifactRow[]
+  ): AgentThread {
+    return {
+      id: row.id,
+      lectureId: row.lectureId,
+      mode: coerceAgentThreadMode(row.mode),
+      status: coerceAgentThreadStatus(row.status),
+      skillId: coerceAgentSkillId(row.skillId),
+      prompt: row.prompt,
+      slideId: row.slideId ?? undefined,
+      blockId: row.blockId ?? undefined,
+      assetId: row.assetId ?? undefined,
+      studentContext: row.studentContextJson ?? undefined,
+      reviewPatch: isRecord(row.reviewPatchJson) ? row.reviewPatchJson as AgentThread["reviewPatch"] : undefined,
+      messages: messageRows
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+        .map((message) => this.agentMessageFromRow(message)),
+      events: eventRows
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+        .map((event) => this.agentEventFromRow(event)),
+      toolCalls: toolCallRows
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+        .map((call) => this.agentToolCallFromRow(call)),
+      artifacts: artifactRows
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+        .map((artifact) => this.agentArtifactFromRow(artifact)),
+      provider: row.provider ?? undefined,
+      model: row.model ?? undefined,
+      usage: isRecord(row.usageJson) ? row.usageJson as AgentUsage : undefined,
+      error: row.errorMessage ?? undefined,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      completedAt: row.completedAt?.toISOString(),
+      acceptedAt: row.acceptedAt?.toISOString(),
+      rejectedAt: row.rejectedAt?.toISOString()
+    };
+  }
+
+  private agentMessageFromRow(row: AgentMessageRow): AgentMessage {
+    return {
+      id: row.id,
+      role: coerceAgentMessageRole(row.role),
+      content: row.content,
+      createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private agentEventFromRow(row: AgentEventRow): AgentRunEvent {
+    return {
+      id: row.id,
+      type: coerceAgentEventType(row.eventType),
+      label: row.label,
+      detail: row.detail ?? undefined,
+      status: coerceAgentEventStatus(row.status),
+      toolName: coerceAgentToolName(row.toolName),
+      payload: row.payloadJson ?? undefined,
+      at: row.createdAt.toISOString()
+    };
+  }
+
+  private agentToolCallFromRow(row: AgentToolCallRow): AgentToolCall {
+    return {
+      id: row.id,
+      toolName: coerceAgentToolName(row.toolName) ?? "getLectureContext",
+      skillId: coerceAgentSkillId(row.skillId) ?? "lecture-planner",
+      input: row.inputJson,
+      output: row.outputJson ?? undefined,
+      status: coerceAgentToolCallStatus(row.status),
+      durationMs: row.durationMs,
+      provider: row.provider ?? undefined,
+      model: row.model ?? undefined,
+      usage: isRecord(row.usageJson) ? row.usageJson as AgentUsage : undefined,
+      error: row.errorMessage ?? undefined,
+      createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private agentArtifactFromRow(row: AgentArtifactRow): AgentArtifact {
+    return {
+      id: row.id,
+      threadId: row.threadId,
+      lectureId: row.lectureId,
+      artifactType: coerceAgentArtifactType(row.artifactType),
+      title: row.title,
+      payload: row.payloadJson,
       createdAt: row.createdAt.toISOString()
     };
   }

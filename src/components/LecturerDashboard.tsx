@@ -987,6 +987,18 @@ export function LecturerDashboard({
     }));
   }
 
+  function applyAgentLecturesChange(nextLectures: Lecture[]) {
+    setLectures(nextLectures);
+    if (!selected) return;
+    const updated = nextLectures.find((lecture) => lecture.id === selected.id);
+    if (!updated) return;
+    setEdit((current) => ({
+      ...current,
+      slides: updated.slides,
+      slideDocument: updated.slideDocument
+    }));
+  }
+
   function editableValue(element: HTMLElement, fallback: string) {
     const value = element.textContent?.replace(/\s+/g, " ").trim() ?? "";
     if (!value) {
@@ -2790,11 +2802,14 @@ export function LecturerDashboard({
                   </Presence>
                   {engineEditorOpen && (
                     <StudioSlideDocumentEditor
+                      csrfToken={csrfToken}
                       currentIndex={activeStudioSlideIndex}
+                      lectureId={selected.id}
                       presentationAssets={selected.presentationAssets}
                       seriesTitle={edit.seriesTitle}
                       slideDocument={edit.slideDocument}
                       slides={studioSlides}
+                      onLecturesChange={applyAgentLecturesChange}
                       onSlideDocumentChange={updateSlideDocumentFromEngine}
                     />
                   )}

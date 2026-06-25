@@ -11,6 +11,7 @@ import {
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
 import type {
+  AgentThread,
   Lecture,
   LecturerAssistantMessage,
   LectureMaterial,
@@ -26,7 +27,7 @@ import type {
   StudentChatQuestion,
   TranscriptSegment
 } from "@/lib/types";
-import type { SlideDocument } from "@learnordie/slide-engine";
+import { applySlideDocumentEdits, type SlideDocument, type SlideDocumentEditOperation } from "@learnordie/slide-engine";
 import { moderateStudentChatQuestion as moderateChatQuestionWithProvider } from "./chat-question-moderation";
 import { evaluateStudentChatQuestion } from "./chat-question-filter";
 import {
@@ -52,6 +53,7 @@ import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
 import { applyQualityDecision, recordReviewEdits } from "./question-review-metadata";
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
+import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
 
 const STORE_PATH = path.join(process.cwd(), ".data", "learnbuddy-local.json");
 
@@ -762,6 +764,129 @@ export class LocalLectureStore {
     ];
 
     lecture.assistantMessages = [...(lecture.assistantMessages ?? []), ...messages];
+    await writeStore(store);
+    return lecture;
+  }
+
+  async createAgentThread(input: {
+    lectureId: string;
+    mode: AgentThread["mode"];
+    prompt: string;
+    slideId?: string;
+    blockId?: string;
+    assetId?: string;
+    studentContext?: unknown;
+  }, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+
+    const cleanPrompt = input.prompt.replace(/\s+/g, " ").trim();
+    if (!cleanPrompt) return null;
+    const slideId = input.slideId && lecture.slides.some((slide) => slide.id === input.slideId) ? input.slideId : undefined;
+    const run = await createAgentThreadRun({
+      lecture,
+      mode: input.mode,
+      prompt: cleanPrompt,
+      slideId,
+      blockId: input.blockId,
+      assetId: input.assetId
+    });
+    const now = new Date().toISOString();
+    const thread: AgentThread = {
+      id: crypto.randomUUID(),
+      lectureId: lecture.id,
+      mode: input.mode,
+      status: run.status,
+      skillId: run.toolCalls[0]?.skillId ?? "slide-editor",
+      prompt: cleanPrompt,
+      slideId,
+      blockId: input.blockId,
+      assetId: input.assetId,
+      studentContext: input.studentContext,
+      reviewPatch: run.reviewPatch,
+      messages: run.messages,
+      events: run.events,
+      toolCalls: run.toolCalls,
+      artifacts: run.reviewPatch
+        ? [{
+            id: crypto.randomUUID(),
+            threadId: "",
+            lectureId: lecture.id,
+            artifactType: "review_patch",
+            title: "Review-Diff",
+            payload: run.reviewPatch,
+            createdAt: now
+          }]
+        : [],
+      provider: run.provider,
+      model: run.model,
+      usage: run.usage,
+      error: run.error,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: run.status === "draft" || run.status === "running" ? undefined : now
+    };
+    thread.artifacts = thread.artifacts?.map((artifact) => ({ ...artifact, threadId: thread.id }));
+
+    lecture.agentThreads = [thread, ...(lecture.agentThreads ?? [])];
+    await writeStore(store);
+    return thread;
+  }
+
+  async getAgentThread(lectureId: string, threadId: string, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    return lecture.agentThreads?.find((thread) => thread.id === threadId) ?? null;
+  }
+
+  async acceptAgentThread(input: { lectureId: string; threadId: string; operationIds?: string[] }, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    const thread = lecture.agentThreads?.find((item) => item.id === input.threadId);
+    if (!thread?.reviewPatch) return null;
+
+    const selectedOperationIds = new Set(input.operationIds ?? []);
+    const operations = selectedOperationIds.size > 0
+      ? thread.reviewPatch.operations.filter((operation: SlideDocumentEditOperation) => operation.operationId && selectedOperationIds.has(operation.operationId))
+      : thread.reviewPatch.operations;
+    const baseDocument = normalizeLectureSlideDocument(lecture.slideDocument, {
+      id: lecture.id,
+      title: lecture.title,
+      seriesTitle: lecture.seriesTitle,
+      language: lecture.language,
+      slides: lecture.slides
+    });
+    const result = applySlideDocumentEdits(baseDocument, operations);
+    const now = new Date().toISOString();
+    if (!result.ok || !result.document) {
+      thread.status = "failed";
+      thread.error = result.issues[0]?.repairHint ?? "Agent-Patch konnte nicht übernommen werden.";
+      thread.updatedAt = now;
+      await writeStore(store);
+      return lecture;
+    }
+
+    Object.assign(lecture, applyAgentReviewPatchToLecture(lecture, result.document));
+    thread.status = "accepted";
+    thread.acceptedAt = now;
+    thread.updatedAt = now;
+    await writeStore(store);
+    return lecture;
+  }
+
+  async rejectAgentThread(input: { lectureId: string; threadId: string }, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    const thread = lecture.agentThreads?.find((item) => item.id === input.threadId);
+    if (!thread) return null;
+    const now = new Date().toISOString();
+    thread.status = "rejected";
+    thread.rejectedAt = now;
+    thread.updatedAt = now;
     await writeStore(store);
     return lecture;
   }
