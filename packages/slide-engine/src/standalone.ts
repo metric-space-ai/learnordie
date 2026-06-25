@@ -113,6 +113,50 @@ export function standaloneStyles() {
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; }
     }
+    @media print {
+      @page { size: A4 portrait; margin: 14mm; }
+      html { scroll-behavior: auto; }
+      body { background: white; color: #000; }
+      main { min-height: auto; padding: 0; }
+      .skip-link, audio { display: none !important; }
+      header, .meta, .manifest, .audio-block { max-width: none; break-inside: avoid; page-break-inside: avoid; }
+      h1 { font-size: 32pt; }
+      h2 { font-size: 22pt; }
+      h3 { font-size: 18pt; }
+      h4 { font-size: 13pt; }
+      .ld-standalone-section { display: block; max-width: none; margin-top: 12mm; }
+      .ld-standalone-slide, .question {
+        display: grid;
+        min-height: 182mm;
+        margin: 0 0 10mm;
+        padding: 10mm;
+        border-color: #8fa2ad;
+        background: white;
+        box-shadow: none;
+        break-after: page;
+        break-inside: avoid;
+        page-break-after: always;
+        page-break-inside: avoid;
+      }
+      .ld-standalone-slide:last-of-type, .question:last-of-type {
+        break-after: auto;
+        page-break-after: auto;
+      }
+      #questions { break-before: page; page-break-before: always; }
+      .slide-doc-block[data-block-type="paragraph"], .question p { font-size: 12pt; line-height: 1.35; }
+      .slide-doc-block ul, .slide-doc-block ol { font-size: 11pt; line-height: 1.3; }
+      .figure-block img { max-height: 96mm; }
+      .answers { grid-template-columns: 1fr; }
+      button {
+        min-height: auto;
+        padding: 6pt 8pt;
+        border-color: #7e929d;
+        background: white;
+        color: #000;
+      }
+      button[data-correct="true"] { border-left: 5pt solid var(--green); }
+      .feedback { display: none; }
+    }
   `.trim();
 }
 
@@ -194,7 +238,7 @@ export function renderStandaloneSlideDocumentHtml(input: RenderStandaloneSlideDo
 </head>
 <body>
   <a class="skip-link" href="#slides">Zum Folieninhalt springen</a>
-  <main id="inhalt" aria-labelledby="export-title" data-slide-engine="${SLIDE_STANDALONE_RENDERER_VERSION}" data-slide-document-id="${escapeAttribute(input.document.id)}" data-slide-document-version="${escapeAttribute(input.document.schemaVersion)}">
+  <main id="inhalt" aria-labelledby="export-title" data-slide-engine="${SLIDE_STANDALONE_RENDERER_VERSION}" data-slide-document-id="${escapeAttribute(input.document.id)}" data-slide-document-version="${escapeAttribute(input.document.schemaVersion)}" data-print-profile="browser-pdf-a4">
     <header>
       <p class="kicker">${escapeHtml(seriesTitle)}</p>
       <h1 id="export-title">${escapeHtml(title)}</h1>

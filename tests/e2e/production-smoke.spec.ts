@@ -2647,6 +2647,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
     selfContained?: boolean;
     externalAssetCount?: number;
     slideEngine?: { renderer?: string; slideDocumentSchemaVersion?: string; slideDocumentId?: string };
+    print?: { profile?: string; pageBreaks?: string; serverPdfBinary?: boolean };
     integrity?: { payloadSha256?: string };
     audioSegments?: Array<{ path?: string; sha256?: string; bytes?: number }>;
     assets?: Array<{ path?: string; role?: string; bytes?: number; sha256?: string }>;
@@ -2660,6 +2661,11 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
     slideDocumentSchemaVersion: "learnordie.slide.v1"
   });
   expect(manifest.slideEngine?.slideDocumentId).toMatch(/^lecture:[^:]+:deck$/);
+  expect(manifest.print).toMatchObject({
+    profile: "browser-pdf-a4",
+    pageBreaks: "slide-and-question",
+    serverPdfBinary: false
+  });
 
   const assetPaths = new Set((manifest.assets ?? []).map((asset) => asset.path));
   for (const requiredPath of [
@@ -2696,6 +2702,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
       payloadSha256?: string;
       offline?: { selfContained?: boolean; externalAssets?: number };
       slideEngine?: { renderer?: string; slideDocumentSchemaVersion?: string; slideDocumentId?: string };
+      print?: { profile?: string; generation?: string; serverPdfBinary?: boolean };
     };
     lecture?: { slideDocument?: { schemaVersion?: string; slides?: unknown[] }; slides?: unknown[]; questions?: unknown[] };
     manifest?: unknown;
@@ -2704,6 +2711,11 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(data.export?.payloadSha256).toBe(manifest.integrity?.payloadSha256);
   expect(data.export?.offline).toMatchObject({ selfContained: true, externalAssets: 0 });
   expect(data.export?.slideEngine).toMatchObject(manifest.slideEngine ?? {});
+  expect(data.export?.print).toMatchObject({
+    profile: "browser-pdf-a4",
+    generation: "browser-print-css",
+    serverPdfBinary: false
+  });
   expect(data.lecture?.slideDocument?.schemaVersion).toBe("learnordie.slide.v1");
   expect(data.lecture?.slideDocument?.slides?.length).toBeGreaterThan(0);
   expect(data.lecture?.slides?.length).toBeGreaterThan(0);
@@ -2713,6 +2725,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(html).toContain('id="learnbuddy-data"');
   expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v1"');
   expect(html).toContain('data-slide-document-version="learnordie.slide.v1"');
+  expect(html).toContain('data-print-profile="browser-pdf-a4"');
   expect(html).toContain("Self-contained: ja, externe Assets: 0");
   expect(html).toContain("data:audio/wav;base64,");
 });

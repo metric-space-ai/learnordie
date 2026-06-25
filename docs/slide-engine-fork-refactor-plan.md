@@ -1,6 +1,6 @@
 # learnordie Slide Engine Fork & Monorepo Refactor Plan
 
-Stand: 2026-06-24
+Stand: 2026-06-25
 
 Dieses Dokument ist der verbindliche Plan, bevor reveal.js geforkt, reduziert und in learnordie.app eingebaut wird. Ziel ist ausdrücklich nicht, eine eigene Präsentationsengine amateurhaft nachzubauen. Ziel ist, den bewährten Kern von reveal.js zu übernehmen, unnötige Teile zu entfernen und darüber ein sicheres, agentenfähiges, responsives Slide-System für learnordie zu bauen.
 
@@ -902,6 +902,8 @@ Deliverables:
 - Print/PDF.
 - Exportmanifest.
 - später PPTX-Exporter.
+
+Status 2026-06-25: Standalone-HTML und ZIP-Export rendern aus dem persistierten `SlideDocument` und enthalten Manifest, Payload-Prüfsummen, Offline-Daten, eingebettete Fragen sowie Dozentenaudio inklusive Segmenten im Archiv. Der Standalone-Renderer enthält ein Browser-Print-Profil `browser-pdf-a4` mit A4-Print-CSS, Seitenumbrüchen für Slides/Fragen und druckbaren Antwortoptionen; Export-Payload und Manifest deklarieren dieses Profil maschinenlesbar. Playwright erzeugt im Slide-Engine-Gate aus dem Standalone-HTML ein echtes Browser-PDF und der Production-Smoke prüft den Print-Vertrag im ZIP-Manifest. PPTX-Export bleibt als späterer optionaler Exportpfad offen.
 
 ### Track H: QA & Production Gates
 
