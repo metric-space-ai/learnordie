@@ -31,6 +31,7 @@
     "test:slide-engine": "playwright test --config playwright.slide-engine.config.ts"
   },
   "dependencies": {
+    "@learnordie/agent-runtime": "file:packages/agent-runtime",
     "@learnordie/slide-engine": "file:packages/slide-engine",
     "@vercel/blob": "^2.4.0",
     "drizzle-orm": "^0.45.2",

@@ -2,6 +2,8 @@ import type {
   Lecture,
   LectureMaterial,
   LectureStatus,
+  AgentThread,
+  AgentThreadMode,
   QuestionVariant,
   Slide,
   StandaloneExport,
@@ -84,6 +86,22 @@ export type SubmitLecturerAssistantMessageInput = {
   slideId?: string;
 };
 
+export type CreateAgentThreadInput = {
+  lectureId: string;
+  mode: AgentThreadMode;
+  prompt: string;
+  slideId?: string;
+  blockId?: string;
+  assetId?: string;
+  studentContext?: unknown;
+};
+
+export type DecideAgentThreadInput = {
+  lectureId: string;
+  threadId: string;
+  operationIds?: string[];
+};
+
 export type CreateLecturerAssistantReviewInput = {
   lectureId: string;
   slideId?: string;
@@ -157,6 +175,10 @@ export interface LectureRepository {
   moderateStudentChatQuestion(input: ModerateChatQuestionInput, ownerEmail?: string): Promise<Lecture | null>;
   submitTranscriptSegment(input: SubmitTranscriptSegmentInput, ownerEmail?: string): Promise<TranscriptSegment | null>;
   submitLecturerAssistantMessage(input: SubmitLecturerAssistantMessageInput, ownerEmail?: string): Promise<Lecture | null>;
+  createAgentThread(input: CreateAgentThreadInput, ownerEmail?: string): Promise<AgentThread | null>;
+  getAgentThread(lectureId: string, threadId: string, ownerEmail?: string): Promise<AgentThread | null>;
+  acceptAgentThread(input: DecideAgentThreadInput, ownerEmail?: string): Promise<Lecture | null>;
+  rejectAgentThread(input: DecideAgentThreadInput, ownerEmail?: string): Promise<Lecture | null>;
   createLecturerAssistantReview(input: CreateLecturerAssistantReviewInput, ownerEmail?: string): Promise<Lecture | null>;
   applyLecturerAssistantSlidePoint(input: ApplyLecturerAssistantSlidePointInput, ownerEmail?: string): Promise<Lecture | null>;
   applyLecturerAssistantEvaluationFocus(input: ApplyLecturerAssistantEvaluationFocusInput, ownerEmail?: string): Promise<Lecture | null>;
@@ -214,6 +236,22 @@ class LocalJsonLectureRepository implements LectureRepository {
 
   async submitLecturerAssistantMessage(input: SubmitLecturerAssistantMessageInput, ownerEmail?: string) {
     return this.store.submitLecturerAssistantMessage(input, ownerEmail);
+  }
+
+  async createAgentThread(input: CreateAgentThreadInput, ownerEmail?: string) {
+    return this.store.createAgentThread(input, ownerEmail);
+  }
+
+  async getAgentThread(lectureId: string, threadId: string, ownerEmail?: string) {
+    return this.store.getAgentThread(lectureId, threadId, ownerEmail);
+  }
+
+  async acceptAgentThread(input: DecideAgentThreadInput, ownerEmail?: string) {
+    return this.store.acceptAgentThread(input, ownerEmail);
+  }
+
+  async rejectAgentThread(input: DecideAgentThreadInput, ownerEmail?: string) {
+    return this.store.rejectAgentThread(input, ownerEmail);
   }
 
   async createLecturerAssistantReview(input: CreateLecturerAssistantReviewInput, ownerEmail?: string) {

@@ -1,4 +1,26 @@
+import type {
+  AgentMessage,
+  AgentReviewPatch,
+  AgentRunEvent,
+  AgentSkillId,
+  AgentThreadMode,
+  AgentThreadStatus,
+  AgentToolCall,
+  AgentUsage
+} from "@learnordie/agent-runtime";
 import type { SlideAssetKind, SlideBBox, SlideDocument } from "@learnordie/slide-engine";
+
+export type {
+  AgentMessage,
+  AgentReviewPatch,
+  AgentRunEvent,
+  AgentSkillId,
+  AgentThreadMode,
+  AgentThreadStatus,
+  AgentToolCall,
+  AgentUsage,
+  LearnordieAgentTool
+} from "@learnordie/agent-runtime";
 
 export type QuestionLevel = "4.0" | "3.0" | "2.0" | "1.0";
 export type QuestionVariantReviewStatus = "draft" | "reviewed" | "approved" | "rejected";
@@ -273,6 +295,43 @@ export type LecturerAssistantMessage = {
   createdAt: string;
 };
 
+export type AgentArtifact = {
+  id: string;
+  threadId: string;
+  lectureId: string;
+  artifactType: "review_patch" | "slide_preview" | "source_note" | "question_family" | "learn_hotspots";
+  title: string;
+  payload: unknown;
+  createdAt: string;
+};
+
+export type AgentThread = {
+  id: string;
+  lectureId: string;
+  mode: AgentThreadMode;
+  status: AgentThreadStatus;
+  skillId?: AgentSkillId;
+  prompt: string;
+  slideId?: string;
+  blockId?: string;
+  assetId?: string;
+  studentContext?: unknown;
+  reviewPatch?: AgentReviewPatch;
+  messages?: AgentMessage[];
+  events?: AgentRunEvent[];
+  toolCalls?: AgentToolCall[];
+  artifacts?: AgentArtifact[];
+  provider?: string;
+  model?: string;
+  usage?: AgentUsage;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  acceptedAt?: string;
+  rejectedAt?: string;
+};
+
 export type StandaloneExport = {
   id: string;
   lectureId: string;
@@ -363,6 +422,7 @@ export type Lecture = {
   studentChatQuestions?: StudentChatQuestion[];
   transcriptSegments?: TranscriptSegment[];
   assistantMessages?: LecturerAssistantMessage[];
+  agentThreads?: AgentThread[];
   standaloneExports?: StandaloneExport[];
   standaloneExportJobs?: StandaloneExportJob[];
 };

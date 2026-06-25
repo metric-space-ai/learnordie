@@ -43,6 +43,12 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   }, session.email);
 
   if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
+  await repository.createAgentThread({
+    lectureId: id,
+    mode: "lecturer_assistant",
+    prompt: parsed.data.message,
+    slideId: parsed.data.slideId
+  }, session.email);
 
   const lectures = await repository.listLectures(session.email);
   return NextResponse.json({ lecture, lectures });

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 
-import type { PresentationAsset, Slide } from "@/lib/types";
+import type { AgentThread, Lecture, PresentationAsset, Slide } from "@/lib/types";
 import {
   DeckRenderer,
   applySlideDocumentEdits,
@@ -25,21 +25,27 @@ import type { SlideAsset } from "@learnordie/slide-engine/components";
 import { Diagram } from "../Diagram";
 
 type StudioSlideDocumentEditorProps = {
+  lectureId: string;
+  csrfToken: string;
   currentIndex: number;
   seriesTitle: string;
   slides: Slide[];
   slideDocument?: SlideDocument;
   presentationAssets?: PresentationAsset[];
   onSlideDocumentChange: (document: SlideDocument, slides: Slide[]) => void;
+  onLecturesChange?: (lectures: Lecture[]) => void;
 };
 
 export function StudioSlideDocumentEditor({
+  lectureId,
+  csrfToken,
   currentIndex,
   seriesTitle,
   slides,
   slideDocument,
   presentationAssets = [],
-  onSlideDocumentChange
+  onSlideDocumentChange,
+  onLecturesChange
 }: StudioSlideDocumentEditorProps) {
   const document = useMemo(() => slideDocument ?? legacySlidesToSlideDocument(slides, {
     id: "studio-legacy-slide-document",
@@ -73,6 +79,11 @@ export function StudioSlideDocumentEditor({
   const [quizLevel, setQuizLevel] = useState<QuestionLevel>(selectedQuizAnchor?.level ?? "2.0");
   const [status, setStatus] = useState("SlideDocument bereit.");
   const [issue, setIssue] = useState("");
+  const [agentPopover, setAgentPopover] = useState<{ x: number; y: number } | null>(null);
+  const [agentPrompt, setAgentPrompt] = useState("");
+  const [agentThread, setAgentThread] = useState<AgentThread | null>(null);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentError, setAgentError] = useState("");
 
   useEffect(() => {
     const nextBlock = currentSlide?.blocks.find((block) => block.id === selectedBlockId)
@@ -106,6 +117,109 @@ export function StudioSlideDocumentEditor({
     setSelectedBlockId(selection.blockId);
     setStatus(`Block ${selection.blockId} ausgewählt.`);
     setIssue("");
+  }
+
+  function openAgentPopover(event: MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(Math.max(event.clientX - rect.left, 16), Math.max(16, rect.width - 420));
+    const y = Math.min(Math.max(event.clientY - rect.top, 16), Math.max(16, rect.height - 320));
+    setAgentPopover({ x, y });
+    setAgentError("");
+    setAgentPrompt("");
+    setAgentThread(null);
+  }
+
+  async function startAgentThread() {
+    if (!agentPrompt.trim() || !currentSlide) return;
+    setAgentBusy(true);
+    setAgentError("");
+    setAgentThread(null);
+    try {
+      const response = await fetch(`/api/lectures/${lectureId}/agent-threads`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-learnbuddy-csrf": csrfToken
+        },
+        body: JSON.stringify({
+          mode: "studio_slide_edit",
+          prompt: agentPrompt,
+          slideId: currentSlide.id,
+          blockId: selectedBlock?.id
+        })
+      });
+      const payload = await response.json() as { error?: string; thread?: AgentThread; lectures?: Lecture[] };
+      if (!response.ok || !payload.thread) {
+        throw new Error(payload.error ?? "Agent-Thread konnte nicht erstellt werden.");
+      }
+      setAgentThread(payload.thread);
+      if (payload.lectures) onLecturesChange?.(payload.lectures);
+      setStatus("Agent-Review-Diff bereit.");
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : "Agent-Thread konnte nicht erstellt werden.");
+    } finally {
+      setAgentBusy(false);
+    }
+  }
+
+  async function acceptAgentPatch() {
+    if (!agentThread) return;
+    setAgentBusy(true);
+    setAgentError("");
+    try {
+      const response = await fetch(`/api/lectures/${lectureId}/agent-threads/${agentThread.id}/accept`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-learnbuddy-csrf": csrfToken
+        },
+        body: JSON.stringify({})
+      });
+      const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
+      if (!response.ok || !payload.lecture) {
+        throw new Error(payload.error ?? "Agent-Patch konnte nicht übernommen werden.");
+      }
+      if (payload.lecture.slideDocument) {
+        onSlideDocumentChange(payload.lecture.slideDocument, payload.lecture.slides);
+      }
+      if (payload.lectures) onLecturesChange?.(payload.lectures);
+      setAgentThread((thread) => thread ? { ...thread, status: "accepted" } : thread);
+      setStatus("Agent-Patch übernommen.");
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : "Agent-Patch konnte nicht übernommen werden.");
+    } finally {
+      setAgentBusy(false);
+    }
+  }
+
+  async function rejectAgentPatch() {
+    if (!agentThread) {
+      setAgentPopover(null);
+      return;
+    }
+    setAgentBusy(true);
+    setAgentError("");
+    try {
+      const response = await fetch(`/api/lectures/${lectureId}/agent-threads/${agentThread.id}/reject`, {
+        method: "POST",
+        headers: {
+          "x-learnbuddy-csrf": csrfToken
+        }
+      });
+      const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
+      if (!response.ok || !payload.lecture) {
+        throw new Error(payload.error ?? "Agent-Patch konnte nicht verworfen werden.");
+      }
+      if (payload.lectures) onLecturesChange?.(payload.lectures);
+      setAgentThread((thread) => thread ? { ...thread, status: "rejected" } : thread);
+      setAgentPopover(null);
+      setStatus("Agent-Patch verworfen.");
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : "Agent-Patch konnte nicht verworfen werden.");
+    } finally {
+      setAgentBusy(false);
+    }
   }
 
   function applyOperations(operations: SlideDocumentEditOperation[], message: string) {
@@ -250,7 +364,7 @@ export function StudioSlideDocumentEditor({
       data-selected-block-id={selectedBlock?.id ?? ""}
       data-studio-engine-editor="true"
     >
-      <div className="studio-engine-editor-preview">
+      <div className="studio-engine-editor-preview" onContextMenu={openAgentPopover}>
         <DeckRenderer
           currentSlideId={currentSlide.id}
           document={document}
@@ -259,6 +373,61 @@ export function StudioSlideDocumentEditor({
           selectedBlockId={selectedBlock?.id}
           onBlockSelect={selectBlock}
         />
+        {agentPopover ? (
+          <div
+            aria-label="KI Agent Thread"
+            className="studio-agent-popover"
+            role="dialog"
+            style={{ left: agentPopover.x, top: agentPopover.y }}
+          >
+            <div className="studio-agent-popover-head">
+              <strong>Mit KI bearbeiten</strong>
+              <button type="button" aria-label="KI Agent schließen" onClick={() => setAgentPopover(null)}>×</button>
+            </div>
+            <p>Scope: {currentSlide.title}{selectedBlock ? ` / ${selectedBlock.type}` : ""}</p>
+            <label>
+              <span>Agent Prompt</span>
+              <textarea
+                aria-label="Agent Prompt"
+                rows={3}
+                value={agentPrompt}
+                onChange={(event) => setAgentPrompt(event.currentTarget.value)}
+                placeholder="z.B. Kernaussage zur Mischreibung präziser formulieren"
+              />
+            </label>
+            <div className="studio-agent-actions">
+              <button type="button" disabled={agentBusy || !agentPrompt.trim()} onClick={startAgentThread}>
+                {agentBusy && !agentThread ? "Agent läuft" : "Agent starten"}
+              </button>
+              <button type="button" onClick={rejectAgentPatch}>Verwerfen</button>
+            </div>
+            {agentThread ? (
+              <div className="studio-agent-result">
+                <strong>Review-Diff</strong>
+                <span>{agentThread.reviewPatch?.operations.length ?? 0} Operation(en)</span>
+                <ol>
+                  {(agentThread.events ?? []).slice(-6).map((event) => (
+                    <li key={event.id}>
+                      <span>{event.label}</span>
+                      <small>{event.status}</small>
+                    </li>
+                  ))}
+                </ol>
+                {agentThread.reviewPatch?.qa.warnings.length ? (
+                  <p className="studio-agent-warning">{agentThread.reviewPatch.qa.warnings.join(" ")}</p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={agentBusy || agentThread.status === "accepted"}
+                  onClick={acceptAgentPatch}
+                >
+                  Änderung übernehmen
+                </button>
+              </div>
+            ) : null}
+            {agentError ? <p role="alert" className="form-error">{agentError}</p> : null}
+          </div>
+        ) : null}
       </div>
       <div className="studio-engine-editor-panel">
         <div className="studio-engine-editor-heading">
@@ -374,6 +543,9 @@ export function StudioSlideDocumentEditor({
         <div className="studio-engine-editor-actions">
           <button type="button" disabled={!selectedField} onClick={saveSelectedBlock}>
             Engine-Block speichern
+          </button>
+          <button type="button" onClick={() => setAgentPopover({ x: 24, y: 24 })}>
+            Mit KI bearbeiten
           </button>
         </div>
         <p aria-live="polite">{status}</p>
