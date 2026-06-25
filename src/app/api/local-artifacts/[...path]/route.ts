@@ -9,6 +9,13 @@ function mediaType(fileName: string) {
   if (lower.endsWith(".json")) return "application/json; charset=utf-8";
   if (lower.endsWith(".css")) return "text/css; charset=utf-8";
   if (lower.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (lower.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".bmp")) return "image/bmp";
+  if (lower.endsWith(".tif") || lower.endsWith(".tiff")) return "image/tiff";
   if (lower.endsWith(".mp3")) return "audio/mpeg";
   if (lower.endsWith(".m4a")) return "audio/mp4";
   if (lower.endsWith(".aac")) return "audio/aac";
@@ -20,7 +27,10 @@ function mediaType(fileName: string) {
 
 function disposition(fileName: string) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]+/g, "-") || "learnbuddy-artifact";
-  return `attachment; filename="${safeName}"`;
+  const mode = /\.(?:svg|png|jpe?g|webp|gif|bmp|tiff?|mp3|m4a|aac|ogg|oga|webm|wav)$/i.test(fileName)
+    ? "inline"
+    : "attachment";
+  return `${mode}; filename="${safeName}"`;
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ path?: string[] }> }) {

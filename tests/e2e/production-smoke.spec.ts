@@ -3026,8 +3026,16 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
       order by started_at desc
       limit 1
     `;
-    const presentationAssetRows = await sql<{ kind: string; title: string; source_json: { originalName?: string }; quality_json: { needsReview?: boolean } }[]>`
-      select pa.kind, pa.title, pa.source_json, pa.quality_json
+    const presentationAssetRows = await sql<{
+      kind: string;
+      title: string;
+      storage_key: string | null;
+      preview_key: string | null;
+      source_json: { originalName?: string; sourceRef?: string; slide?: number; page?: number };
+      structured_data: { sourceKind?: string; mimeType?: string; visualLine?: string } | null;
+      quality_json: { needsReview?: boolean };
+    }[]>`
+      select pa.kind, pa.title, pa.storage_key, pa.preview_key, pa.source_json, pa.structured_data, pa.quality_json
       from presentation_assets pa
       join lecture_assets la on la.id = pa.material_id
       where la.original_name in (${pdfName}, ${scannedPdfName}, ${ocrPdfName}, ${pptxName}, ${imageOnlyPdfName}, ${blockedLoopbackUrlText})
@@ -3060,6 +3068,24 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     expect(presentationAssetRows.map((row) => row.kind)).toEqual(expect.arrayContaining(["sourceDocument", "text", "diagram", "formula"]));
     expect(presentationAssetRows.some((row) => row.source_json.originalName === pptxName)).toBe(true);
     expect(presentationAssetRows.some((row) => row.quality_json.needsReview === true)).toBe(true);
+    const pptxVisualAsset = presentationAssetRows.find((row) => (
+      row.source_json.originalName === pptxName &&
+      row.kind === "diagram" &&
+      row.storage_key &&
+      row.preview_key &&
+      row.structured_data?.sourceKind === "pptx"
+    ));
+    expect(pptxVisualAsset).toBeTruthy();
+    expect(pptxVisualAsset?.source_json.sourceRef).toContain("Folie 1");
+    expect(pptxVisualAsset?.source_json.slide).toBe(1);
+    expect(pptxVisualAsset?.structured_data?.mimeType).toBe("image/png");
+    expect(pptxVisualAsset?.storage_key).toContain("/extracted-assets/");
+    expect(pptxVisualAsset?.preview_key).toContain(".preview.svg");
+    const previewResponse = await page.request.get(pptxVisualAsset!.preview_key!);
+    expect(previewResponse.ok()).toBe(true);
+    expect(previewResponse.headers()["content-type"]).toContain("image/svg+xml");
+    expect(await previewResponse.text()).toContain("<svg");
+    await expect(page.locator(".studio-asset-thumb").first()).toBeVisible();
     expect(blockedUrlTrap.requestCount()).toBe(0);
     expect(latestRuns[0].steps_json.some((step) => (
       step.label === `Review-Vorschlag übersprungen: ${imageOnlyPdfName}` &&

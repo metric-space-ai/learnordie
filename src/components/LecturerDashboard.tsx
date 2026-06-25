@@ -172,6 +172,11 @@ function assetPreview(asset: PresentationAsset) {
   return preview.length > 130 ? `${preview.slice(0, 127)}...` : preview;
 }
 
+function presentationAssetPreviewUrl(asset: PresentationAsset) {
+  if (!asset.previewKey) return "";
+  return ["figure", "photo", "diagram", "chart"].includes(asset.kind) ? asset.previewKey : "";
+}
+
 function mergeSlideDocumentAssets(base: SlideDocument, previous?: SlideDocument): SlideDocument {
   if (!previous || previous.assets.length === 0) return base;
   const assets = new Map<string, SlideAssetRef>();
@@ -1578,6 +1583,9 @@ export function LecturerDashboard({
     const lastRun = selected.materialProcessingRuns?.[0];
     const materials = selected.materials ?? [];
     const presentationAssets = selected.presentationAssets ?? [];
+    const visiblePresentationAssets = [...presentationAssets].sort((left, right) => (
+      Number(Boolean(presentationAssetPreviewUrl(right))) - Number(Boolean(presentationAssetPreviewUrl(left)))
+    ));
     const materialLabel = materials.length === 1 ? "1 Quelle" : `${materials.length} Quellen`;
     const assetLabel = presentationAssets.length === 1 ? "1 Asset" : `${presentationAssets.length} Assets`;
     const lastRunCountLabel = lastRun
@@ -1626,20 +1634,26 @@ export function LecturerDashboard({
             <p className="muted">Noch keine extrahierten Präsentationsassets. Quellen verarbeiten erzeugt Text-, Diagramm-, Formel- und Tabellenkandidaten.</p>
           ) : (
             <div className="studio-asset-list compact">
-              {presentationAssets.slice(0, 6).map((asset) => (
-                <article className="studio-asset-card" key={asset.id}>
-                  <header>
-                    <span>{formatPresentationAssetKind(asset.kind)}</span>
-                    <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
-                  </header>
-                  <strong>{asset.title}</strong>
-                  <p>{assetPreview(asset)}</p>
-                  <footer>
-                    <span>{asset.source.originalName}</span>
-                    {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
-                  </footer>
-                </article>
-              ))}
+              {visiblePresentationAssets.slice(0, 6).map((asset) => {
+                const previewUrl = presentationAssetPreviewUrl(asset);
+                return (
+                  <article className={`studio-asset-card${previewUrl ? " has-preview" : ""}`} key={asset.id}>
+                    {previewUrl && (
+                      <span className="studio-asset-thumb" style={{ backgroundImage: `url("${previewUrl}")` }} aria-hidden="true" />
+                    )}
+                    <header>
+                      <span>{formatPresentationAssetKind(asset.kind)}</span>
+                      <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
+                    </header>
+                    <strong>{asset.title}</strong>
+                    <p>{assetPreview(asset)}</p>
+                    <footer>
+                      <span>{asset.source.originalName}</span>
+                      {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
+                    </footer>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
