@@ -918,6 +918,8 @@ Deliverables:
 - Standalone-offline-Gate.
 - Migration-E2E.
 
+Status 2026-06-25: `npm run test:slide-engine` führt eine Browser-Viewport-Matrix für Desktop, Laptop, Tablet, iPad Portrait und Mobile aus, scannt horizontale Overflows, prüft zu kleine Targets, kontrolliert Console-Fehler und deckt Legacy-, All-Block-, Standalone-, Agent-, Editor-, Asset-, Formel- und Tabellenpfade ab. Der Standalone-Test blockiert externe Runtime-Requests und erzeugt zusätzlich ein echtes Browser-PDF aus dem Offline-HTML. Die Production-E2E-Smokes prüfen Live-, Learn-, Studio-, Export-, Retention-, Provider- und Migration-Pfade mit `data-slide-engine`-Nachweis; `.github/workflows/e2e.yml` führt Typecheck, Lint, Script-, Motion-, Release-, Provider-, Production-Smoke- und Preflight-Gates auf Pull Requests und `main` aus. `npm run check:slide-engine-vendor` schützt den reduzierten reveal-Core gegen undokumentierte Upstream-/Vendor-Abweichungen.
+
 ## 17. Akzeptanzkriterien
 
 Eine erste Version gilt nur als production-ready, wenn:
