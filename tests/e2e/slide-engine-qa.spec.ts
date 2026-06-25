@@ -501,9 +501,24 @@ test.describe("SlideDocument renderer QA harness", () => {
     await expect(page.locator("[data-slide-document-version]")).toHaveAttribute("data-slide-document-version", "learnordie.slide.v1");
     await expect(page.locator("[data-block-type='chart']")).toBeVisible();
     await expect(page.locator("[data-block-type='quizAnchor']")).toBeVisible();
+    await expect(page.locator(`[data-slide-engine="${SLIDE_STANDALONE_RENDERER_VERSION}"]`)).toHaveAttribute("data-print-profile", "browser-pdf-a4");
     await expect(page.getByText("assets/styles.css · fixture-style-sha")).toBeVisible();
     await page.getByRole("button", { name: /Antwort A:/ }).click();
     await expect(page.getByText("Richtig.")).toBeVisible();
+    await page.emulateMedia({ media: "print" });
+    const printContract = await page.locator(".ld-standalone-slide").first().evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        breakAfter: style.breakAfter,
+        breakInside: style.breakInside,
+        minHeight: style.minHeight
+      };
+    });
+    expect(printContract.breakAfter).toBe("page");
+    expect(printContract.breakInside).toBe("avoid");
+    expect(Number.parseFloat(printContract.minHeight)).toBeGreaterThan(500);
+    const pdfBytes = await page.pdf({ format: "A4", printBackground: true });
+    expect(pdfBytes.byteLength).toBeGreaterThan(1000);
     expect(externalRequests).toEqual([]);
     assertClean();
   });
