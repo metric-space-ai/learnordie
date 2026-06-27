@@ -69,7 +69,8 @@ test("Dozent setzt Code, Student tritt mit Pseudonym bei und sieht das Dashboard
   await expect(page).toHaveURL(new RegExp(`/join/`));
   await expect(page.getByRole("heading", { name: SERIES_TITLE })).toBeVisible();
 
-  await page.locator(".join-form input").fill("Testpilot");
+  await expect(page.locator(".join-form .pseudonym-suggestion")).toHaveCount(3);
+  await page.locator(".join-form .pseudonym-suggestion").first().click();
   await page.locator(".join-form button[type=submit]").click();
 
   await expect(page).toHaveURL(/\/student/);
@@ -99,7 +100,7 @@ test("Root zeigt für ein bestehendes Profil den Dashboard-Einstieg", async ({ b
   await page.goto(`/join/${JOIN_CODE}`);
   const pseudonymInput = page.locator(".join-form input");
   if (await pseudonymInput.isVisible().catch(() => false)) {
-    await pseudonymInput.fill("Wiederkehrer");
+    await page.locator(".join-form .pseudonym-suggestion").first().click();
     await page.locator(".join-form button[type=submit]").click();
     await expect(page).toHaveURL(/\/student/);
   }

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { getOrCreateStudentKey, saveProfile } from "@/lib/student-client";
+import { suggestPseudonyms } from "@/lib/student-pseudonym";
 import type { ResolvedJoinTarget } from "@/lib/types";
+import { PseudonymChooser } from "./PseudonymChooser";
 
 type JoinFlowProps = {
   code: string;
@@ -27,7 +29,7 @@ function redirectAfterJoin(target: ResolvedJoinTarget): string {
 export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps) {
   const router = useRouter();
   const [retryCode, setRetryCode] = useState("");
-  const [pseudonymInput, setPseudonymInput] = useState(pseudonym ?? "");
+  const [pseudonymInput, setPseudonymInput] = useState(() => pseudonym ?? suggestPseudonyms(code)[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -123,6 +125,7 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
         {hasProfile ? (
           <>
             <p className="join-note">Angemeldet als <strong>{pseudonym}</strong>.</p>
+            <p className="join-hint">Deine Punkte sind an deinen anonymen Browser-Schlüssel gebunden, nicht nur an den Anzeigenamen.</p>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button" type="button" onClick={enroll} disabled={busy}>
               {busy ? "Wird hinzugefügt …" : "Zu meinen Vorlesungen hinzufügen"}
@@ -130,18 +133,16 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
           </>
         ) : (
           <form className="join-form" onSubmit={submitPseudonym}>
-            <label>
-              Wähle ein Pseudonym
-              <input
-                value={pseudonymInput}
-                onChange={(event) => setPseudonymInput(event.target.value)}
-                placeholder="z. B. Zahnrad-Zoe"
-                autoComplete="off"
-                maxLength={80}
-                disabled={busy}
-              />
-            </label>
-            <p className="join-hint">Bitte keinen Klarnamen verwenden — dein Pseudonym bleibt anonym.</p>
+            <PseudonymChooser
+              value={pseudonymInput}
+              onChange={setPseudonymInput}
+              seed={code}
+              disabled={busy}
+              label="Wähle ein Pseudonym"
+            />
+            <p className="join-hint">
+              Punkte und Dashboard-Zugriff hängen an diesem Browser-Schlüssel. Jemand mit gleichem Pseudonym übernimmt deine Punkte nicht.
+            </p>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button" type="submit" disabled={busy}>
               {busy ? "Trete bei …" : "Pseudonym wählen und beitreten"}

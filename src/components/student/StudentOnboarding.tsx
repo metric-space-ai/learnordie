@@ -6,10 +6,12 @@ import { FormEvent, useState } from "react";
 
 import { joinCodeFromInput } from "@/lib/join-code";
 import { saveProfile } from "@/lib/student-client";
+import { suggestPseudonyms } from "@/lib/student-pseudonym";
+import { PseudonymChooser } from "./PseudonymChooser";
 
 export function StudentOnboarding() {
   const router = useRouter();
-  const [pseudonymInput, setPseudonymInput] = useState("");
+  const [pseudonymInput, setPseudonymInput] = useState(() => suggestPseudonyms("student-onboarding")[0]);
   const [codeInput, setCodeInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -54,19 +56,9 @@ export function StudentOnboarding() {
       <section className="student-emptystate lb-enter-panel">
         <p className="eyebrow">Lernen im Norden</p>
         <h1>Wähle ein Pseudonym</h1>
-        <p>Du brauchst kein Konto. Wähle ein Pseudonym, bitte keinen Klarnamen, und starte deine erste Lernrunde.</p>
+        <p>Du brauchst kein Konto. Dein Pseudonym ist ein Anzeigename; deine Punkte hängen an einem anonymen Browser-Schlüssel.</p>
         <form className="student-onboard-form" onSubmit={submit}>
-          <label>
-            Pseudonym
-            <input
-              value={pseudonymInput}
-              onChange={(event) => setPseudonymInput(event.target.value)}
-              placeholder="z. B. Zahnrad-Zoe"
-              autoComplete="off"
-              maxLength={80}
-              disabled={busy}
-            />
-          </label>
+          <PseudonymChooser value={pseudonymInput} onChange={setPseudonymInput} seed="student-onboarding" disabled={busy} />
           <label>
             Vorlesungscode (optional)
             <input

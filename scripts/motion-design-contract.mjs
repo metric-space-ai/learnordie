@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const HELP_TEXT = `
 Usage: npm run motion:contract
 
-Checks the LearnBuddy motion/design contract across CSS, docs and core UI components.
+Checks the LearnBuddy motion/design contract across CSS and core UI components.
 
 Options:
   --help, -h                        Print this usage text without running checks.
@@ -70,7 +70,6 @@ function expectRegex(id, content, expected, file) {
 const [
   globals,
   design,
-  motionSpec,
   presence,
   quizDrawer,
   learnExperience,
@@ -80,11 +79,11 @@ const [
   slideCanvas,
   leaderboardModal,
   homePage,
+  homeLanding,
   motionUtils
 ] = await Promise.all([
   readText("src/app/globals.css"),
   readText("DESIGN.md"),
-  readText("docs/learnbuddy-motion-design-spec.md"),
   readText("src/components/Presence.tsx"),
   readText("src/components/QuizDrawer.tsx"),
   readText("src/components/LearnExperience.tsx"),
@@ -94,11 +93,11 @@ const [
   readText("src/components/SlideCanvas.tsx"),
   readText("src/components/LeaderboardModal.tsx"),
   readText("src/app/page.tsx"),
+  readText("src/components/HomeLanding.tsx"),
   readText("src/lib/motion.ts")
 ]);
 
 expectContains("design_context", design, [
-  "docs/learnbuddy-motion-design-spec.md",
   "Folie ist der Anker",
   "Bottom-Bar",
   "Hotspots",
@@ -106,17 +105,15 @@ expectContains("design_context", design, [
   "lb-enter-stage",
   "lb-enter-sheet",
   "lb-enter-overlay",
-  "prefers-reduced-motion"
-], "DESIGN.md");
-
-expectContains("motion_spec_acceptance", motionSpec, [
+  "Motion Acceptance",
   "Keine Food-App-Optik",
   "Keine Hotspots, die dauerhaft pulsieren",
   "Playwright-Screenshots",
   "Startseite baut Card und Links gestaffelt auf",
-  "Frage-Drawer öffnet nicht hart",
-  "Referentenstudio öffnet Tools aus der unteren Steuerung"
-], "docs/learnbuddy-motion-design-spec.md");
+  "Frage-Drawer oeffnet nicht hart",
+  "Referentenstudio oeffnet Tools aus der unteren Steuerung",
+  "prefers-reduced-motion"
+], "DESIGN.md");
 
 expectContains("motion_tokens", globals, [
   "--lb-ease-out",
@@ -172,6 +169,10 @@ expectContains("motion_classes", globals, [
   ".lb-enter-overlay",
   ".lb-enter-shared",
   ".studio-slide-shared-ghost",
+  ".learn-hotspot-shared-ghost",
+  ".studio-tool-shared-ghost",
+  ".studio-insight-shared-ghost",
+  ".home-route-cover",
   ".lb-cover"
 ], "src/app/globals.css");
 
@@ -187,6 +188,7 @@ expectContains("motion_keyframes", globals, [
   "@keyframes lb-origin-trace-in",
   "@keyframes lb-origin-socket-in",
   "@keyframes lb-rail-sweep",
+  "@keyframes lb-route-cover-in",
   "@keyframes lb-student-gate-cover-in",
   "@keyframes lb-answer-correct",
   "@media (prefers-reduced-motion: reduce)"
@@ -238,6 +240,16 @@ expectNotContains("home_not_demo_launch_contract", homePage, [
   "mode-list"
 ], "src/app/page.tsx");
 
+expectContains("home_route_cover_contract", homeLanding, [
+  "data-route-cover={routeCover ? \"active\" : \"idle\"}",
+  "home-route-cover lb-route-cover",
+  "navigateWithCover",
+  "followWithCover",
+  "prefersReducedMotion()",
+  "setRouteCover(target)",
+  "router.push(href)"
+], "src/components/HomeLanding.tsx");
+
 expectContains("presence_contract", presence, [
   "export type PresenceState = \"entering\" | \"open\" | \"exiting\"",
   "exitMs = 280",
@@ -255,6 +267,9 @@ expectContains("quiz_drawer_contract", quizDrawer, [
 ], "src/components/QuizDrawer.tsx");
 
 expectContains("learn_mode_contract", learnExperience, [
+  "animateHotspotToDrawerSharedElement",
+  "hotspotButtonRefs",
+  "pendingHotspotSharedRef",
   "className={`slide-screen lb-motion-root",
   "data-question-origin={questionOrigin}",
   "\"--origin-x\"",
@@ -294,6 +309,9 @@ expectContains("lecturer_live_contract", lecturerLiveExperience, [
 ], "src/components/LecturerLiveExperience.tsx");
 
 expectContains("studio_contract", lecturerDashboard, [
+  "animateStudioToolSharedElement",
+  "animateStudioInsightSharedElement",
+  "pendingStudioToolMotionRef",
   "animateStudioSlideSharedElement",
   "filmstripButtonRefs",
   "moveToStudioSlide",
@@ -310,6 +328,8 @@ expectContains("studio_contract", lecturerDashboard, [
   "studio-context-drawer evaluation",
   "studio-context-drawer analytics",
   "studio-context-drawer assistant",
+  "data-panel-origin=\"studio-sources\"",
+  "data-panel-origin=\"studio-analytics\"",
   "studio-slide-tool-overlay",
   "studio-slide-source-overlay",
   "studio-slide-assistant-overlay",
@@ -341,9 +361,17 @@ expectContains("leaderboard_overlay_contract", leaderboardModal, [
 
 expectContains("shared_element_motion_contract", motionUtils, [
   "export function animateFlip",
+  "export function animateHotspotToDrawerSharedElement",
+  "export function animateStudioToolSharedElement",
+  "export function animateStudioInsightSharedElement",
   "export function animateStudioSlideSharedElement",
   "prefersReducedMotion()",
   "getBoundingClientRect",
+  "learn-hotspot-shared-ghost",
+  "studio-tool-shared-ghost",
+  "studio-insight-shared-ghost",
+  "sharedElement: \"learn-hotspot\"",
+  "sharedElement: tool === \"materials\" ? \"studio-sources\" : \"studio-analytics\"",
   "studio-slide-shared-ghost lb-enter-shared",
   "ghost.dataset.sharedElement = \"studio-slide\"",
   "document.body.append(ghost)",

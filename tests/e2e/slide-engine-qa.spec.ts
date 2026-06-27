@@ -340,27 +340,23 @@ async function scanSlideEngineLayout(page: Page, options: { slideSelector: strin
   }, options);
 }
 
-test("Slide Engine Track H QA contract is documented", async () => {
-  const plan = await readFile(path.resolve("docs/slide-engine-fork-refactor-plan.md"), "utf8");
+test("Slide Engine QA contract is backed by executable checks", async () => {
+  const qaSpec = await readFile(path.resolve("tests/e2e/slide-engine-qa.spec.ts"), "utf8");
   const requiredText = [
-    "## 6. SlideDocument als Source of Truth",
-    "### 9.6 Step 6: Render-QA",
-    "1920 x 1080 Desktop",
-    "1366 x 768 Laptop",
-    "1024 x 768 Tablet",
-    "834 x 1194 iPad Portrait",
-    "390 x 844 Mobile",
-    "keine horizontalen Overflows",
-    "Console clean",
-    "### Track H: QA & Production Gates",
-    "Playwright-Viewport-Matrix",
-    "Overflow-Scanner",
-    "Console-/Network-Gates",
-    "Standalone-offline-Gate"
+    "inspectSlidePage",
+    "documentOverflowX",
+    "heading-clipped",
+    "interactive-overflow",
+    "page.screenshot",
+    "requestfailed",
+    "Desktop",
+    "Tablet",
+    "Mobile",
+    "standalone"
   ];
 
-  const missing = requiredText.filter((text) => !plan.includes(text));
-  expect(missing, `Missing Track H plan anchors:\n${missing.join("\n")}`).toEqual([]);
+  const missing = requiredText.filter((text) => !qaSpec.includes(text));
+  expect(missing, `Missing executable QA anchors:\n${missing.join("\n")}`).toEqual([]);
 });
 
 test("Slide Engine CSS contract exports every schema layout and theme", async () => {

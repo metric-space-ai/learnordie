@@ -1435,26 +1435,26 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
       .some((check) => check.id === "question_generator" && check.status === "fail" && check.message?.includes("provider-backed"))
   ).toBe(true);
   expect(missingQuestionGeneratorSmoke.blockers?.map((blocker) => blocker.id)).toEqual(["question_generator"]);
-  const ctoxResponsesMockSmoke = await runProviderSmokeAllowFailure([
+  const learnordieResponsesMockSmoke = await runProviderSmokeAllowFailure([
     "--profile",
     "production",
     "--mock",
     "--only",
     "ai,lecturer_assistant,chat_moderation,question_generator"
   ], {
-    LEARNBUDDY_AI_PROVIDER: "ctox-responses"
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses"
   });
-  expect(ctoxResponsesMockSmoke.ok).toBe(true);
-  expect(ctoxResponsesMockSmoke.blockers).toEqual([]);
+  expect(learnordieResponsesMockSmoke.ok).toBe(true);
+  expect(learnordieResponsesMockSmoke.blockers).toEqual([]);
   for (const checkId of ["ai", "lecturer_assistant", "chat_moderation", "question_generator"]) {
-    const check = ctoxResponsesMockSmoke.checks?.find((candidate) => candidate.id === checkId);
+    const check = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === checkId);
     expect(check?.status, checkId).toBe("pass");
-    expect(check?.details?.provider, checkId).toBe("ctox-responses");
+    expect(check?.details?.provider, checkId).toBe("learnordie-responses");
   }
-  const ctoxAiCheck = ctoxResponsesMockSmoke.checks?.find((candidate) => candidate.id === "ai");
-  expect((ctoxAiCheck?.details?.stream as { provider?: string } | undefined)?.provider).toBe("ctox-responses");
-  const ctoxLecturerAssistantCheck = ctoxResponsesMockSmoke.checks?.find((candidate) => candidate.id === "lecturer_assistant");
-  expect((ctoxLecturerAssistantCheck?.details?.toolPlan as { actions?: string[] } | undefined)?.actions).toContain("evaluation_focus");
+  const learnordieAiCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "ai");
+  expect((learnordieAiCheck?.details?.stream as { provider?: string } | undefined)?.provider).toBe("learnordie-responses");
+  const learnordieLecturerAssistantCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "lecturer_assistant");
+  expect((learnordieLecturerAssistantCheck?.details?.toolPlan as { actions?: string[] } | undefined)?.actions).toContain("evaluation_focus");
   const selfHostedSttMockSmoke = await runProviderSmokeAllowFailure([
     "--profile",
     "production",
@@ -1519,7 +1519,12 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   expect(remediation?.alternativeGroups?.some((group) => (
     group.id === "llm_proxy_key" &&
     group.provider === "ai" &&
-    group.commands?.includes("export LEARNBUDDY_LLM_PROXY_API_KEY=...")
+    group.commands?.includes("export LEARNORDIE_LLM_PROXY_API_KEY=...")
+  ))).toBe(true);
+  expect(remediation?.alternativeGroups?.some((group) => (
+    group.id === "minimax_upstream_key" &&
+    group.provider === "ai" &&
+    group.commands?.includes("export LEARNORDIE_MINIMAX_API_KEY=...")
   ))).toBe(true);
   expect(remediation?.alternativeGroups?.some((group) => (
     group.id === "stt_provider_key" &&
@@ -1544,7 +1549,11 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   ))).toBe(true);
   expect(aiCompletionGroup?.missingAlternativeGroups?.some((group) => (
     group.id === "llm_proxy_key" &&
-    group.commands?.includes("export LEARNBUDDY_LLM_PROXY_API_KEY=...")
+    group.commands?.includes("export LEARNORDIE_LLM_PROXY_API_KEY=...")
+  ))).toBe(true);
+  expect(aiCompletionGroup?.missingAlternativeGroups?.some((group) => (
+    group.id === "minimax_upstream_key" &&
+    group.commands?.includes("export LEARNORDIE_MINIMAX_API_KEY=...")
   ))).toBe(true);
   const ocrCompletionGroup = remediation?.completionGroups?.find((group) => group.provider === "ocr");
   expect(ocrCompletionGroup?.missingRequired?.map((item) => item.name)).toEqual([
@@ -1569,7 +1578,11 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   ))).toBe(true);
   expect(blockerRemediation?.alternativeGroups?.some((group) => (
     group.id === "llm_proxy_key" &&
-    group.commands?.includes("export LEARNBUDDY_LLM_PROXY_API_KEY=...")
+    group.commands?.includes("export LEARNORDIE_LLM_PROXY_API_KEY=...")
+  ))).toBe(true);
+  expect(blockerRemediation?.alternativeGroups?.some((group) => (
+    group.id === "minimax_upstream_key" &&
+    group.commands?.includes("export LEARNORDIE_MINIMAX_API_KEY=...")
   ))).toBe(true);
   expect(blockerRemediation?.alternativeGroups?.some((group) => (
     group.id === "stt_provider_key" &&
@@ -1594,7 +1607,8 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
     LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters",
     CRON_SECRET: "cron-secret-with-more-than-32-characters",
     LEARNBUDDY_AI_PROVIDER: "local",
-    LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_live_key_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_live_key_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNORDIE_MINIMAX_API_KEY: "minimax_live_key_abcdefghijklmnopqrstuvwxyz123456",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "local",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "local",
     LEARNBUDDY_QUESTION_GENERATOR: "local",
@@ -1628,7 +1642,7 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   expect(invalidProviderModes?.some((item) => (
     item.name === "LEARNBUDDY_AI_PROVIDER" &&
     item.value === "local" &&
-    item.expected?.includes("ctox-responses")
+    item.expected?.includes("learnordie-responses")
   ))).toBe(true);
   const missingEnvReleaseGate = await runReleaseGateAllowFailure([
     "--mode", "full",
@@ -1668,7 +1682,11 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   ))).toBe(true);
   expect(requiredEnvDetails?.remediation?.alternativeGroups?.some((group) => (
     group.id === "llm_proxy_key" &&
-    group.commands?.includes("export LEARNBUDDY_LLM_PROXY_API_KEY=...")
+    group.commands?.includes("export LEARNORDIE_LLM_PROXY_API_KEY=...")
+  ))).toBe(true);
+  expect(requiredEnvDetails?.remediation?.alternativeGroups?.some((group) => (
+    group.id === "minimax_upstream_key" &&
+    group.commands?.includes("export LEARNORDIE_MINIMAX_API_KEY=...")
   ))).toBe(true);
   expect(requiredEnvDetails?.remediation?.alternativeGroups?.some((group) => (
     group.id === "stt_provider_key" &&
@@ -1741,8 +1759,9 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
     LEARNBUDDY_JOB_PROVIDER: "database",
     LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters",
     CRON_SECRET: "cron-secret-with-more-than-32-characters",
-    LEARNBUDDY_AI_PROVIDER: "ctox-responses",
-    LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_mock_key",
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses",
+    LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_llm_mock_key",
+    LEARNORDIE_MINIMAX_API_KEY: "replace-with-minimax-key",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
@@ -1786,8 +1805,9 @@ LEARNBUDDY_STORAGE_ENDPOINT=https://storage.example.test
 LEARNBUDDY_JOB_PROVIDER=database
 LEARNBUDDY_WORKER_SECRET=worker-secret-with-more-than-32-characters
 CRON_SECRET=cron-secret-with-more-than-32-characters
-LEARNBUDDY_AI_PROVIDER=ctox-responses
-LEARNBUDDY_LLM_PROXY_API_KEY=ctox_llm_mock_key
+LEARNBUDDY_AI_PROVIDER=learnordie-responses
+LEARNORDIE_LLM_PROXY_API_KEY=learnordie_llm_mock_key
+LEARNORDIE_MINIMAX_API_KEY=replace-with-minimax-key
 LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER=ai
 LEARNBUDDY_CHAT_MODERATION_PROVIDER=ai
 LEARNBUDDY_QUESTION_GENERATOR=ai
@@ -1830,8 +1850,8 @@ MISTRAL_API_KEY=replace-with-mistral-key
     ))).toBe(true);
     expect(listedRemediation?.alternativeGroups?.some((group) => (
       group.id === "llm_proxy_key" &&
-      group.commands?.includes("vercel env add LEARNBUDDY_LLM_PROXY_API_KEY preview") &&
-      group.branchCommands?.includes("vercel env add LEARNBUDDY_LLM_PROXY_API_KEY preview <git-branch>")
+      group.commands?.includes("vercel env add LEARNORDIE_LLM_PROXY_API_KEY preview") &&
+      group.branchCommands?.includes("vercel env add LEARNORDIE_LLM_PROXY_API_KEY preview <git-branch>")
     ))).toBe(true);
     expect(listedRemediation?.alternativeGroups?.some((group) => (
       group.id === "stt_provider_key" &&
@@ -1900,8 +1920,9 @@ MISTRAL_API_KEY=replace-with-mistral-key
     LEARNBUDDY_JOB_PROVIDER: "database",
     LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters",
     CRON_SECRET: "cron-secret-with-more-than-32-characters",
-    LEARNBUDDY_AI_PROVIDER: "ctox-responses",
-    LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses",
+    LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNORDIE_MINIMAX_API_KEY: "minimax_live_like_abcdefghijklmnopqrstuvwxyz123456",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
@@ -1959,8 +1980,9 @@ MISTRAL_API_KEY=replace-with-mistral-key
     LEARNBUDDY_JOB_PROVIDER: "database",
     LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters",
     CRON_SECRET: "cron-secret-with-more-than-32-characters",
-    LEARNBUDDY_AI_PROVIDER: "ctox-responses",
-    LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses",
+    LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNORDIE_MINIMAX_API_KEY: "minimax_live_like_abcdefghijklmnopqrstuvwxyz123456",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
@@ -2010,8 +2032,9 @@ MISTRAL_API_KEY=replace-with-mistral-key
     LEARNBUDDY_JOB_PROVIDER: "database",
     LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters",
     CRON_SECRET: "cron-secret-with-more-than-32-characters",
-    LEARNBUDDY_AI_PROVIDER: "ctox-responses",
-    LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses",
+    LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNORDIE_MINIMAX_API_KEY: "minimax_live_like_abcdefghijklmnopqrstuvwxyz123456",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
@@ -2063,8 +2086,9 @@ MISTRAL_API_KEY=replace-with-mistral-key
     LEARNBUDDY_JOB_PROVIDER: "database",
     LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters",
     CRON_SECRET: "cron-secret-with-more-than-32-characters",
-    LEARNBUDDY_AI_PROVIDER: "ctox-responses",
-    LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses",
+    LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_llm_live_like_abcdefghijklmnopqrstuvwxyz123456",
+    LEARNORDIE_MINIMAX_API_KEY: "minimax_live_like_abcdefghijklmnopqrstuvwxyz123456",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
@@ -3228,7 +3252,8 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   const chatQuestionUrl = "/api/lecture/gleitlagerung-demo/chat-questions";
 
   await page.goto("/l/gleitlagerung-demo");
-  await page.getByPlaceholder("z. B. LagerProfi42").fill("E2E Lager");
+  await expect(page.locator(".pseudonym-suggestion")).toHaveCount(3);
+  await page.getByLabel("Eigenes Pseudonym").fill("E2E Lager");
   await page.getByRole("button", { name: "Teilnehmen" }).click();
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
@@ -3299,6 +3324,9 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   await page.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
   await expect(page.getByText("Antwort gespeichert: richtig.")).toBeVisible();
   await expect(page.getByText("+3 Punkte")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Pseudonym sichern" })).toBeVisible();
+  await page.getByRole("button", { name: "Sichern" }).click();
+  await expect(page.getByText("Pseudonym gesichert. Die Vorlesung liegt jetzt in deinem Dashboard.")).toBeVisible();
 
   await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
   await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
@@ -3352,7 +3380,7 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
   expect(lowerSelf?.rank).toBeGreaterThan(10);
 
   await page.goto("/l/gleitlagerung-demo");
-  await page.getByPlaceholder("z. B. LagerProfi42").fill(`Viewer ${runId}`);
+  await page.getByLabel("Eigenes Pseudonym").fill(`Viewer ${runId}`);
   await page.getByRole("button", { name: "Teilnehmen" }).click();
   await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
   await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
@@ -3486,9 +3514,26 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.getByText("LERNEN IM NORDEN")).toBeVisible();
   await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer");
   await expect(page.getByText("Hydrodynamische Gleitlagerung")).toHaveCount(0);
+  await page.getByRole("link", { name: "Dozentenlogin" }).click();
+  await expect(page.locator(".home-route-cover[data-route='lecturer']")).toBeAttached();
+  const homeRouteCoverMotion = await page.evaluate(() => {
+    const cover = document.querySelector<HTMLElement>(".home-route-cover");
+    if (!cover) throw new Error("Home route cover missing.");
+    return {
+      route: cover.dataset.route,
+      animationName: getComputedStyle(cover).animationName,
+      originY: getComputedStyle(cover).transformOrigin.split(" ")[1],
+      grid: getComputedStyle(cover).backgroundImage
+    };
+  });
+  expect(homeRouteCoverMotion.route).toBe("lecturer");
+  expect(homeRouteCoverMotion.animationName).toContain("lb-route-cover-in");
+  expect(Number.parseFloat(homeRouteCoverMotion.originY)).toBeGreaterThan(400);
+  expect(homeRouteCoverMotion.grid).toContain("linear-gradient");
+  await expect(page).toHaveURL(/\/lecturer\/login$/);
   await page.goto("/l/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/l\/gleitlagerung-demo$/);
-  await page.getByPlaceholder("z. B. LagerProfi42").fill("Motion Gate");
+  await page.getByLabel("Eigenes Pseudonym").fill("Motion Gate");
   await page.getByRole("button", { name: "Teilnehmen" }).click();
   await expect(page.locator(".student-gate-screen")).toHaveAttribute("data-joining", "true");
   const studentGateMotion = await page.evaluate(() => {
@@ -3518,6 +3563,24 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
 
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
+  await expect(page.locator(".learn-hotspot-shared-ghost[data-shared-element='learn-hotspot']")).toBeAttached();
+  const hotspotSharedMotion = await page.evaluate(() => {
+    const ghost = document.querySelector<HTMLElement>(".learn-hotspot-shared-ghost");
+    if (!ghost) throw new Error("Learn hotspot shared ghost missing.");
+    const timing = ghost.getAnimations()[0]?.effect?.getTiming();
+    return {
+      sharedElement: ghost.dataset.sharedElement,
+      level: ghost.dataset.level,
+      hasSharedClass: ghost.classList.contains("lb-enter-shared"),
+      duration: timing?.duration,
+      radius: getComputedStyle(ghost).borderTopLeftRadius
+    };
+  });
+  expect(hotspotSharedMotion.sharedElement).toBe("learn-hotspot");
+  expect(hotspotSharedMotion.level).toBe("3.0");
+  expect(hotspotSharedMotion.hasSharedClass).toBe(true);
+  expect(hotspotSharedMotion.duration).toBe(620);
+  expect(hotspotSharedMotion.radius).toBe("999px");
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
   const learnMotion = await page.evaluate(() => {
@@ -3571,6 +3634,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(learnMotion.answerDelays[1]).toBeGreaterThan(learnMotion.answerDelays[0]);
   expect(learnMotion.answerDelays[3]).toBeGreaterThan(learnMotion.answerDelays[2]);
   expect(learnMotion.hotspotHasOvershoot).toBe(false);
+  await expect(page.locator(".learn-hotspot-shared-ghost")).toHaveCount(0, { timeout: 1500 });
 
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
@@ -3588,6 +3652,34 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(chatMotion.animationName).toContain("lb-inspector-right-in");
   expect(chatMotion.radius).toBe("18px");
   expect(chatMotion.railBackground).toContain("linear-gradient");
+  await page.getByLabel("Chat schließen").click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/learn/gleitlagerung-demo");
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
+  await expect(page.getByLabel("Quizfrage")).toBeVisible();
+  const mobileLearnFit = await page.evaluate(() => {
+    const drawer = document.querySelector<HTMLElement>(".question-drawer");
+    const slide = document.querySelector<HTMLElement>(".slide-screen");
+    if (!drawer) throw new Error("Mobile question drawer missing.");
+    if (!slide) throw new Error("Mobile slide screen missing.");
+    const drawerBox = drawer.getBoundingClientRect();
+    const slideBox = slide.getBoundingClientRect();
+    return {
+      overflowX: document.documentElement.scrollWidth - window.innerWidth,
+      drawerLeft: Math.round(drawerBox.left),
+      drawerRightGap: Math.round(window.innerWidth - drawerBox.right),
+      drawerBottomGap: Math.round(window.innerHeight - drawerBox.bottom),
+      slideTop: Math.round(slideBox.top)
+    };
+  });
+  expect(mobileLearnFit.overflowX).toBeLessThanOrEqual(1);
+  expect(mobileLearnFit.drawerLeft).toBeGreaterThanOrEqual(0);
+  expect(mobileLearnFit.drawerRightGap).toBeGreaterThanOrEqual(0);
+  expect(mobileLearnFit.drawerBottomGap).toBeGreaterThanOrEqual(0);
+  expect(mobileLearnFit.slideTop).toBeGreaterThanOrEqual(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await loginLecturer(page);
   const studioStageMotion = await page.evaluate(() => {
@@ -3660,6 +3752,66 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(toolMotion.popoverOriginMarkerWidth).toBe("58px");
   expect(toolMotion.choiceDelays[4]).toBeGreaterThan(toolMotion.choiceDelays[0]);
 
+  await page.getByRole("button", { name: "Material zu dieser Folie hinzufügen" }).click();
+  await expect(page.getByLabel("Quellen direkt an der Folie")).toBeVisible();
+  await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toBeAttached();
+  const studioSourceMotion = await page.evaluate(() => {
+    const ghost = document.querySelector<HTMLElement>(".studio-tool-shared-ghost[data-shared-element='studio-sources']");
+    const sheet = document.querySelector<HTMLElement>(".studio-slide-source-overlay");
+    if (!ghost) throw new Error("Studio source shared ghost missing.");
+    if (!sheet) throw new Error("Studio source sheet missing.");
+    const durations = ghost.getAnimations()
+      .map((animation) => animation.effect?.getTiming().duration)
+      .filter((duration): duration is number => typeof duration === "number");
+    return {
+      origin: sheet.dataset.panelOrigin,
+      sharedElement: ghost.dataset.sharedElement,
+      tool: ghost.dataset.tool,
+      durations,
+      sheetAnimation: getComputedStyle(sheet).animationName,
+      sheetRadius: getComputedStyle(sheet).borderTopLeftRadius
+    };
+  });
+  expect(studioSourceMotion.origin).toBe("studio-sources");
+  expect(studioSourceMotion.sharedElement).toBe("studio-sources");
+  expect(studioSourceMotion.tool).toBe("materials");
+  expect(studioSourceMotion.durations).toContain(560);
+  expect(studioSourceMotion.sheetAnimation).toContain("lb-tool-sheet-in");
+  expect(studioSourceMotion.sheetRadius).toBe("18px");
+  await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toHaveCount(0, { timeout: 1500 });
+  await page.getByLabel("Quellen schließen").click();
+
+  await page.getByLabel("Folienwerkzeuge öffnen").click();
+  await page.getByRole("button", { name: "Lernstand und offene Punkte dieser Folie ansehen" }).click();
+  await expect(page.getByLabel("Auswertung direkt an der Folie")).toBeVisible();
+  await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toBeAttached();
+  const studioAnalyticsMotion = await page.evaluate(() => {
+    const ghost = document.querySelector<HTMLElement>(".studio-tool-shared-ghost[data-shared-element='studio-analytics']");
+    const sheet = document.querySelector<HTMLElement>(".studio-slide-analytics-overlay");
+    if (!ghost) throw new Error("Studio analytics shared ghost missing.");
+    if (!sheet) throw new Error("Studio analytics sheet missing.");
+    const durations = ghost.getAnimations()
+      .map((animation) => animation.effect?.getTiming().duration)
+      .filter((duration): duration is number => typeof duration === "number");
+    return {
+      origin: sheet.dataset.panelOrigin,
+      sharedElement: ghost.dataset.sharedElement,
+      tool: ghost.dataset.tool,
+      durations,
+      sheetAnimation: getComputedStyle(sheet).animationName,
+      sheetRadius: getComputedStyle(sheet).borderTopLeftRadius
+    };
+  });
+  expect(studioAnalyticsMotion.origin).toBe("studio-analytics");
+  expect(studioAnalyticsMotion.sharedElement).toBe("studio-analytics");
+  expect(studioAnalyticsMotion.tool).toBe("analytics");
+  expect(studioAnalyticsMotion.durations).toContain(560);
+  expect(studioAnalyticsMotion.sheetAnimation).toContain("lb-inspector-right-in");
+  expect(studioAnalyticsMotion.sheetRadius).toBe("18px");
+  await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toHaveCount(0, { timeout: 1500 });
+  await page.getByLabel("Auswertung schließen").click();
+
+  await page.getByLabel("Folienwerkzeuge öffnen").click();
   await page.getByRole("button", { name: "Fragen auf dieser Folie" }).click();
   await expect(page.getByLabel("Fragen direkt auf der Folie")).toBeVisible();
   const studioSheetMotion = await page.evaluate(() => {

@@ -14,7 +14,7 @@ Der visuelle Fingerabdruck ist eine präzise technische Bühnenlogik: Folienflä
 
 ## Motion System
 
-Die verbindliche Detailquelle ist `docs/learnbuddy-motion-design-spec.md`. Die wichtigsten Regeln:
+Der verbindliche UI-Vertrag steht direkt in diesem Dokument und wird durch `npm run motion:contract` gegen die Produktoberflächen geprüft. Die wichtigsten Regeln:
 
 1. Große Wechsel nutzen Masken oder Sheet-Reveals, keine harten Mount-Sprünge.
 2. Inhalte erscheinen nach ihren Containern, Listen und Antworten gestaffelt.
@@ -23,6 +23,15 @@ Die verbindliche Detailquelle ist `docs/learnbuddy-motion-design-spec.md`. Die w
 5. Motion muss eine fachliche Beziehung klären: Quelle der Frage, Bezug zur Folie, geöffneter Zustand oder Ergebnisfeedback.
 6. Keine dauerhaften Pulses, keine Bounce-Animation, keine dekorativen Loops.
 7. `prefers-reduced-motion` ist Pflicht: reduzierte Bewegung muss dieselbe Struktur ohne kaputte Zwischenzustände zeigen.
+
+## Motion Acceptance
+
+- Keine Food-App-Optik.
+- Keine Hotspots, die dauerhaft pulsieren.
+- Playwright-Screenshots muessen zentrale Learn-, Live-, Studio- und Mobile-Zustaende belegen.
+- Die Startseite baut Card und Links gestaffelt auf.
+- Der Frage-Drawer oeffnet nicht hart.
+- Das Referentenstudio oeffnet Tools aus der unteren Steuerung.
 
 ## Tokens
 

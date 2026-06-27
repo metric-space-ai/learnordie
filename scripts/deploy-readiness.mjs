@@ -36,8 +36,13 @@ const PREVIEW_RUNTIME_ENV = [
 const ALTERNATIVE_ENV_GROUPS = [
   {
     id: "llm_proxy_key",
-    description: "CTOX/LearnBuddy Responses proxy key",
-    anyOf: ["LEARNBUDDY_LLM_PROXY_API_KEY", "CTOX_LLM_PROXY_API_KEY"]
+    description: "Learnordie Responses proxy key",
+    anyOf: ["LEARNORDIE_LLM_PROXY_API_KEY", "LEARNBUDDY_LLM_PROXY_API_KEY", "CTOX_LLM_PROXY_API_KEY"]
+  },
+  {
+    id: "minimax_upstream_key",
+    description: "MiniMax M3 upstream key for llm.learnordie.app",
+    anyOf: ["LEARNORDIE_MINIMAX_API_KEY", "MINIMAX_API_KEY"]
   },
   {
     id: "stt_provider_key",
@@ -118,7 +123,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNBUDDY_AI_PROVIDER: {
     provider: "ai",
-    purpose: "Use ctox-responses for the reused CTOX Responses proxy path."
+    purpose: "Use learnordie-responses for the llm.learnordie.app Responses proxy path."
   },
   LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: {
     provider: "ai",
@@ -164,6 +169,14 @@ const REQUIRED_ENV_GUIDANCE = {
     provider: "stt",
     purpose: "Mistral API key for Voxtral transcription."
   },
+  LEARNORDIE_MINIMAX_API_KEY: {
+    provider: "ai",
+    purpose: "Server-side MiniMax M3 upstream key for the llm.learnordie.app Responses proxy."
+  },
+  MINIMAX_API_KEY: {
+    provider: "ai",
+    purpose: "Server-side MiniMax M3 upstream key for the llm.learnordie.app Responses proxy."
+  },
   LEARNBUDDY_STT_API_KEY: {
     provider: "stt",
     purpose: "Server-side key for an OpenAI-compatible or self-hosted Voxtral/vLLM transcription endpoint."
@@ -177,6 +190,7 @@ const DEPLOYMENT_ENDPOINT_ENV = [
   "LEARNBUDDY_RESEND_BASE_URL",
   "RESEND_BASE_URL",
   "LEARNBUDDY_AI_BASE_URL",
+  "LEARNORDIE_LLM_PROXY_BASE_URL",
   "LEARNBUDDY_LLM_PROXY_BASE_URL",
   "CTOX_LLM_PROXY_BASE_URL",
   "LEARNBUDDY_EMBEDDING_BASE_URL",
@@ -193,8 +207,11 @@ const DEPLOYMENT_SECRET_ENV = [
   "LEARNBUDDY_WORKER_SECRET",
   "CRON_SECRET",
   "LEARNBUDDY_AI_API_KEY",
+  "LEARNORDIE_LLM_PROXY_API_KEY",
   "LEARNBUDDY_LLM_PROXY_API_KEY",
   "CTOX_LLM_PROXY_API_KEY",
+  "LEARNORDIE_MINIMAX_API_KEY",
+  "MINIMAX_API_KEY",
   "LEARNBUDDY_EMBEDDING_API_KEY",
   "LEARNBUDDY_OCR_API_KEY",
   "LEARNBUDDY_STT_API_KEY",
@@ -219,14 +236,6 @@ const DEPLOYMENT_PROVIDER_MODE_ENV = [
   "LEARNBUDDY_EMBEDDING_PROVIDER",
   "LEARNBUDDY_OCR_PROVIDER",
   "LEARNBUDDY_STT_PROVIDER"
-];
-const DEPLOYMENT_DOC_EXPECTATIONS = [
-  ["readiness_env_contract", "env_example_contract"],
-  ["verified_sender_example", "noreply@your-university.edu"],
-  ["operator_email_example", "referent@your-university.edu"],
-  ["provider_completion_groups", "completionGroups"],
-  ["full_gate_release_ready", "releaseReady=true"],
-  ["production_ready_guard", "productionReady=true"]
 ];
 const SELF_HOSTING_FILES = [
   {
@@ -312,18 +321,13 @@ const SELF_HOSTING_FILES = [
     ]
   },
   {
-    file: "docs/self-hosting.md",
+    file: ".env.example",
     expectations: [
-      ["compose_start_documented", "docker compose up --build"],
-      ["self_host_smoke_documented", "npm run smoke:self-host"],
-      ["backup_restore_smoke_documented", "npm run smoke:backup-restore"],
-      ["production_overrides_documented", "Produktions-Overrides"],
       ["production_host_example", "learnbuddy.your-university.edu"],
       ["storage_host_example", "object-storage.your-university.edu"],
       ["verified_sender_example", "noreply@your-university.edu"],
       ["operator_email_example", "referent@your-university.edu"],
-      ["worker_operation_documented", "npm run admin -- worker-once"],
-      ["retention_documented", "retention-cleanup"]
+      ["release_gate_self_host", "LEARNBUDDY_RELEASE_GATE_SELF_HOST=0"]
     ]
   }
 ];
@@ -745,6 +749,7 @@ function envRemediation(source, missing, missingGroups) {
 
 function providerForAlternativeGroup(id) {
   if (id === "llm_proxy_key") return "ai";
+  if (id === "minimax_upstream_key") return "ai";
   if (id === "stt_provider_key") return "stt";
   return "storage";
 }
@@ -873,6 +878,7 @@ function placeholderSecretReason(name, value) {
     "test_key",
     "_test_",
     "resend_test",
+    "learnordie_llm_mock",
     "ctox_llm_mock",
     "re_xxx",
     "xxx"
@@ -982,8 +988,8 @@ function providerModeRules() {
       ? ["preview"]
       : ["development", "local"];
   const aiProviderAllowed = selfHostOnly
-    ? ["ctox-responses", "ctox", "llm.ctox.dev", "responses", "openai-compatible", "http"]
-    : ["ctox-responses", "ctox", "llm.ctox.dev", "responses"];
+    ? ["learnordie-responses", "learnordie", "llm.learnordie.app", "ctox-responses", "ctox", "llm.ctox.dev", "responses", "openai-compatible", "http"]
+    : ["learnordie-responses", "learnordie", "llm.learnordie.app", "ctox-responses", "ctox", "llm.ctox.dev", "responses"];
   const storageProviderAllowed = selfHostOnly
     ? ["vercel", "vercel-blob", "blob", "http", "object-http", "external"]
     : ["vercel", "vercel-blob", "blob"];
@@ -1018,8 +1024,8 @@ function providerModeRules() {
       name: "LEARNBUDDY_AI_PROVIDER",
       allowed: aiProviderAllowed,
       reason: selfHostOnly
-        ? "Self-host targets may use CTOX Responses or an OpenAI-compatible provider."
-        : "Vercel targets must reuse the CTOX Responses proxy path."
+        ? "Self-host targets may use Learnordie Responses or an OpenAI-compatible provider."
+        : "Vercel targets must use the Learnordie Responses proxy path."
     },
     {
       name: "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
@@ -1169,26 +1175,6 @@ async function checkLocalConfigFiles() {
     }
   } catch (error) {
     fail("security_headers", error);
-  }
-
-  try {
-    const checklist = await readFile("docs/deployment-checklist.md", "utf8");
-    const missing = DEPLOYMENT_DOC_EXPECTATIONS
-      .filter(([, expected]) => !checklist.includes(expected))
-      .map(([id]) => id);
-    if (missing.length > 0) {
-      fail("deployment_docs", "Deployment checklist is missing required operational release guidance.", {
-        file: "docs/deployment-checklist.md",
-        missing
-      });
-    } else {
-      pass("deployment_docs", "Deployment checklist exists and includes required release guidance.", {
-        file: "docs/deployment-checklist.md",
-        expectations: DEPLOYMENT_DOC_EXPECTATIONS.map(([id]) => id)
-      });
-    }
-  } catch (error) {
-    fail("deployment_docs", error);
   }
 
   try {

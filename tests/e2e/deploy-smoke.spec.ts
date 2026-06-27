@@ -44,7 +44,8 @@ test("Deployed: Student tritt mit bestehendem Code bei und sieht das Postgres-Da
   await expect(page).toHaveURL(/\/join\//);
   await expect(page.getByRole("heading", { name: SERIES_TITLE })).toBeVisible();
 
-  await page.locator(".join-form input").fill("DeploySmoke");
+  await expect(page.locator(".join-form .pseudonym-suggestion")).toHaveCount(3);
+  await page.getByLabel("Eigenes Pseudonym").fill("DeploySmoke");
   await page.locator(".join-form button[type=submit]").click();
 
   await expect(page).toHaveURL(/\/student/);

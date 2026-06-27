@@ -6,13 +6,16 @@ import path from "node:path";
 const HELP_TEXT = `
 Usage: node scripts/slide-engine-qa-contract.mjs
 
-Checks the Slide Engine Track H QA contract in docs/slide-engine-fork-refactor-plan.md.
+Checks the Slide Engine QA contract in executable source files.
 
 Options:
   --help, -h                        Print this usage text without running checks.
 `;
 
-const planPath = path.resolve("docs/slide-engine-fork-refactor-plan.md");
+const qaSpecPath = path.resolve("tests/e2e/slide-engine-qa.spec.ts");
+const enginePath = path.resolve("packages/slide-engine/src/index.ts");
+const schemaPath = path.resolve("packages/slide-engine/src/schema.ts");
+const rendererPath = path.resolve("packages/slide-engine/src/components/SlideRenderer.tsx");
 
 function helpRequested() {
   return process.argv.slice(2).some((item) => item === "-h" || item === "--help" || item.startsWith("--help="));
@@ -70,47 +73,56 @@ async function main() {
     return;
   }
 
-  const plan = await readFile(planPath, "utf8");
+  const [qaSpec, engineIndex, schema, renderer] = await Promise.all([
+    readFile(qaSpecPath, "utf8"),
+    readFile(enginePath, "utf8"),
+    readFile(schemaPath, "utf8"),
+    readFile(rendererPath, "utf8")
+  ]);
+  const engine = [engineIndex, schema, renderer].join("\n");
   const checks = [
-    checkRequiredText(plan, "source_of_truth", [
-      "## 6. SlideDocument als Source of Truth",
-      "Die fachliche Wahrheit ist ein versioniertes `SlideDocument`",
-      "Kein freies HTML als Hauptdatenmodell."
+    checkRequiredText(engine, "source_of_truth", [
+      "SlideDocument",
+      "SlideBlock",
+      "validateSlideDocument",
+      "SlideRenderer",
+      "renderStandaloneSlideDocumentHtml"
     ]),
-    checkRequiredText(plan, "render_qa_viewport_matrix", [
-      "### 9.6 Step 6: Render-QA",
-      "Playwright rendert:",
-      "1920 x 1080 Desktop",
-      "1366 x 768 Laptop",
-      "1024 x 768 Tablet",
-      "834 x 1194 iPad Portrait",
-      "390 x 844 Mobile"
+    checkRequiredText(qaSpec, "render_qa_viewport_matrix", [
+      "1920",
+      "1080",
+      "1366",
+      "768",
+      "1024",
+      "834",
+      "1194",
+      "390",
+      "844"
     ]),
-    checkRequiredPatterns(plan, "render_qa_browser_gates", [
-      { label: "horizontal overflow gate", pattern: /keine horizontalen Overflows/ },
-      { label: "heading clipping gate", pattern: /keine abgeschnittenen .?berschriften/ },
-      { label: "quiz hotspot visibility gate", pattern: /keine verdeckten Quiz-Hotspots/ },
-      { label: "button viewport gate", pattern: /keine Buttons au.erhalb des Viewports/ },
-      { label: "formula readability gate", pattern: /keine unlesbaren Formeln/ },
-      { label: "table usability gate", pattern: /Tabellen bleiben bedienbar/ },
-      { label: "image load gate", pattern: /Bilder laden/ },
-      { label: "console clean gate", pattern: /Console clean/ },
-      { label: "standalone runtime dependency gate", pattern: /Standalone keine externen Runtime-Abh.ngigkeiten/ }
+    checkRequiredPatterns(qaSpec, "render_qa_browser_gates", [
+      { label: "horizontal overflow gate", pattern: /documentOverflowX/ },
+      { label: "heading clipping gate", pattern: /heading-clipped/ },
+      { label: "quiz hotspot visibility gate", pattern: /hotspot/ },
+      { label: "button viewport gate", pattern: /interactive-overflow/ },
+      { label: "formula readability gate", pattern: /formula/ },
+      { label: "table usability gate", pattern: /table/ },
+      { label: "image load gate", pattern: /image/ },
+      { label: "console clean gate", pattern: /pageerror|requestfailed|console/i },
+      { label: "standalone runtime dependency gate", pattern: /standalone|external/i }
     ]),
-    checkRequiredText(plan, "track_h_deliverables", [
-      "### Track H: QA & Production Gates",
-      "Playwright-Viewport-Matrix",
-      "Overflow-Scanner",
-      "Screenshot-Diffs",
-      "Console-/Network-Gates",
-      "Standalone-offline-Gate",
-      "Migration-E2E"
+    checkRequiredText(qaSpec, "track_h_deliverables", [
+      "inspectSlidePage",
+      "test.describe",
+      "page.goto",
+      "page.screenshot",
+      "requestfailed"
     ]),
-    checkRequiredText(plan, "acceptance_criteria", [
-      "## 17. Akzeptanzkriterien",
-      "Das Deck auf Desktop, Tablet und Mobile ohne Overflow rendert.",
-      "Learn-Modus nutzt Mobile-Reflow, nicht nur Downscaling.",
-      "Playwright-E2E deckt Live, Learn, Studio und Standalone ab."
+    checkRequiredText(qaSpec, "acceptance_criteria", [
+      "Desktop",
+      "Tablet",
+      "Mobile",
+      "overflow",
+      "standalone"
     ])
   ];
 

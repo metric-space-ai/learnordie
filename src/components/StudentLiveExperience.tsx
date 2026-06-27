@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { seriesIdFromTitle } from "@/lib/series";
+import { getOrCreateStudentKey, saveProfile } from "@/lib/student-client";
+import { suggestPseudonyms } from "@/lib/student-pseudonym";
 import type { LeaderboardEntry, Lecture } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
 import { QuizDrawer } from "./QuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
+import { PseudonymChooser } from "./student/PseudonymChooser";
 
 type QuestionOrigin = "control" | "hotspot" | "space";
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -32,18 +36,21 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [chatFeedback, setChatFeedback] = useState("");
   const [feedback, setFeedback] = useState("");
   const [anonymousKey, setAnonymousKey] = useState("");
+  const [answeredOnce, setAnsweredOnce] = useState(false);
+  const [identitySaved, setIdentitySaved] = useState(false);
+  const [identitySaving, setIdentitySaving] = useState(false);
+  const [identityMessage, setIdentityMessage] = useState("");
 
   useEffect(() => {
     const saved = window.localStorage.getItem(`lb_pseudonym_${lecture.publicToken}`);
-    const savedAnonymousKey =
-      window.localStorage.getItem("lb_student_key") ||
-      window.localStorage.getItem(`lb_anonymous_${lecture.publicToken}`) ||
-      crypto.randomUUID();
+    const savedAnonymousKey = getOrCreateStudentKey();
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, savedAnonymousKey);
     setAnonymousKey(savedAnonymousKey);
     if (saved) {
       setPseudonym(saved);
       setJoined(true);
+    } else {
+      setPseudonym(suggestPseudonyms(lecture.publicToken)[0]);
     }
   }, [lecture.publicToken]);
 
@@ -68,7 +75,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
 
   async function recordEvent(eventType: string, payload: Record<string, unknown>, alias = pseudonym) {
-    const key = anonymousKey || window.localStorage.getItem("lb_student_key") || window.localStorage.getItem(`lb_anonymous_${lecture.publicToken}`) || crypto.randomUUID();
+    const key = anonymousKey || getOrCreateStudentKey();
+    window.localStorage.setItem("lb_student_key", key);
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, key);
     if (!anonymousKey) setAnonymousKey(key);
 
@@ -88,7 +96,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   }
 
   async function loadLeaderboard() {
-    const key = anonymousKey || window.localStorage.getItem("lb_student_key") || window.localStorage.getItem(`lb_anonymous_${lecture.publicToken}`) || crypto.randomUUID();
+    const key = anonymousKey || getOrCreateStudentKey();
+    window.localStorage.setItem("lb_student_key", key);
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, key);
     if (!anonymousKey) setAnonymousKey(key);
 
@@ -106,7 +115,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
 
   function join() {
     if (joining) return;
-    const clean = pseudonym.trim() || "Pseudonym";
+    const clean = pseudonym.trim() || suggestPseudonyms(lecture.publicToken)[0];
+    getOrCreateStudentKey();
     window.localStorage.setItem(`lb_pseudonym_${lecture.publicToken}`, clean);
     setPseudonym(clean);
     void recordEvent("student_joined", { mode: "live" }, clean);
@@ -120,12 +130,46 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     window.setTimeout(() => setJoined(true), 700);
   }
 
+  async function saveLiveIdentity() {
+    if (identitySaving) return;
+    const clean = pseudonym.trim() || suggestPseudonyms(lecture.publicToken)[0];
+    setIdentitySaving(true);
+    setIdentityMessage("");
+    const profile = await saveProfile(clean);
+    if (!profile) {
+      setIdentityMessage("Konnte gerade nicht sichern. Live-Teilnahme bleibt aktiv.");
+      setIdentitySaving(false);
+      return;
+    }
+
+    try {
+      await fetch("/api/student/enrollments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          seriesId: seriesIdFromTitle(lecture.seriesTitle),
+          seriesTitle: lecture.seriesTitle,
+          lectureId: lecture.id,
+          source: "direct_live_link"
+        })
+      });
+      setIdentitySaved(true);
+      setIdentityMessage("Pseudonym gesichert. Die Vorlesung liegt jetzt in deinem Dashboard.");
+    } catch {
+      setIdentitySaved(true);
+      setIdentityMessage("Pseudonym gesichert. Dashboard-Zuordnung wird später erneut versucht.");
+    } finally {
+      setIdentitySaving(false);
+    }
+  }
+
   async function submitChatQuestion() {
     const text = chatText.trim();
     if (!text) return;
     setChatSending(true);
     setChatFeedback("");
-    const key = anonymousKey || window.localStorage.getItem("lb_student_key") || window.localStorage.getItem(`lb_anonymous_${lecture.publicToken}`) || crypto.randomUUID();
+    const key = anonymousKey || getOrCreateStudentKey();
+    window.localStorage.setItem("lb_student_key", key);
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, key);
     if (!anonymousKey) setAnonymousKey(key);
 
@@ -156,13 +200,14 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         <section className="mode-card student-gate-card lb-enter-sheet" data-joining={joining ? "true" : "false"}>
           <p className="eyebrow">Live Student Modus</p>
           <h1>{lecture.seriesTitle}: {lecture.title}</h1>
-          <p>Gib ein Pseudonym ein. Bitte keinen Klarnamen verwenden.</p>
+          <p>Du kannst sofort live teilnehmen. Dein Pseudonym ist nur die Anzeige; Punkte hängen an diesem Browser.</p>
           <div className="pseudonym-form">
-            <input
+            <PseudonymChooser
               value={pseudonym}
-              onChange={(event) => setPseudonym(event.target.value)}
-              placeholder="z. B. LagerProfi42"
-              suppressHydrationWarning
+              onChange={setPseudonym}
+              seed={lecture.publicToken}
+              disabled={joining}
+              label="Pseudonym für diese Runde"
             />
             <button className="primary-button" type="button" onClick={join} disabled={joining}>Teilnehmen</button>
           </div>
@@ -254,6 +299,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
               const selectedAnswer = question.answers.find((answer) => answer.key === selected);
               const correctAnswer = question.answers.find((answer) => answer.correct);
               setFeedback(correct ? "Antwort gespeichert: richtig." : "Antwort gespeichert: bitte Erklärung ansehen.");
+              setAnsweredOnce(true);
               void (async () => {
                 await recordEvent("answer_selected", {
                   mode: "live",
@@ -275,6 +321,26 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         )}
       </Presence>
       {feedback && <div className="toast-inline" aria-live="polite">{feedback}</div>}
+      {answeredOnce && (!identitySaved || identityMessage) && (
+        <aside className="identity-save-nudge lb-enter-panel" aria-label="Pseudonym sichern">
+          <div>
+            <strong>Pseudonym sichern?</strong>
+            <p>
+              {identitySaved
+                ? "Dieses Pseudonym ist jetzt für dein Dashboard gesichert."
+                : "Deine Punkte sind jetzt diesem Browser zugeordnet. Sichere das Pseudonym, damit die Vorlesung auch im Dashboard erscheint."}
+            </p>
+            {identityMessage && <p className="form-note" aria-live="polite">{identityMessage}</p>}
+          </div>
+          {identitySaved ? (
+            <a className="plain-button small" href="/student">Dashboard</a>
+          ) : (
+            <button className="plain-button small" type="button" onClick={saveLiveIdentity} disabled={identitySaving}>
+              {identitySaving ? "Sichert ..." : "Sichern"}
+            </button>
+          )}
+        </aside>
+      )}
       <Presence show={lecture.leaderboardEnabled && leaderboardOpen}>
         {(motionState) => (
           <LeaderboardModal

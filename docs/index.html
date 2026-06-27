@@ -3,89 +3,109 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>learnordie.app - Lernen im Norden</title>
+    <title>learnordie.app | Lernen im Norden</title>
     <meta
       name="description"
-      content="learnordie.app erweitert technische Vorlesungen um Live-Fragen, Lernrunden, KI-Erklärungen, Analytics und Standalone-Export."
+      content="learnordie.app erweitert technische Vorlesungen um Live-Fragen, Learn-Modus, KI-Erklärungen, anonyme Analytics und Standalone-Export."
     >
     <style>
       :root {
         color-scheme: light;
-        --ink: #061724;
-        --muted: #516675;
-        --line: #bfd1dc;
-        --paper: #f4f8fb;
-        --panel: #ffffff;
-        --blue: #247ba0;
-        --amber: #d49322;
-        --green: #397f66;
-        --night: #132333;
+        --ink: oklch(14% 0.026 236);
+        --muted: oklch(42% 0.032 236);
+        --soft: oklch(55% 0.032 236);
+        --line: oklch(82% 0.026 230);
+        --line-strong: oklch(73% 0.035 230);
+        --paper: oklch(96% 0.012 230);
+        --panel: oklch(99% 0.006 230);
+        --panel-soft: oklch(94% 0.016 230);
+        --accent: oklch(46% 0.09 205);
+        --accent-soft: oklch(88% 0.047 196);
+        --amber: oklch(70% 0.13 76);
+        --green: oklch(53% 0.08 158);
+        --north: oklch(71% 0.11 178);
+        --night: oklch(11% 0.028 236);
+        --shadow: 0 28px 90px oklch(15% 0.035 236 / 0.14);
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html {
+        background: var(--night);
+      }
+
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: var(--paper);
+        min-width: 320px;
+        background:
+          linear-gradient(90deg, oklch(72% 0.024 230 / 0.09) 1px, transparent 1px),
+          linear-gradient(180deg, oklch(72% 0.024 230 / 0.09) 1px, transparent 1px),
+          var(--paper);
+        background-size: 58px 58px, 58px 58px, auto;
         color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         line-height: 1.5;
       }
 
-      main {
-        min-height: 100vh;
+      a {
+        color: inherit;
+      }
+
+      .page {
+        min-height: 100svh;
       }
 
       .hero {
-        min-height: 82vh;
+        min-height: min(850px, 100svh);
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
-        gap: clamp(32px, 6vw, 96px);
+        grid-template-columns: minmax(0, 0.95fr) minmax(340px, 0.72fr);
+        gap: clamp(34px, 6vw, 112px);
         align-items: center;
-        padding: clamp(28px, 5vw, 72px);
+        padding: clamp(28px, 5vw, 74px);
         border-bottom: 1px solid var(--line);
       }
 
       .brand {
-        display: inline-flex;
+        display: inline-grid;
+        grid-template-columns: 46px auto;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 42px;
-        font-weight: 800;
+        gap: 13px;
+        margin-bottom: clamp(48px, 8vh, 92px);
+        text-decoration: none;
       }
 
       .mark {
         position: relative;
+        display: grid;
         width: 46px;
-        height: 38px;
-        border-radius: 12px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: #eef4f5;
-        box-shadow: inset 0 0 0 1px var(--line);
+        height: 40px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: var(--panel);
+        box-shadow: 0 12px 34px oklch(20% 0.03 236 / 0.1);
       }
 
       .loop {
         position: relative;
         width: 24px;
         height: 24px;
+        border: 2px solid var(--accent);
+        border-right-color: oklch(46% 0.09 205 / 0.28);
         border-radius: 999px;
-        border: 2px solid #2f6f8f;
-        border-right-color: rgba(47, 111, 143, 0.32);
         transform: rotate(-18deg);
       }
 
-      .loop:after {
+      .loop::after {
         content: "";
         position: absolute;
         left: 4px;
         bottom: 3px;
         width: 11px;
         height: 5px;
-        border-bottom: 2px solid #397f66;
+        border-bottom: 2px solid var(--green);
         border-radius: 0 0 12px 12px;
         transform: rotate(12deg);
       }
@@ -93,196 +113,383 @@
       .north-dot {
         position: absolute;
         top: 7px;
-        right: 10px;
-        width: 5px;
-        height: 5px;
+        right: 9px;
+        width: 6px;
+        height: 6px;
         border-radius: 999px;
-        background: #7ed6c1;
-        box-shadow: 0 0 0 4px rgba(126, 214, 193, 0.18);
+        background: var(--north);
+        box-shadow: 0 0 0 4px oklch(71% 0.11 178 / 0.18);
       }
 
       .wordmark {
-        color: var(--night);
+        display: block;
+        color: var(--ink);
+        font-size: 18px;
+        font-weight: 900;
+        letter-spacing: 0;
       }
 
       .wordmark .nord {
-        color: #2f6f8f;
-        font-weight: 900;
-      }
-
-      .wordmark .dot {
-        color: var(--muted);
+        color: var(--accent);
       }
 
       .brand small {
         display: block;
-        margin-top: 2px;
+        margin-top: 1px;
         color: var(--muted);
         font-size: 12px;
+        font-weight: 820;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
       h1 {
-        max-width: 980px;
+        max-width: 900px;
         margin: 0;
-        font-size: clamp(48px, 7vw, 112px);
+        font-size: clamp(48px, 7.4vw, 116px);
         line-height: 0.94;
         letter-spacing: 0;
       }
 
       .lead {
-        max-width: 760px;
-        margin: 32px 0 0;
+        max-width: 720px;
+        margin: 34px 0 0;
         color: var(--muted);
         font-size: clamp(20px, 2vw, 30px);
+        line-height: 1.34;
+        font-weight: 620;
       }
 
       .actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 14px;
+        gap: 12px;
         margin-top: 42px;
       }
 
-      a.button {
-        display: inline-flex;
+      .button {
+        display: inline-grid;
         min-height: 48px;
-        align-items: center;
-        justify-content: center;
+        place-items: center;
         padding: 0 18px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--line-strong);
         border-radius: 10px;
-        color: var(--ink);
         background: var(--panel);
+        color: var(--ink);
+        font-weight: 850;
         text-decoration: none;
-        font-weight: 800;
+        transition:
+          border-color 180ms ease-out,
+          background 180ms ease-out,
+          color 180ms ease-out,
+          transform 180ms ease-out;
       }
 
-      a.button.primary {
-        color: #fff;
-        border-color: #0d516a;
-        background: #0d516a;
+      .button:hover,
+      .button:focus-visible {
+        border-color: var(--accent);
+        transform: translateY(-1px);
       }
 
-      .slide {
-        aspect-ratio: 16 / 10;
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        background:
-          linear-gradient(90deg, rgba(36, 123, 160, 0.08) 1px, transparent 1px),
-          linear-gradient(180deg, rgba(36, 123, 160, 0.08) 1px, transparent 1px),
-          #fbfdff;
-        background-size: 56px 56px;
-        padding: clamp(22px, 3vw, 44px);
-        box-shadow: 0 26px 80px rgba(6, 23, 36, 0.12);
-        display: grid;
-        align-content: space-between;
+      .button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: oklch(98% 0.006 230);
       }
 
-      .slide small,
-      .label {
-        color: var(--muted);
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
+      .button.primary:hover,
+      .button.primary:focus-visible {
+        background: oklch(39% 0.09 205);
       }
 
-      .slide h2 {
-        margin: 24px 0;
-        font-size: clamp(32px, 4vw, 64px);
-        line-height: 1;
-      }
-
-      .diagram {
-        justify-self: end;
-        width: min(52%, 340px);
-        height: 126px;
-        border: 5px solid #6c8492;
-        border-radius: 60px;
+      .slide-card {
         position: relative;
-        background: #d8e6ee;
+        display: grid;
+        min-height: 480px;
+        align-content: space-between;
+        padding: clamp(26px, 3vw, 46px);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background:
+          linear-gradient(90deg, oklch(72% 0.024 230 / 0.13) 1px, transparent 1px),
+          linear-gradient(180deg, oklch(72% 0.024 230 / 0.13) 1px, transparent 1px),
+          var(--panel);
+        background-size: 56px 56px, 56px 56px, auto;
+        box-shadow: var(--shadow);
+        overflow: hidden;
       }
 
-      .diagram:before {
+      .slide-card::before,
+      .slide-card::after {
         content: "";
         position: absolute;
-        left: 26%;
-        top: 16%;
-        width: 34%;
-        aspect-ratio: 1;
-        border-radius: 50%;
-        border: 8px solid #334a55;
-        background: #f8fbfd;
+        right: 34px;
+        bottom: 34px;
+        height: 2px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, var(--amber), var(--accent));
       }
 
-      .diagram:after {
+      .slide-card::before {
+        width: 290px;
+        opacity: 0.34;
+      }
+
+      .slide-card::after {
+        width: 92px;
+        bottom: 44px;
+        opacity: 0.82;
+      }
+
+      .deck-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .deck-title {
+        max-width: 580px;
+        margin: 52px 0 26px;
+        font-size: clamp(42px, 5vw, 72px);
+        line-height: 0.98;
+      }
+
+      .deck-copy {
+        max-width: 560px;
+        margin: 0;
+        color: var(--ink);
+        font-size: 20px;
+        line-height: 1.42;
+      }
+
+      .bearing {
+        position: relative;
+        justify-self: end;
+        width: min(55%, 340px);
+        height: 126px;
+        margin-top: 44px;
+        border: 5px solid oklch(55% 0.045 230);
+        border-radius: 70px;
+        background: oklch(88% 0.03 220);
+      }
+
+      .bearing::before {
         content: "";
         position: absolute;
         left: 28%;
+        top: 17%;
+        width: 32%;
+        aspect-ratio: 1;
+        border: 8px solid oklch(31% 0.043 230);
+        border-radius: 50%;
+        background: var(--panel);
+      }
+
+      .bearing::after {
+        content: "";
+        position: absolute;
+        left: 29%;
         top: 48%;
-        width: 42%;
+        width: 41%;
         height: 42%;
         border-bottom: 13px solid var(--amber);
         border-radius: 0 0 90px 90px;
         transform: rotate(-10deg);
       }
 
-      .sections {
-        padding: clamp(36px, 5vw, 72px);
+      .content {
+        padding: clamp(38px, 6vw, 84px) clamp(28px, 5vw, 74px) 70px;
+      }
+
+      .screenshots {
         display: grid;
-        gap: 54px;
+        gap: 18px;
+        padding: clamp(34px, 5vw, 74px);
+        border-bottom: 1px solid var(--line);
+        background: oklch(98% 0.007 230 / 0.66);
+      }
+
+      .screenshots h2 {
+        max-width: 860px;
+        margin: 0;
+        font-size: clamp(34px, 4.4vw, 70px);
+        line-height: 0.98;
+      }
+
+      .screenshots p {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 19px;
+        font-weight: 620;
+      }
+
+      .shot-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .shot {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        box-shadow: 0 24px 70px oklch(15% 0.035 236 / 0.12);
+      }
+
+      .shot.mobile img {
+        width: min(360px, 100%);
+      }
+
+      .shot figcaption {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 780;
       }
 
       .section {
         display: grid;
-        grid-template-columns: minmax(220px, 0.36fr) minmax(0, 1fr);
-        gap: clamp(24px, 5vw, 72px);
-        align-items: start;
+        grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
+        gap: clamp(28px, 5vw, 78px);
+        padding: 38px 0;
         border-top: 1px solid var(--line);
-        padding-top: 34px;
       }
 
       .section h2 {
         margin: 0;
-        font-size: clamp(28px, 3vw, 46px);
-        line-height: 1.05;
+        max-width: 370px;
+        font-size: clamp(29px, 3vw, 48px);
+        line-height: 1.04;
       }
 
-      .grid {
+      .section-body {
+        display: grid;
+        gap: 22px;
+        max-width: 940px;
+      }
+
+      .section-body > p {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 19px;
+      }
+
+      .flow {
+        display: grid;
+        gap: 11px;
+        counter-reset: flow;
+      }
+
+      .flow li {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+        padding: 14px 0;
+        border-top: 1px solid oklch(84% 0.026 230 / 0.72);
+        color: var(--muted);
+        list-style: none;
+      }
+
+      .flow li::before {
+        counter-increment: flow;
+        content: counter(flow);
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        color: var(--accent);
+        font-weight: 920;
+      }
+
+      .flow strong {
+        display: block;
+        color: var(--ink);
+      }
+
+      .facts {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .item {
-        min-height: 150px;
+        gap: 1px;
         border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 20px;
-        background: rgba(255, 255, 255, 0.64);
+        border-radius: 18px;
+        background: var(--line);
+        overflow: hidden;
       }
 
-      .item strong {
+      .fact {
+        min-height: 150px;
+        padding: 22px;
+        background: var(--panel);
+      }
+
+      .fact strong {
         display: block;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
         font-size: 18px;
       }
 
-      .item p,
-      .section p {
-        margin: 0;
+      .fact span {
         color: var(--muted);
+      }
+
+      .quality {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+      }
+
+      .quality li {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 12px 0;
+        border-top: 1px solid oklch(84% 0.026 230 / 0.72);
+        color: var(--muted);
+        list-style: none;
+      }
+
+      .quality strong {
+        color: var(--ink);
       }
 
       footer {
-        padding: 32px clamp(36px, 5vw, 72px) 56px;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 34px clamp(28px, 5vw, 74px) 58px;
+        border-top: 1px solid var(--line);
         color: var(--muted);
       }
 
-      @media (max-width: 900px) {
+      footer a {
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      @media (max-width: 920px) {
         .hero,
-        .section {
+        .section,
+        .shot-grid {
           grid-template-columns: 1fr;
         }
 
@@ -290,97 +497,217 @@
           min-height: auto;
         }
 
-        .grid {
+        .brand {
+          margin-bottom: 54px;
+        }
+
+        .slide-card {
+          min-height: 420px;
+        }
+
+        .facts {
           grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .hero {
+          padding: 24px 18px 34px;
+        }
+
+        .content {
+          padding: 24px 18px 44px;
+        }
+
+        .screenshots {
+          padding: 28px 18px 38px;
+        }
+
+        h1 {
+          font-size: 45px;
+        }
+
+        .lead {
+          font-size: 19px;
+        }
+
+        .actions {
+          display: grid;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .slide-card {
+          min-height: 370px;
+          padding: 22px;
+        }
+
+        .deck-title {
+          margin-top: 36px;
+          font-size: 38px;
+        }
+
+        .deck-copy {
+          font-size: 17px;
+        }
+
+        .bearing {
+          width: 82%;
+          height: 102px;
+        }
+
+        .quality li {
+          display: grid;
+          gap: 4px;
         }
       }
     </style>
   </head>
   <body>
-    <main>
-      <section class="hero">
+    <main class="page">
+      <section class="hero" aria-label="learnordie.app Projekt">
         <div>
-          <div class="brand">
+          <a class="brand" href="https://learnordie.app" aria-label="learnordie.app öffnen">
             <span class="mark" aria-hidden="true">
               <span class="loop"></span>
               <span class="north-dot"></span>
             </span>
             <span>
-              <span class="wordmark">lear<span class="nord">nord</span>ie<span class="dot">.app</span></span>
-              <small>Lernen im Norden. Lehre im Loop.</small>
+              <span class="wordmark">lear<span class="nord">nord</span>ie.app</span>
+              <small>Lernen im Norden</small>
             </span>
-          </div>
-          <h1>Technische Vorlesungen als Lernrunde.</h1>
+          </a>
+          <h1>Vorlesungen werden Lernrunden.</h1>
           <p class="lead">
-            Ein Link reicht. Studierende sammeln Punkte, sehen ihren Lernstand und bleiben
-            bis zum Prüfungstag im Stoff. Dozierende steuern alles direkt am Foliendeck.
+            Eine Folienbühne für technische Lehre: Live-Fragen, KI-Erklärungen, anonymes Lernfeedback
+            und ein Learn-Modus, der bis zum Prüfungstag weiterarbeitet.
           </p>
-          <div class="actions">
+          <nav class="actions" aria-label="Projektlinks">
             <a class="button primary" href="https://learnordie.app">App öffnen</a>
-            <a class="button" href="../">Repository ansehen</a>
-            <a class="button" href="learnbuddy-parallel-product-plan.md">Produktplan</a>
-            <a class="button" href="deployment-checklist.md">Deployment</a>
-          </div>
+            <a class="button" href="https://github.com/metric-space-ai/learnordie">Repository</a>
+            <a class="button" href="https://github.com/metric-space-ai/learnordie#readme">README</a>
+          </nav>
         </div>
-        <div class="slide" aria-label="learnordie.app Folienvorschau">
+
+        <article class="slide-card" aria-label="Foliendeck Vorschau">
           <div>
-            <small>Maschinenelemente I</small>
-            <h2>Hydrodynamische Gleitlagerung</h2>
-            <p>Ein tragender Schmierfilm entsteht durch Relativbewegung und einen keilförmigen Spalt.</p>
+            <div class="deck-meta">
+              <span>Maschinenelemente I</span>
+              <span>1 / 3</span>
+            </div>
+            <h2 class="deck-title">Hydrodynamische Gleitlagerung</h2>
+            <p class="deck-copy">
+              Fragen, Quellen und Analytics bleiben an der Folie verankert, statt in einem Admin-Dashboard zu verschwinden.
+            </p>
           </div>
-          <div class="diagram" aria-hidden="true"></div>
+          <div class="bearing" aria-hidden="true"></div>
+        </article>
+      </section>
+
+      <section class="screenshots" aria-labelledby="screenshots-title">
+        <h2 id="screenshots-title">Die App ist das Produkt, nicht ein Demo-Slide.</h2>
+        <p>
+          Student Dashboard, Learn-Modus, mobile Frage und Referentenstudio sind die Kernflächen.
+          Die Folie bleibt der Anker; Fragen, KI, Quellen und Analytics öffnen kontextnah.
+        </p>
+        <div class="shot-grid">
+          <figure class="shot">
+            <img src="assets/student-dashboard.png" alt="Student Dashboard mit Vorlesungsreihe, Terminen und Readiness">
+            <figcaption>Student Dashboard: Vorlesungen, Live-/Learn-Zustand und Prüfungsreadiness.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="assets/learn-question-desktop.png" alt="Learn-Modus mit Folie und geöffneter Quizfrage">
+            <figcaption>Learn-Modus: Frage-Drawer und Folie bleiben räumlich verbunden.</figcaption>
+          </figure>
+          <figure class="shot mobile">
+            <img src="assets/learn-question-mobile.png" alt="Mobile Ansicht des Learn-Modus mit Frage">
+            <figcaption>Mobile: Frage, Antwort und Timer ohne abgeschnittene Inhalte.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="assets/lecturer-studio.png" alt="Referentenstudio mit Foliendeck und Werkzeugen">
+            <figcaption>Referentenstudio: Foliennahe Bearbeitung statt Formularliste.</figcaption>
+          </figure>
         </div>
       </section>
 
-      <section class="sections">
-        <div class="section">
-          <h2>Für Studierende</h2>
-          <div class="grid">
-            <article class="item">
-              <strong>Link reicht</strong>
-              <p>Teilnahme mit Code oder Einladung, ohne Account-Hürde und mit Pseudonym statt Klarname.</p>
-            </article>
-            <article class="item">
-              <strong>Live Feedback</strong>
-              <p>Multiple-Choice-Fragen erscheinen als Drawer, Feedback kommt sofort nach der Auswahl.</p>
-            </article>
-            <article class="item">
-              <strong>Lernrunden</strong>
-              <p>Nach der Vorlesung werden Fragen, Folien, KI-Hilfe und Levelstand im eigenen Dashboard verfügbar.</p>
-            </article>
+      <section class="content">
+        <section class="section" aria-labelledby="student-flow">
+          <h2 id="student-flow">Für Studierende ohne Hürde.</h2>
+          <div class="section-body">
+            <p>
+              Ein Link oder ein Code reicht. Studierende wählen ein Pseudonym, beantworten Live-Fragen und sehen später im Learn-Modus, wo sie stehen.
+            </p>
+            <ol class="flow">
+              <li><span><strong>Teilnehmen.</strong> Link öffnen, Pseudonym wählen, Live-Frage beantworten.</span></li>
+              <li><span><strong>Verstehen.</strong> Feedback kommt sofort. KI-Erklärungen bleiben auf den aktuellen Foliensatz bezogen.</span></li>
+              <li><span><strong>Weiterlernen.</strong> Vergangene Veranstaltungen öffnen im Learn-Modus mit Hotspots, Frageleveln und Readiness.</span></li>
+            </ol>
           </div>
-        </div>
+        </section>
 
-        <div class="section">
-          <h2>Für Dozierende</h2>
-          <div class="grid">
-            <article class="item">
-              <strong>Studio statt Adminliste</strong>
-              <p>Material, Folien, Fragen, Transcript und Evaluation bleiben am Vorlesungsobjekt.</p>
-            </article>
-            <article class="item">
-              <strong>Join Codes</strong>
-              <p>Kurzcodes wie ME1-GL-2026 verbinden Studierende mit der richtigen Vorlesungsreihe.</p>
-            </article>
-            <article class="item">
-              <strong>Qualitätsregelkreis</strong>
-              <p>Anonyme Analytics zeigen, welche Themen verstanden wurden und wo Nacharbeit sinnvoll ist.</p>
-            </article>
+        <section class="section" aria-labelledby="lecturer-flow">
+          <h2 id="lecturer-flow">Für Dozierende direkt am Deck.</h2>
+          <div class="section-body">
+            <p>
+              Das Studio behandelt die Folie als Arbeitsobjekt. Material, Fragen, Evaluation, Transcript und Lernsignale öffnen kontextnah am Slide.
+            </p>
+            <div class="facts">
+              <div class="fact">
+                <strong>Material</strong>
+                <span>PowerPoint, PDF, URL, Notizen und Audio werden als Quellen und Assets organisiert.</span>
+              </div>
+              <div class="fact">
+                <strong>Fragen</strong>
+                <span>Question Families decken `4.0` bis `1.0` ab, mit Punkten, Feedback und Review.</span>
+              </div>
+              <div class="fact">
+                <strong>Export</strong>
+                <span>Standalone-Archive halten Folien, Audio und Fragen langfristig offline nutzbar.</span>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="section">
-          <h2>Production Gates</h2>
-          <p>
-            learnordie.app nutzt TypeScript, ESLint, Motion-Verträge, Playwright-Clean-Profile-Flows,
-            Provider-Smokes, Backup/Restore-Smokes und Deployment-Readiness-Checks. Production-ready
-            bedeutet echte Browserflows, nicht nur ein erfolgreicher Build.
-          </p>
-        </div>
+        <section class="section" aria-labelledby="architecture">
+          <h2 id="architecture">Gebaut für Vercel, Neon und späteres Self-Hosting.</h2>
+          <div class="section-body">
+            <p>
+              Next.js, Postgres, Resend, private Workspace-Pakete für Slide Engine und Agent Runtime, plus ein serverseitiger Responses-Proxy für KI-Funktionen.
+            </p>
+            <ul class="quality">
+              <li><strong>App</strong><span>Next.js App Router, React, TypeScript</span></li>
+              <li><strong>Daten</strong><span>Postgres mit Drizzle, Neon als Primärziel</span></li>
+              <li><strong>KI</strong><span>llm.learnordie.app proxy, MiniMax-M3 upstream, keine Browser-Keys</span></li>
+              <li><strong>Lehre</strong><span>SlideDocument Engine, Learn Mode, Live Mode, Standalone Export</span></li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="quality">
+          <h2 id="quality">Release heißt Browser-Beweis.</h2>
+          <div class="section-body">
+            <p>
+              Production-ready bedeutet nicht nur Build grün. Die App wird über reale Playwright-Flows mit sauberem Browserprofil geprüft.
+            </p>
+            <ul class="quality">
+              <li><strong>50/50 E2E</strong><span>Login, Student Live, Learn, Studio, Slide Engine, Export, Guards</span></li>
+              <li><strong>Motion Contract</strong><span>Route-Cover, Drawer, Shared Elements und Studio Sheets</span></li>
+              <li><strong>Readiness</strong><span>Deployment-, Provider-, Storage-, Worker- und Backup-Smokes</span></li>
+            </ul>
+            <div class="actions">
+              <a class="button primary" href="https://github.com/metric-space-ai/learnordie">Code ansehen</a>
+              <a class="button" href="https://learnordie.app">App öffnen</a>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
+
     <footer>
-      learnordie.app - Next.js, Postgres, Vercel, Neon, Resend. Self-hosting ist als Architekturpfad vorgesehen.
+      <span>learnordie.app, eine ruhige technische Arbeitsbühne für Vorlesungen.</span>
+      <span><a href="https://github.com/metric-space-ai/learnordie">Repository</a> · <a href="https://learnordie.app">App</a></span>
     </footer>
   </body>
 </html>
