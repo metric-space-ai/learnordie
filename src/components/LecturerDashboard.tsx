@@ -10,7 +10,11 @@ import {
   MIN_LEARN_QUESTION_DENSITY,
   normalizeLearnQuestionDensity
 } from "@/lib/learn-settings";
-import { animateStudioSlideSharedElement } from "@/lib/motion";
+import {
+  animateStudioInsightSharedElement,
+  animateStudioSlideSharedElement,
+  animateStudioToolSharedElement
+} from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
 import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
@@ -57,6 +61,8 @@ type WorkspaceTool = "presentation" | "evaluation" | "questions" | "materials" |
 type PlanEditor = "status" | "live" | "exam" | "learn" | "budget" | "leaderboard" | null;
 type SourceComposer = "file" | "url" | "notes" | null;
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
+type SharedStudioTool = Extract<WorkspaceTool, "materials" | "analytics">;
+type StudioToolMotion = { tool: SharedStudioTool; first: DOMRect; label: string };
 
 const workspaceTools: Array<{ value: WorkspaceTool; label: string; shortLabel: string }> = [
   { value: "presentation", label: "Folie bearbeiten", shortLabel: "Folie" },
@@ -500,6 +506,7 @@ export function LecturerDashboard({
   const [chatModerationMessage, setChatModerationMessage] = useState("");
   const stageFrameRef = useRef<HTMLDivElement>(null);
   const filmstripButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingStudioToolMotionRef = useRef<StudioToolMotion | null>(null);
   const csrfJsonHeaders = useMemo(() => ({
     "content-type": "application/json",
     "x-learnbuddy-csrf": csrfToken
@@ -749,7 +756,7 @@ export function LecturerDashboard({
         evaluationConfig: updatedLecture.evaluationConfig
       }));
     }
-    setReviewMessage("Evaluation aus dem Assistenten geschärft.");
+    setReviewMessage("Ich habe die Evaluation auf diese Folie geschärft.");
     setWorkspaceTool("evaluation");
   }
 
@@ -1151,9 +1158,16 @@ export function LecturerDashboard({
     }
   }
 
-  async function applyImprovementDraft(draft: ImprovementDraft) {
+  async function applyImprovementDraft(draft: ImprovementDraft, source?: HTMLElement | null) {
     if (!selected) return;
     setImprovementMessage("");
+    const questionTarget = document.querySelector<HTMLElement>(".studio-hotspot[aria-label='Fragen auf dieser Folie']");
+    animateStudioInsightSharedElement({
+      kind: draft.kind,
+      label: draft.kind === "slide" ? "Folie" : draft.questionLevel ?? "Frage",
+      source,
+      target: draft.kind === "question" ? questionTarget ?? stageFrameRef.current : stageFrameRef.current
+    });
 
     let requestBody: {
       slides?: Slide[];
@@ -1290,6 +1304,34 @@ export function LecturerDashboard({
     setShowCreateForm(false);
     setStudioSlideIndex(boundedIndex);
   }
+
+  useEffect(() => {
+    const pending = pendingStudioToolMotionRef.current;
+    if (!pending || pending.tool !== workspaceTool) return;
+
+    let frame = 0;
+    let attempts = 0;
+    const playWhenMounted = () => {
+      const target = document.querySelector<HTMLElement>(
+        pending.tool === "materials" ? ".studio-slide-source-overlay" : ".studio-slide-analytics-overlay"
+      );
+      if (!target && attempts < 8) {
+        attempts += 1;
+        frame = window.requestAnimationFrame(playWhenMounted);
+        return;
+      }
+      animateStudioToolSharedElement({
+        first: pending.first,
+        label: pending.label,
+        target,
+        tool: pending.tool
+      });
+      pendingStudioToolMotionRef.current = null;
+    };
+
+    frame = window.requestAnimationFrame(playWhenMounted);
+    return () => window.cancelAnimationFrame(frame);
+  }, [workspaceTool]);
 
   useEffect(() => {
     if (!focusedReview) return;
@@ -1608,7 +1650,7 @@ export function LecturerDashboard({
     const extractionWarning = lastRun?.steps.find((step) => step.label.startsWith("Extraktion eingeschränkt"))?.detail;
 
     return (
-      <aside className="studio-context-drawer materials studio-slide-source-overlay lb-enter-sheet" data-state={motionState} aria-label="Quellen direkt an der Folie">
+      <aside className="studio-context-drawer materials studio-slide-source-overlay lb-enter-sheet" data-panel-origin="studio-sources" data-state={motionState} aria-label="Quellen direkt an der Folie">
         <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Quellen schließen">×</button>
         <header className="slide-overlay-head">
           <div>
@@ -1793,6 +1835,7 @@ export function LecturerDashboard({
           />
           im Learn-Modus anzeigen
         </label>
+        {reviewMessage && <p className="form-note" aria-live="polite">{reviewMessage}</p>}
         {renderEvaluationPreview()}
         <label className="toggle-line studio-toggle-line">
           <input
@@ -1813,7 +1856,7 @@ export function LecturerDashboard({
     const visibleChatQuestions = (selected.studentChatQuestions ?? []).slice(0, 2);
 
     return (
-      <aside className="studio-context-drawer analytics studio-slide-tool-overlay studio-slide-analytics-overlay lb-enter-sheet" data-state={motionState} aria-label="Auswertung direkt an der Folie">
+      <aside className="studio-context-drawer analytics studio-slide-tool-overlay studio-slide-analytics-overlay lb-enter-sheet" data-panel-origin="studio-analytics" data-state={motionState} aria-label="Auswertung direkt an der Folie">
         <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Auswertung schließen">×</button>
         <header className="slide-overlay-head">
           <div>
@@ -1849,7 +1892,12 @@ export function LecturerDashboard({
                 <span>{topDraft.kind === "slide" ? "Folie" : "Frage"} · {topDraft.targetLabel}</span>
                 <strong>{topDraft.title}</strong>
                 <p>{topDraft.after}</p>
-                <button className="primary-button" disabled={topDraft.applied} type="button" onClick={() => applyImprovementDraft(topDraft)}>
+                <button
+                  className="primary-button"
+                  disabled={topDraft.applied}
+                  type="button"
+                  onClick={(event) => applyImprovementDraft(topDraft, event.currentTarget.closest(".studio-insight-card") as HTMLElement | null)}
+                >
                   {topDraft.applied ? "Übernommen" : "Übernehmen"}
                 </button>
               </section>
@@ -2111,7 +2159,19 @@ export function LecturerDashboard({
     );
   }
 
-  function openWorkspaceTool(tool: WorkspaceTool) {
+  function openWorkspaceTool(tool: WorkspaceTool, source?: HTMLElement | null) {
+    if (
+      source &&
+      workspaceTool !== tool &&
+      (tool === "materials" || tool === "analytics")
+    ) {
+      const activeTool = workspaceTools.find((item) => item.value === tool);
+      pendingStudioToolMotionRef.current = {
+        tool,
+        first: source.getBoundingClientRect(),
+        label: activeTool?.shortLabel ?? activeTool?.label ?? tool
+      };
+    }
     setCommandMenuOpen(false);
     setToolMenuOpen(false);
     setShowCreateForm(false);
@@ -2168,7 +2228,7 @@ export function LecturerDashboard({
                     key={item.tool}
                     style={{ "--lb-i": index } as MotionStyle}
                     type="button"
-                    onClick={() => openWorkspaceTool(item.tool)}
+                    onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
                   >
                     <strong>{item.detail}</strong>
                     {item.count ? <small>{item.count}</small> : null}
@@ -2246,7 +2306,7 @@ export function LecturerDashboard({
             style={{ "--lb-i": index } as MotionStyle}
             title={item.label}
             type="button"
-            onClick={() => openWorkspaceTool(item.tool)}
+            onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
           >
             <span className={`lb-icon lb-icon-${item.icon}`} aria-hidden="true" />
             {item.count ? <small>{item.count}</small> : null}

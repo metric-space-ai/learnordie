@@ -1,4 +1,4 @@
-// Readiness service (parallel-product-plan §8.2 / Agent A1).
+// Readiness service for deployment and production health checks.
 //
 // Readiness is a MOTIVATIONAL self-assessment, never a grade or an exam promise.
 // It is computed from real interaction signals (answers per level, coverage of past

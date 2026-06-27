@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// Clean-profile product flows against the LOCAL store (parallel-product-plan P1 / Welle 7).
+// Clean-profile student flows against the LOCAL store.
 // Each test uses a fresh browser context, so the student has no cookies/localStorage —
 // a true clean profile. Run with playwright.local.config.ts against a running dev server.
 

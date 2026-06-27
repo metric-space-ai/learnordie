@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 
-const DEFAULT_DATABASE_URL = "postgres://michaelwelsch@127.0.0.1:55432/learnbuddy_e2e_smoke";
+const DEFAULT_DATABASE_URL = "postgres://michaelwelsch@127.0.0.1:55432/learnordie_e2e_smoke";
 const databaseUrl = process.env.E2E_DATABASE_URL || DEFAULT_DATABASE_URL;
 const host = process.env.E2E_HOST || "127.0.0.1";
 const port = process.env.E2E_PORT || "3070";
@@ -19,10 +19,10 @@ let aiMockServer;
 const HELP_TEXT = `
 Usage: node scripts/e2e-server.mjs
 
-Starts the isolated LearnBuddy E2E server: resets the E2E database, migrates, seeds demo data, starts the AI mock and launches "npm start".
+Starts the isolated learnordie.app E2E server: resets the E2E database, migrates, seeds demo data, starts the AI mock and launches "npm start".
 
 Environment:
-  E2E_DATABASE_URL                  E2E Postgres URL. Defaults to learnbuddy_e2e_smoke.
+  E2E_DATABASE_URL                  E2E Postgres URL. Defaults to learnordie_e2e_smoke.
   E2E_HOST                          Host for app and mock servers. Defaults to 127.0.0.1.
   E2E_PORT                          App port. Defaults to 3070.
   E2E_BASE_URL                      Public app URL passed to Next.js.
@@ -67,7 +67,7 @@ function e2eEnv(extra = {}) {
     ...process.env,
     DATABASE_URL: databaseUrl,
     NEXT_PUBLIC_APP_URL: appUrl,
-    AUTH_SECRET: "learnbuddy-e2e-secret-with-more-than-32-characters",
+    AUTH_SECRET: "learnordie-e2e-secret-with-more-than-32-characters",
     LEARNBUDDY_DEPLOYMENT_ENV: "local",
     LEARNBUDDY_REPOSITORY: "postgres",
     LEARNBUDDY_AUTO_SEED: "0",

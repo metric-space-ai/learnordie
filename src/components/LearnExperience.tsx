@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
@@ -8,6 +8,7 @@ import {
   MIN_LEARN_QUESTION_DENSITY,
   normalizeLearnQuestionDensity
 } from "@/lib/learn-settings";
+import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
 import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
@@ -93,6 +94,8 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     aiHelpful: 4,
     comment: ""
   });
+  const hotspotButtonRefs = useRef(new Map<number, HTMLButtonElement>());
+  const pendingHotspotSharedRef = useRef<{ index: number; level: QuestionLevel } | null>(null);
 
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
@@ -118,6 +121,36 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   useEffect(() => {
     setDensity(normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
   }, [lecture.learnQuestionDensity, lecture.publicToken]);
+
+  useEffect(() => {
+    if (!questionOpen || questionOrigin !== "hotspot" || activeHotspotIndex === null) return;
+    const pending = pendingHotspotSharedRef.current;
+    if (!pending || pending.index !== activeHotspotIndex) return;
+
+    let frame = 0;
+    let attempts = 0;
+    const playWhenMounted = () => {
+      const drawer = document.querySelector<HTMLElement>(".question-drawer");
+      const source = hotspotButtonRefs.current.get(activeHotspotIndex);
+      if ((!drawer || !source) && attempts < 8) {
+        attempts += 1;
+        frame = window.requestAnimationFrame(playWhenMounted);
+        return;
+      }
+      const originX = hotspotOrigins[activeHotspotIndex]?.x ?? "50%";
+      const originRatio = Math.max(0, Math.min(1, Number.parseFloat(originX) / 100 || 0.5));
+      animateHotspotToDrawerSharedElement({
+        drawer,
+        level: pending.level,
+        originRatio,
+        source
+      });
+      pendingHotspotSharedRef.current = null;
+    };
+
+    frame = window.requestAnimationFrame(playWhenMounted);
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeHotspotIndex, questionOpen, questionOrigin]);
 
   const questions = useMemo(() => {
     if (!forcedLevel) return lecture.questions;
@@ -351,10 +384,18 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             className={`hotspot lb-enter-hotspot ${hotspotClasses[index]}`}
             key={`${level}-${index}`}
             type="button"
+            ref={(node) => {
+              if (node) {
+                hotspotButtonRefs.current.set(index, node);
+              } else {
+                hotspotButtonRefs.current.delete(index);
+              }
+            }}
             style={{ "--lb-i": index } as MotionStyle}
             aria-pressed={questionOpen && activeHotspotIndex === index}
             aria-label={`Frage Niveau ${level} anzeigen`}
             onClick={() => {
+              pendingHotspotSharedRef.current = { index, level };
               setForcedLevel(level);
               setQuestionOrigin("hotspot");
               setActiveHotspotIndex(index);

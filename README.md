@@ -131,7 +131,7 @@ npm run release:gate         # release gate wrapper
 The default E2E config expects Postgres at `127.0.0.1:55432`. On machines with Postgres on port `5432`, run:
 
 ```bash
-E2E_DATABASE_URL='postgres://michaelwelsch@127.0.0.1:5432/learnbuddy_e2e_smoke' npm run test:e2e
+E2E_DATABASE_URL='postgres://michaelwelsch@127.0.0.1:5432/learnordie_e2e_smoke' npm run test:e2e
 ```
 
 ## Environment

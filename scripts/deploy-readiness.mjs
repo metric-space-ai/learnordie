@@ -65,7 +65,7 @@ const FORBIDDEN_DEPLOY_ENV = [
 const HELP_TEXT = `
 Usage: npm run deploy:readiness -- [options]
 
-Checks whether a Vercel, local or self-host target has the required LearnBuddy deployment configuration.
+Checks whether a Vercel, local or self-host target has the required learnordie.app deployment configuration.
 
 Options:
   --environment preview|production|development
@@ -107,7 +107,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   EMAIL_FROM: {
     provider: "mail",
-    purpose: "Verified sender, for example LearnBuddy <noreply@your-university.edu>."
+    purpose: "Verified sender, for example learnordie.app <noreply@your-university.edu>."
   },
   LEARNBUDDY_JOB_PROVIDER: {
     provider: "jobs",
@@ -323,7 +323,7 @@ const SELF_HOSTING_FILES = [
   {
     file: ".env.example",
     expectations: [
-      ["production_host_example", "learnbuddy.your-university.edu"],
+      ["production_host_example", "learnordie.app"],
       ["storage_host_example", "object-storage.your-university.edu"],
       ["verified_sender_example", "noreply@your-university.edu"],
       ["operator_email_example", "referent@your-university.edu"],

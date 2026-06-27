@@ -680,7 +680,7 @@ export type LecturerSession = {
 
 // ── Student / Enrollment / Join-Code product layer ──────────────────────────
 //
-// These objects model the real student-facing product (see parallel-product-plan §3).
+// These objects model the real student-facing product surface.
 // A `joinCode` is a human-readable, deliberately communicated product object and is
 // distinct from the technical `publicToken`. Codes are normalized case-insensitively
 // (see `@/lib/join-code`: `normalizeJoinCode`). The `seriesId` is the slug of the
@@ -828,7 +828,7 @@ export type ReadinessSnapshot = {
 };
 
 /**
- * Anonymous, purpose-bound analytics events (parallel-product-plan §8.1).
+ * Anonymous, purpose-bound analytics events for the learning loop.
  * Never store real names; `anonymousKey`/`pseudonym` only.
  */
 export const STUDENT_ANALYTICS_EVENTS = [

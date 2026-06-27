@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const HELP_TEXT = `
 Usage: npm run motion:contract
 
-Checks the LearnBuddy motion/design contract across CSS and core UI components.
+Checks the learnordie.app motion/design contract across CSS and core UI components.
 
 Options:
   --help, -h                        Print this usage text without running checks.
@@ -226,8 +226,8 @@ expectRegex("studio_origin_contract", globals, [
   { label: "studio_tool_popover_has_origin_marker", pattern: /\.studio-tool-popover::before\s*{[\s\S]*bottom:\s*-7px[\s\S]*animation:\s*lb-origin-line/ }
 ], "src/app/globals.css");
 
-// parallel-product-plan §4.1: the root is the real app landing (join-by-code,
-// "Meine Vorlesungen", lecturer login) — it must NOT redirect away or show a demo.
+// The root is the real app landing: join-by-code, "Meine Vorlesungen",
+// and lecturer login. It must not redirect away or show a demo.
 expectContains("home_app_landing_contract", homePage, [
   "HomeLanding"
 ], "src/app/page.tsx");

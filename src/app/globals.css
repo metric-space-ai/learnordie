@@ -10770,7 +10770,7 @@ textarea.review-live-explanation {
   }
 }
 
-/* ── Student app: dashboard, join flow, readiness (parallel-product-plan §4.2/§4.3) ── */
+/* Student app: dashboard, join flow, readiness. */
 
 .student-app {
   min-height: 100svh;
@@ -11206,7 +11206,7 @@ textarea.review-live-explanation {
   }
 }
 
-/* ── Lecturer join-code editor (parallel-product-plan §4.6 / L1) ── */
+/* Lecturer join-code editor. */
 .join-code-editor {
   display: grid;
   gap: 12px;
@@ -11284,7 +11284,7 @@ textarea.review-live-explanation {
   font-weight: 760;
 }
 
-/* Student-visible standalone export link in learn mode (parallel-product-plan §2.3 / P4) */
+/* Student-visible standalone export link in learn mode. */
 .learn-export-link {
   display: inline-flex;
   align-items: center;

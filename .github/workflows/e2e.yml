@@ -30,7 +30,7 @@ jobs:
 
     env:
       CI: "true"
-      E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/learnbuddy_e2e_smoke
+      E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/learnordie_e2e_smoke
 
     steps:
       - name: Checkout
@@ -75,10 +75,10 @@ jobs:
       - name: Provider smoke
         run: npm run provider:smoke -- --profile production --mock --only ai,lecturer_assistant,chat_moderation,question_generator,embedding,ocr,storage,mail,stt
 
-      - name: CTOX Responses provider smoke
+      - name: Learnordie Responses provider smoke
         run: npm run provider:smoke -- --profile production --mock --only ai,lecturer_assistant,chat_moderation,question_generator
         env:
-          LEARNBUDDY_AI_PROVIDER: ctox-responses
+          LEARNBUDDY_AI_PROVIDER: learnordie-responses
 
       - name: Production smoke
         run: npm run test:e2e
@@ -88,27 +88,28 @@ jobs:
         env:
           DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
           LEARNBUDDY_DEPLOYMENT_ENV: production
-          NEXT_PUBLIC_APP_URL: "https://learnbuddy-ci.learnbuddy.cloud"
-          AUTH_SECRET: "learnbuddy-production-secret-with-more-than-32-characters"
+          NEXT_PUBLIC_APP_URL: "https://ci.learnordie.app"
+          AUTH_SECRET: "learnordie-production-secret-with-more-than-32-characters"
           LEARNBUDDY_MAIL_PROVIDER: resend
           RESEND_API_KEY: "re_live_like_abcdefghijklmnopqrstuvwxyz123456"
-          EMAIL_FROM: "LearnBuddy <noreply@learnbuddy.cloud>"
+          EMAIL_FROM: "learnordie.app <noreply@learnordie.app>"
           LEARNBUDDY_JOB_PROVIDER: database
           LEARNBUDDY_WORKER_SECRET: "worker-secret-with-more-than-32-characters"
           CRON_SECRET: "cron-secret-with-more-than-32-characters"
           LEARNBUDDY_STORAGE_PROVIDER: http
-          LEARNBUDDY_STORAGE_ENDPOINT: "https://storage.learnbuddy.cloud"
+          LEARNBUDDY_STORAGE_ENDPOINT: "https://storage.learnordie.app"
           LEARNBUDDY_STORAGE_API_KEY: "storage_live_like_abcdefghijklmnopqrstuvwxyz123456"
-          LEARNBUDDY_AI_PROVIDER: ctox-responses
-          LEARNBUDDY_LLM_PROXY_API_KEY: "ctox_llm_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_AI_PROVIDER: learnordie-responses
+          LEARNORDIE_LLM_PROXY_API_KEY: "learnordie_llm_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNORDIE_MINIMAX_API_KEY: "minimax_live_like_abcdefghijklmnopqrstuvwxyz123456"
           LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: ai
           LEARNBUDDY_CHAT_MODERATION_PROVIDER: ai
           LEARNBUDDY_QUESTION_GENERATOR: ai
           LEARNBUDDY_EMBEDDING_PROVIDER: openai-compatible
-          LEARNBUDDY_EMBEDDING_BASE_URL: "https://embedding.learnbuddy.cloud"
+          LEARNBUDDY_EMBEDDING_BASE_URL: "https://embedding.learnordie.app"
           LEARNBUDDY_EMBEDDING_API_KEY: "emb_live_like_abcdefghijklmnopqrstuvwxyz123456"
           LEARNBUDDY_OCR_PROVIDER: http
-          LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnbuddy.cloud"
+          LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnordie.app"
           LEARNBUDDY_OCR_API_KEY: "ocr_live_like_abcdefghijklmnopqrstuvwxyz123456"
           LEARNBUDDY_OCR_MODEL: "learnbuddy-ocr"
           LEARNBUDDY_STT_PROVIDER: mistral-voxtral

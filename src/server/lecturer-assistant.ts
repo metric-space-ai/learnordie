@@ -234,12 +234,12 @@ function lecturerAssistantProviderMode() {
 }
 
 function shouldUseLecturerAssistantAI() {
-  return ["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(lecturerAssistantProviderMode());
+  return ["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(lecturerAssistantProviderMode());
 }
 
 function providerSystemPrompt() {
   return [
-    "Du bist der LearnBuddy Planungsassistent für einen Referenten einer technischen Hochschulvorlesung.",
+    "Du bist der learnordie.app Planungsassistent für einen Referenten einer technischen Hochschulvorlesung.",
     "Antworte auf Deutsch, präzise und WYSIWYG-nah zur sichtbaren Folie.",
     "Nutze nur die gelieferten Folien-, Quellen-, Chat- und Transkriptinformationen.",
     "Erfinde keine UI-Funktionen und nenne keine API-, Provider- oder Token-Details.",

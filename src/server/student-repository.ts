@@ -1,4 +1,4 @@
-// Student / Enrollment / Join-Code repository (parallel-product-plan §7).
+// Student, enrollment, and join-code repository.
 //
 // All student-facing data access goes through this contract. The Local and Postgres
 // implementations MUST satisfy the same interface — no feature may work only locally.

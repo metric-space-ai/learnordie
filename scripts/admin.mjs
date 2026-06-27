@@ -145,7 +145,7 @@ function resolvedRetentionPolicy(years, cutoffAt, asOf) {
 
 function printUsage() {
   console.log([
-    "LearnBuddy Admin CLI",
+    "learnordie.app Admin CLI",
     "",
     "Usage:",
     "  npm run admin -- seed-demo [--owner email@example.test]",
@@ -153,8 +153,8 @@ function printUsage() {
     "  npm run admin -- retention-report [--years 5] [--lecture-token token]",
     "  npm run admin -- retention-cleanup [--years 5] [--lecture-token token] [--apply --confirm-retention-cleanup]",
     "  npm run admin -- worker-once --url http://localhost:3000 --secret secret [--limit 5]",
-    "  npm run admin -- backup-sql --out backups/learnbuddy.sql",
-    "  npm run admin -- restore-sql --file backups/learnbuddy.sql",
+    "  npm run admin -- backup-sql --out backups/learnordie.sql",
+    "  npm run admin -- restore-sql --file backups/learnordie.sql",
     "  npm run admin -- preflight [--profile local|preview|production]",
     "  npm run admin -- status",
     "",
@@ -686,22 +686,28 @@ async function runPreflight(sql) {
   const aiProvider = selectedAIProvider();
   if (strict && ["", "learnbuddy-demo", "demo", "local"].includes(aiProvider)) {
     failCheck(checks, "ai_provider", "critical", "Production benötigt den serverseitigen KI-Proxyprovider.", { provider: aiProvider });
-  } else if (["ctox-responses", "ctox", "llm.ctox.dev", "responses"].includes(aiProvider)) {
-    const endpointName = envValue("LEARNBUDDY_LLM_PROXY_BASE_URL")
-      ? "LEARNBUDDY_LLM_PROXY_BASE_URL"
-      : envValue("CTOX_LLM_PROXY_BASE_URL")
-        ? "CTOX_LLM_PROXY_BASE_URL"
-        : envValue("LEARNBUDDY_AI_BASE_URL")
-          ? "LEARNBUDDY_AI_BASE_URL"
-          : "";
+  } else if (["learnordie-responses", "learnordie", "llm.learnordie.app", "ctox-responses", "ctox", "llm.ctox.dev", "responses"].includes(aiProvider)) {
+    const endpointName = envValue("LEARNORDIE_LLM_PROXY_BASE_URL")
+      ? "LEARNORDIE_LLM_PROXY_BASE_URL"
+      : envValue("LEARNBUDDY_LLM_PROXY_BASE_URL")
+        ? "LEARNBUDDY_LLM_PROXY_BASE_URL"
+        : envValue("CTOX_LLM_PROXY_BASE_URL")
+          ? "CTOX_LLM_PROXY_BASE_URL"
+          : envValue("LEARNBUDDY_AI_BASE_URL")
+            ? "LEARNBUDDY_AI_BASE_URL"
+            : "";
     const endpointValue = endpointName ? envValue(endpointName) : "";
     const endpointError = deploymentEndpointError(endpointName, endpointValue, profile);
+    const usesLearnordieProxy = !endpointValue || endpointValue.replace(/\/+$/, "").includes("llm.learnordie.app");
+    const hasProxyToken = hasAnyEnv(["LEARNORDIE_LLM_PROXY_API_KEY", "LEARNBUDDY_LLM_PROXY_API_KEY", "CTOX_LLM_PROXY_API_KEY", "FALLBACK_LLM_PROXY_TOKEN", "LEARNBUDDY_AI_API_KEY"]);
     if (endpointError) {
-      failCheck(checks, "ai_provider", "critical", endpointError, { provider: "ctox-responses" });
-    } else if (hasAnyEnv(["LEARNBUDDY_LLM_PROXY_API_KEY", "CTOX_LLM_PROXY_API_KEY", "FALLBACK_LLM_PROXY_TOKEN", "LEARNBUDDY_AI_API_KEY"])) {
-      passCheck(checks, "ai_provider", "CTOX Responses KI-Proxy ist konfiguriert.", { provider: "ctox-responses" });
+      failCheck(checks, "ai_provider", "critical", endpointError, { provider: "learnordie-responses" });
+    } else if (!hasProxyToken) {
+      failCheck(checks, "ai_provider", strict ? "critical" : "warning", "Learnordie Responses KI-Proxy benötigt ein serverseitiges Proxy-Token.");
+    } else if (usesLearnordieProxy && !hasAnyEnv(["LEARNORDIE_MINIMAX_API_KEY", "MINIMAX_API_KEY"])) {
+      failCheck(checks, "ai_provider", strict ? "critical" : "warning", "Learnordie Responses KI-Proxy benötigt einen serverseitigen MiniMax-Upstream-Key.");
     } else {
-      failCheck(checks, "ai_provider", strict ? "critical" : "warning", "CTOX Responses KI-Proxy benötigt ein serverseitiges Proxy-Token.");
+      passCheck(checks, "ai_provider", "Learnordie Responses KI-Proxy ist konfiguriert.", { provider: "learnordie-responses" });
     }
   } else if (["openai-compatible", "http"].includes(aiProvider)) {
     const missing = [];
@@ -726,7 +732,7 @@ async function runPreflight(sql) {
     failCheck(checks, "lecturer_assistant_provider", "critical", "Production benötigt providerbasierte Referenten-Assistenz.", {
       provider: lecturerAssistantProvider || "local"
     });
-  } else if (["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(lecturerAssistantProvider)) {
+  } else if (["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(lecturerAssistantProvider)) {
     passCheck(checks, "lecturer_assistant_provider", "Referenten-Assistent nutzt den serverseitigen AIProvider.", {
       provider: lecturerAssistantProvider,
       aiProvider
@@ -746,7 +752,7 @@ async function runPreflight(sql) {
     failCheck(checks, "chat_moderation_provider", "critical", "Production benötigt providerbasierte Chatfragenmoderation.", {
       provider: chatModerationProvider || "local"
     });
-  } else if (["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(chatModerationProvider)) {
+  } else if (["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(chatModerationProvider)) {
     passCheck(checks, "chat_moderation_provider", "Chatfragenmoderation nutzt den serverseitigen AIProvider.", {
       provider: chatModerationProvider,
       aiProvider
@@ -766,7 +772,7 @@ async function runPreflight(sql) {
     failCheck(checks, "question_generator_provider", "critical", "Production benötigt providerbasierte Material-Fragegenerierung.", {
       provider: questionGenerator || "local"
     });
-  } else if (["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(questionGenerator)) {
+  } else if (["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(questionGenerator)) {
     passCheck(checks, "question_generator_provider", "Material-Fragegenerator nutzt den serverseitigen AIProvider.", {
       provider: questionGenerator,
       aiProvider

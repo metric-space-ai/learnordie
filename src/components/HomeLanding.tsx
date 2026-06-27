@@ -1,11 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import type { FormEvent, MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { joinCodeFromInput } from "@/lib/join-code";
+import { prefersReducedMotion } from "@/lib/motion";
 import { fetchCurrentProfile } from "@/lib/student-client";
 import type { StudentProfile } from "@/lib/types";
+
+type HomeRouteTarget = "join" | "student" | "lecturer";
 
 export function HomeLanding() {
   const router = useRouter();
@@ -13,6 +17,8 @@ export function HomeLanding() {
   const [error, setError] = useState("");
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [checkedProfile, setCheckedProfile] = useState(false);
+  const [routeCover, setRouteCover] = useState<HomeRouteTarget | null>(null);
+  const routeTimeout = useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -26,6 +32,33 @@ export function HomeLanding() {
     };
   }, []);
 
+  useEffect(() => () => {
+    if (routeTimeout.current !== null) {
+      window.clearTimeout(routeTimeout.current);
+    }
+  }, []);
+
+  function navigateWithCover(href: string, target: HomeRouteTarget) {
+    if (routeTimeout.current !== null) {
+      window.clearTimeout(routeTimeout.current);
+    }
+
+    if (prefersReducedMotion()) {
+      router.push(href);
+      return;
+    }
+
+    setRouteCover(target);
+    routeTimeout.current = window.setTimeout(() => {
+      router.push(href);
+    }, 560);
+  }
+
+  function followWithCover(event: MouseEvent<HTMLAnchorElement>, href: string, target: HomeRouteTarget) {
+    event.preventDefault();
+    navigateWithCover(href, target);
+  }
+
   function joinByCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const code = joinCodeFromInput(codeInput);
@@ -34,11 +67,11 @@ export function HomeLanding() {
       return;
     }
     setError("");
-    router.push(`/join/${encodeURIComponent(code)}`);
+    navigateWithCover(`/join/${encodeURIComponent(code)}`, "join");
   }
 
   return (
-    <main className="home-app lb-motion-root" aria-label="learnordie.app Start">
+    <main className="home-app lb-motion-root" data-route-cover={routeCover ? "active" : "idle"} aria-label="learnordie.app Start">
       <section className="home-app-stage lb-enter-stage">
         <header className="home-app-head lb-enter-row">
           <span className="home-brand-mark" aria-hidden="true">
@@ -88,7 +121,7 @@ export function HomeLanding() {
                     <p>Live-Termine, Lernmodus und dein Level bis zum Prüfungstag.</p>
                   </div>
                   <div className="home-lecturer-actions">
-                    <a className="primary-button" href="/student">Zum Dashboard</a>
+                    <a className="primary-button" href="/student" onClick={(event) => followWithCover(event, "/student", "student")}>Zum Dashboard</a>
                   </div>
                 </>
               ) : (
@@ -103,7 +136,7 @@ export function HomeLanding() {
                     </p>
                   </div>
                   <div className="home-lecturer-actions">
-                    <a className="plain-button" href="/student">Dashboard öffnen</a>
+                    <a className="plain-button" href="/student" onClick={(event) => followWithCover(event, "/student", "student")}>Dashboard öffnen</a>
                   </div>
                 </>
               )}
@@ -116,11 +149,12 @@ export function HomeLanding() {
                 <p>Vorlesungsreihe planen, Live-Fragen steuern und Lernrunden bis zum Prüfungstag freigeben.</p>
               </div>
               <div className="home-lecturer-actions">
-                <a className="plain-button" href="/lecturer">Dozentenlogin</a>
+                <a className="plain-button" href="/lecturer" onClick={(event) => followWithCover(event, "/lecturer", "lecturer")}>Dozentenlogin</a>
               </div>
             </section>
           </div>
         </div>
+        <span className="home-route-cover lb-route-cover" data-route={routeCover ?? undefined} aria-hidden="true" />
       </section>
     </main>
   );

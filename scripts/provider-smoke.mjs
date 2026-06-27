@@ -10,14 +10,15 @@ const ALL_CHECKS = ["ai", "lecturer_assistant", "chat_moderation", "question_gen
 const HELP_TEXT = `
 Usage: npm run provider:smoke -- [options]
 
-Runs active LearnBuddy provider roundtrips and prints a machine-readable JSON result.
+Runs active learnordie.app provider roundtrips and prints a machine-readable JSON result.
 
 Options:
   --profile local|preview|production
                                     Controls strictness for provider-backed checks.
   --only <csv>                      Restrict checks to: ${ALL_CHECKS.join(",")}.
   --mock                            Start local provider mocks instead of calling real services.
-                                    If LEARNBUDDY_AI_PROVIDER is ctox-responses, the mock exercises /v1/responses.
+                                    If LEARNBUDDY_AI_PROVIDER is learnordie-responses or ctox-responses,
+                                    the mock exercises /v1/responses.
   --mock-port <port>                Port for the mock provider server. Defaults to 0.
 
 Examples:
@@ -340,7 +341,7 @@ function normalizeChatEndpoint(value) {
 }
 
 function normalizeResponsesEndpoint(value) {
-  const trimmed = value.trim().replace(/\/+$/, "") || "https://llm.ctox.dev";
+  const trimmed = value.trim().replace(/\/+$/, "") || "https://llm.learnordie.app";
   const endpoint = trimmed.endsWith("/responses") ? trimmed : `${trimmed}/v1/responses`;
   return assertProductionSmokeEndpoint(endpoint, "LEARNBUDDY_LLM_PROXY_BASE_URL/CTOX_LLM_PROXY_BASE_URL");
 }
@@ -449,13 +450,24 @@ function selectedSTTProvider() {
   return envValue("MISTRAL_API_KEY") ? "mistral-voxtral" : "local";
 }
 
-function ctoxToken() {
+function responsesProxyToken() {
   return (
+    envValue("LEARNORDIE_LLM_PROXY_API_KEY") ||
     envValue("LEARNBUDDY_LLM_PROXY_API_KEY") ||
     envValue("CTOX_LLM_PROXY_API_KEY") ||
     envValue("FALLBACK_LLM_PROXY_TOKEN") ||
     envValue("LEARNBUDDY_AI_API_KEY")
   );
+}
+
+function isResponsesProxyProvider(provider) {
+  return ["learnordie-responses", "learnordie", "llm.learnordie.app", "ctox-responses", "ctox", "llm.ctox.dev", "responses"].includes(provider);
+}
+
+function responsesProxyProviderName(provider) {
+  return provider === "ctox-responses" || provider === "ctox" || provider === "llm.ctox.dev"
+    ? "ctox-responses"
+    : "learnordie-responses";
 }
 
 function extractResponsesText(payload) {
@@ -524,12 +536,12 @@ function parseStreamText(text, tokenExtractor) {
 
 async function completeAI(input) {
   const provider = selectedAIProvider();
-  const model = envValue("LEARNBUDDY_AI_MODEL") || (provider.includes("ctox") || provider === "responses" ? "MiniMax-M3" : "learnbuddy-external");
+  const model = envValue("LEARNBUDDY_AI_MODEL") || (isResponsesProxyProvider(provider) ? "MiniMax-M3" : "learnbuddy-external");
 
-  if (provider === "ctox-responses" || provider === "ctox" || provider === "llm.ctox.dev" || provider === "responses") {
-    const token = ctoxToken();
-    if (!token) throw new Error("ctox Responses token is missing.");
-    const endpoint = normalizeResponsesEndpoint(envValue("LEARNBUDDY_LLM_PROXY_BASE_URL") || envValue("CTOX_LLM_PROXY_BASE_URL") || envValue("LEARNBUDDY_AI_BASE_URL"));
+  if (isResponsesProxyProvider(provider)) {
+    const token = responsesProxyToken();
+    if (!token) throw new Error("Responses proxy token is missing.");
+    const endpoint = normalizeResponsesEndpoint(envValue("LEARNORDIE_LLM_PROXY_BASE_URL") || envValue("LEARNBUDDY_LLM_PROXY_BASE_URL") || envValue("CTOX_LLM_PROXY_BASE_URL") || envValue("LEARNBUDDY_AI_BASE_URL"));
     const { response, payload } = await fetchJson(endpoint, {
       method: "POST",
       headers: {
@@ -544,10 +556,10 @@ async function completeAI(input) {
         store: false
       })
     }, providerTimeoutMs("LEARNBUDDY_AI"));
-    if (!response.ok) throw new Error(`ctox Responses returned HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`Responses proxy returned HTTP ${response.status}.`);
     const answer = extractResponsesText(payload);
-    if (!answer) throw new Error("ctox Responses returned no answer text.");
-    return { provider: "ctox-responses", model, answer, usage: extractUsage(payload), endpointHost: endpointHost(endpoint) };
+    if (!answer) throw new Error("Responses proxy returned no answer text.");
+    return { provider: responsesProxyProviderName(provider), model, answer, usage: extractUsage(payload), endpointHost: endpointHost(endpoint) };
   }
 
   if (provider === "openai-compatible" || provider === "http") {
@@ -583,12 +595,12 @@ async function completeAI(input) {
 
 async function streamAI(input) {
   const provider = selectedAIProvider();
-  const model = envValue("LEARNBUDDY_AI_MODEL") || (provider.includes("ctox") || provider === "responses" ? "MiniMax-M3" : "learnbuddy-external");
+  const model = envValue("LEARNBUDDY_AI_MODEL") || (isResponsesProxyProvider(provider) ? "MiniMax-M3" : "learnbuddy-external");
 
-  if (provider === "ctox-responses" || provider === "ctox" || provider === "llm.ctox.dev" || provider === "responses") {
-    const token = ctoxToken();
-    if (!token) throw new Error("ctox Responses token is missing.");
-    const endpoint = normalizeResponsesEndpoint(envValue("LEARNBUDDY_LLM_PROXY_BASE_URL") || envValue("CTOX_LLM_PROXY_BASE_URL") || envValue("LEARNBUDDY_AI_BASE_URL"));
+  if (isResponsesProxyProvider(provider)) {
+    const token = responsesProxyToken();
+    if (!token) throw new Error("Responses proxy token is missing.");
+    const endpoint = normalizeResponsesEndpoint(envValue("LEARNORDIE_LLM_PROXY_BASE_URL") || envValue("LEARNBUDDY_LLM_PROXY_BASE_URL") || envValue("CTOX_LLM_PROXY_BASE_URL") || envValue("LEARNBUDDY_AI_BASE_URL"));
     const { response, text } = await fetchText(endpoint, {
       method: "POST",
       headers: {
@@ -604,9 +616,9 @@ async function streamAI(input) {
         store: false
       })
     }, providerTimeoutMs("LEARNBUDDY_AI"));
-    if (!response.ok) throw new Error(`ctox Responses stream returned HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`Responses proxy stream returned HTTP ${response.status}.`);
     const parsed = parseStreamText(text, responsesStreamToken);
-    return { provider: "ctox-responses", model, answer: parsed.answer, usage: parsed.usage, endpointHost: endpointHost(endpoint) };
+    return { provider: responsesProxyProviderName(provider), model, answer: parsed.answer, usage: parsed.usage, endpointHost: endpointHost(endpoint) };
   }
 
   if (provider === "openai-compatible" || provider === "http") {
@@ -652,12 +664,12 @@ async function smokeAI() {
 
   try {
     const result = await completeAI({
-      system: "LearnBuddy provider smoke. Reply with exactly: ok",
+      system: "learnordie.app provider smoke. Reply with exactly: ok",
       user: "Return ok.",
       maxOutputTokens: 16
     });
     const streamResult = await streamAI({
-      system: "LearnBuddy provider stream smoke. Reply with exactly: ok",
+      system: "learnordie.app provider stream smoke. Reply with exactly: ok",
       user: "Return ok.",
       maxOutputTokens: 16
     });
@@ -681,7 +693,7 @@ async function smokeAI() {
 async function smokeChatModeration() {
   if (!shouldRun("chat_moderation")) return;
   const provider = selectedChatModerationProvider();
-  if (!["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
+  if (!["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
     const message = "Chat moderation is not configured for provider-backed decisions.";
     if (productionLike) fail("chat_moderation", message, { provider });
     else warn("chat_moderation", message, { provider });
@@ -750,7 +762,7 @@ function validateQuestionGeneratorPayload(answer) {
 async function smokeQuestionGenerator() {
   if (!shouldRun("question_generator")) return;
   const provider = selectedQuestionGenerator();
-  if (!["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
+  if (!["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
     const message = "Question generator is not configured for provider-backed material review questions.";
     if (productionLike) fail("question_generator", message, { provider });
     else warn("question_generator", message, { provider });
@@ -785,7 +797,7 @@ async function smokeQuestionGenerator() {
 async function smokeLecturerAssistant() {
   if (!shouldRun("lecturer_assistant")) return;
   const provider = selectedLecturerAssistantProvider();
-  if (!["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
+  if (!["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
     const message = "Lecturer assistant is not configured for provider-backed answers.";
     if (productionLike) fail("lecturer_assistant", message, { provider });
     else warn("lecturer_assistant", message, { provider });
@@ -796,7 +808,7 @@ async function smokeLecturerAssistant() {
     const result = await completeAI({
       system: [
         "LEARNBUDDY_LECTURER_ASSISTANT_SMOKE_V1",
-        "Du bist der foliennahe Referenten-Assistent im LearnBuddy-Studio.",
+        "Du bist der foliennahe Referenten-Assistent im learnordie.app-Studio.",
         "Antworte knapp auf Deutsch und nenne keine Provider- oder Token-Details."
       ].join(" "),
       user: [
@@ -1058,9 +1070,9 @@ async function smokeMail() {
     const result = await resend.emails.send({
       from,
       to,
-      subject: "LearnBuddy provider smoke",
-      text: `LearnBuddy provider smoke at ${new Date().toISOString()}.`,
-      html: `<p>LearnBuddy provider smoke at ${new Date().toISOString()}.</p>`
+      subject: "learnordie.app provider smoke",
+      text: `learnordie.app provider smoke at ${new Date().toISOString()}.`,
+      html: `<p>learnordie.app provider smoke at ${new Date().toISOString()}.</p>`
     });
     if (result.error) {
       throw new Error(typeof result.error.message === "string" ? result.error.message : "Resend returned an error.");
@@ -1301,7 +1313,7 @@ function handleMockRealtimeUpgrade(request, socket) {
 
 function mockAIProviderMode() {
   const selected = envValue("LEARNBUDDY_AI_PROVIDER").toLowerCase();
-  if (["ctox-responses", "ctox", "llm.ctox.dev", "responses"].includes(selected)) return "ctox-responses";
+  if (isResponsesProxyProvider(selected)) return responsesProxyProviderName(selected);
   return "openai-compatible";
 }
 
@@ -1570,7 +1582,7 @@ async function startMockServer() {
   process.env.LEARNBUDDY_STORAGE_API_KEY = "provider-smoke-mock-token";
   process.env.LEARNBUDDY_MAIL_PROVIDER = "resend";
   process.env.RESEND_API_KEY = "provider-smoke-mock-token";
-  process.env.EMAIL_FROM = "LearnBuddy <noreply@example.test>";
+  process.env.EMAIL_FROM = "learnordie.app <noreply@example.test>";
   process.env.LEARNBUDDY_PROVIDER_SMOKE_EMAIL = "provider-smoke@example.test";
   process.env.LEARNBUDDY_RESEND_BASE_URL = baseUrl;
   if (!envValue("LEARNBUDDY_STT_PROVIDER")) {

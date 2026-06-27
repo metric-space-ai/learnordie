@@ -21,7 +21,7 @@ function selectedChatModerationProvider() {
 }
 
 function wantsAIChatModeration() {
-  return ["ai", "llm", "external", "provider", "ctox", "ctox-responses", "openai-compatible", "http"].includes(selectedChatModerationProvider());
+  return ["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(selectedChatModerationProvider());
 }
 
 function localModerationDecision(lecture: Lecture, text: string): ChatQuestionModerationDecision {

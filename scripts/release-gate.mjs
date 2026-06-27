@@ -22,7 +22,7 @@ const REQUIRED_FULL_PROVIDER_SMOKE_CHECKS = [
 const HELP_TEXT = `
 Usage: npm run release:gate -- [options]
 
-Runs the LearnBuddy release gate and prints a machine-readable JSON result.
+Runs the learnordie.app release gate and prints a machine-readable JSON result.
 
 Core options:
   --mode full|preview-baseline       Full release gate or CI-safe baseline gate.
@@ -772,7 +772,7 @@ async function main() {
       await runPlainStep("lint", "ESLint passed.", "npm", ["run", "lint"], { timeoutMs });
       await runPlainStep("build", "Next.js production build passed.", "npm", ["run", "build"], { timeoutMs: commandTimeoutMs("build") });
       await runPlainStep("audit", "npm audit passed at moderate threshold.", "npm", ["audit", "--audit-level=moderate"], { timeoutMs });
-      await runPlainStep("motion_contract", "LearnBuddy motion/design contract passed.", "npm", ["run", "motion:contract"], { timeoutMs });
+      await runPlainStep("motion_contract", "learnordie.app motion/design contract passed.", "npm", ["run", "motion:contract"], { timeoutMs });
       await runJsonStep("backup_restore_config", "Backup/restore config smoke passed.", "npm", [
         "run", "smoke:backup-restore", "--", "--config-only"
       ], { timeoutMs });

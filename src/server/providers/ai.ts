@@ -1,5 +1,9 @@
 import type { Lecture } from "@/lib/types";
 import type { RetrievedLectureSource } from "@/server/lecture-retrieval";
+import {
+  LEARNORDIE_RESPONSES_PROVIDER,
+  LEARNORDIE_RESPONSES_PROXY_BASE_URL
+} from "@/server/llm-proxy";
 import { assertDeploymentFetchEndpoint } from "@/server/providers/endpoint-policy";
 
 export type AIProviderInfo = {
@@ -143,7 +147,7 @@ function normalizeChatCompletionsBaseUrl(value: string) {
 }
 
 function normalizeResponsesBaseUrl(value: string) {
-  const trimmed = value.trim().replace(/\/+$/, "") || "https://llm.ctox.dev";
+  const trimmed = value.trim().replace(/\/+$/, "") || LEARNORDIE_RESPONSES_PROXY_BASE_URL;
   const endpoint = trimmed.endsWith("/responses") ? trimmed : `${trimmed}/v1/responses`;
   assertDeploymentFetchEndpoint(endpoint, "LEARNBUDDY_LLM_PROXY_BASE_URL");
   return endpoint;
@@ -162,7 +166,7 @@ function sourceTextFor(input: { sources: RetrievedLectureSource[] }) {
 
 function systemPrompt() {
   return [
-    "Du bist der LearnBuddy KI-Assistent für eine technische Hochschulvorlesung.",
+    "Du bist der learnordie.app KI-Assistent für eine technische Hochschulvorlesung.",
     "Antworte auf Deutsch, knapp, fachlich und nur im Kontext der Vorlesung.",
     "Nenne keine internen API-Details und keine Modellkonfiguration."
   ].join(" ");
@@ -459,16 +463,16 @@ class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
-class CtoxResponsesProvider implements AIProvider {
+class ResponsesProxyProvider implements AIProvider {
   readonly info: AIProviderInfo;
   private readonly endpoint: string;
   private readonly apiKey: string;
 
-  constructor(input: { endpoint: string; apiKey: string; model: string }) {
+  constructor(input: { endpoint: string; apiKey: string; model: string; provider: string }) {
     this.endpoint = input.endpoint;
     this.apiKey = input.apiKey.trim();
     this.info = {
-      provider: "ctox-responses",
+      provider: input.provider,
       model: input.model
     };
   }
@@ -497,12 +501,12 @@ class CtoxResponsesProvider implements AIProvider {
       const payload = await response.json().catch(() => null) as ResponsesApiResponse | null;
       if (!response.ok) {
         const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-        throw new Error(`ctox Responses proxy request failed: ${message}`);
+        throw new Error(`Responses proxy request failed: ${message}`);
       }
 
       const content = normalizeResponsesOutputText(payload);
       if (!content) {
-        throw new Error("ctox Responses proxy returned no answer text.");
+        throw new Error("Responses proxy returned no answer text.");
       }
 
       return {
@@ -511,7 +515,7 @@ class CtoxResponsesProvider implements AIProvider {
       };
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("ctox Responses proxy request timed out.");
+        throw new Error("Responses proxy request timed out.");
       }
       throw error;
     } finally {
@@ -540,7 +544,7 @@ class CtoxResponsesProvider implements AIProvider {
       signal: controller.signal
     }).catch((error) => {
       clearTimeout(timeout);
-      if (error instanceof Error && error.name === "AbortError") throw new Error("ctox Responses proxy request timed out.");
+      if (error instanceof Error && error.name === "AbortError") throw new Error("Responses proxy request timed out.");
       throw error;
     });
 
@@ -548,7 +552,7 @@ class CtoxResponsesProvider implements AIProvider {
       clearTimeout(timeout);
       const payload = await response.json().catch(() => null) as ResponsesApiResponse | null;
       const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-      throw new Error(`ctox Responses proxy stream failed: ${message}`);
+      throw new Error(`Responses proxy stream failed: ${message}`);
     }
 
     const completed = deferredResult<AIProviderResult>();
@@ -567,7 +571,7 @@ class CtoxResponsesProvider implements AIProvider {
           yield token;
         }
         const answer = parts.join("").trim();
-        if (!answer) throw new Error("ctox Responses proxy stream returned no answer text.");
+        if (!answer) throw new Error("Responses proxy stream returned no answer text.");
         completed.resolve({ answer, usage });
       } catch (error) {
         completed.reject(error);
@@ -604,8 +608,21 @@ function selectedAIProvider() {
   return process.env.LEARNBUDDY_AI_PROVIDER?.trim().toLowerCase();
 }
 
-function ctoxResponsesToken() {
+function isResponsesProxyProvider(selected: string | undefined) {
+  return [
+    "learnordie-responses",
+    "learnordie",
+    "llm.learnordie.app",
+    "ctox-responses",
+    "ctox",
+    "llm.ctox.dev",
+    "responses"
+  ].includes(selected ?? "");
+}
+
+function responsesProxyToken() {
   return (
+    process.env.LEARNORDIE_LLM_PROXY_API_KEY ??
     process.env.LEARNBUDDY_LLM_PROXY_API_KEY ??
     process.env.CTOX_LLM_PROXY_API_KEY ??
     process.env.FALLBACK_LLM_PROXY_TOKEN ??
@@ -616,9 +633,9 @@ function ctoxResponsesToken() {
 
 export function configuredAIProviderInfo(): AIProviderInfo {
   const selected = selectedAIProvider();
-  if (selected === "ctox-responses" || selected === "ctox" || selected === "llm.ctox.dev" || selected === "responses") {
+  if (isResponsesProxyProvider(selected)) {
     return {
-      provider: "ctox-responses",
+      provider: LEARNORDIE_RESPONSES_PROVIDER,
       model: process.env.LEARNBUDDY_AI_MODEL?.trim() || "MiniMax-M3"
     };
   }
@@ -638,15 +655,16 @@ export function configuredAIProviderInfo(): AIProviderInfo {
 
 export function getAIProvider(): AIProvider {
   const selected = selectedAIProvider();
-  if (selected === "ctox-responses" || selected === "ctox" || selected === "llm.ctox.dev" || selected === "responses") {
-    const apiKey = ctoxResponsesToken();
+  if (isResponsesProxyProvider(selected)) {
+    const apiKey = responsesProxyToken();
     if (!apiKey) {
-      throw new Error("LEARNBUDDY_LLM_PROXY_API_KEY or CTOX_LLM_PROXY_API_KEY is required for LEARNBUDDY_AI_PROVIDER=ctox-responses.");
+      throw new Error("LEARNORDIE_LLM_PROXY_API_KEY or LEARNBUDDY_LLM_PROXY_API_KEY is required for LEARNBUDDY_AI_PROVIDER=learnordie-responses.");
     }
 
-    return new CtoxResponsesProvider({
-      endpoint: normalizeResponsesBaseUrl(process.env.LEARNBUDDY_LLM_PROXY_BASE_URL ?? process.env.CTOX_LLM_PROXY_BASE_URL ?? process.env.LEARNBUDDY_AI_BASE_URL ?? ""),
+    return new ResponsesProxyProvider({
+      endpoint: normalizeResponsesBaseUrl(process.env.LEARNORDIE_LLM_PROXY_BASE_URL ?? process.env.LEARNBUDDY_LLM_PROXY_BASE_URL ?? process.env.CTOX_LLM_PROXY_BASE_URL ?? process.env.LEARNBUDDY_AI_BASE_URL ?? ""),
       apiKey,
+      provider: LEARNORDIE_RESPONSES_PROVIDER,
       model: process.env.LEARNBUDDY_AI_MODEL?.trim() || "MiniMax-M3"
     });
   }
