@@ -92,7 +92,7 @@ function streamAnswer(input: {
 
 function streamProviderAnswer(input: {
   chunks: AsyncIterable<string>;
-  complete: () => Promise<{
+  complete: (streamedAnswer: string) => Promise<{
     limit: number;
     remaining: number;
     tokenLimit: number;
@@ -108,16 +108,26 @@ function streamProviderAnswer(input: {
   return new Response(new ReadableStream({
     async start(controller) {
       let completionStarted = false;
+      let streamedAnswer = "";
       try {
         for await (const chunk of input.chunks) {
+          streamedAnswer += chunk;
           controller.enqueue(encoder.encode(`${JSON.stringify({ type: "token", value: chunk })}\n`));
         }
         completionStarted = true;
-        const donePayload = await input.complete();
+        const donePayload = await input.complete(streamedAnswer);
         controller.enqueue(encoder.encode(`${JSON.stringify({ type: "done", ...donePayload })}\n`));
       } catch (error) {
-        if (!completionStarted) {
-          void input.complete().catch(() => undefined);
+        if (streamedAnswer.trim()) {
+          try {
+            const donePayload = await input.complete(streamedAnswer);
+            controller.enqueue(encoder.encode(`${JSON.stringify({ type: "done", ...donePayload })}\n`));
+            return;
+          } catch {
+            // The visible stream still failed finalization; report the original provider failure below.
+          }
+        } else if (!completionStarted) {
+          void input.complete(streamedAnswer).catch(() => undefined);
         }
         await input.onError(error);
         controller.enqueue(encoder.encode(`${JSON.stringify({ type: "error", error: "KI-Provider konnte den Stream nicht abschließen." })}\n`));
@@ -463,8 +473,23 @@ export async function POST(request: Request) {
       });
       return streamProviderAnswer({
         chunks: providerStream.chunks,
-        complete: async () => {
-          const result = await finalizeProviderResult(await providerStream.completed, true, "provider");
+        complete: async (streamedAnswer) => {
+          let providerResult: AIProviderResult;
+          try {
+            providerResult = await providerStream.completed;
+          } catch (error) {
+            const answer = streamedAnswer.trim();
+            if (!answer) throw error;
+            const message = error instanceof Error ? error.message : "AI provider stream finalization failed.";
+            await recordAIEvent("ai_chat_stream_recovered", {
+              ...eventPayload,
+              reason: "provider_stream_finalization",
+              status: 200,
+              message
+            });
+            providerResult = { answer };
+          }
+          const result = await finalizeProviderResult(providerResult, true, "provider");
           return {
             limit: result.limit,
             remaining: result.remaining,
