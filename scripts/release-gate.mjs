@@ -38,6 +38,7 @@ Target configuration:
   --scope <vercel-scope>             Optional Vercel scope passed to "vercel env pull".
   --self-host                        Use process env and self-host deploy readiness.
   --allow-process-env                Diagnostic full-gate mode without Vercel env pull.
+  --allow-public-write-smokes        Allow load smoke to write real events on public targets.
 
 Provider and auth options:
   --provider-only <csv>              Restrict provider smokes. Full gates require all checks.
@@ -670,11 +671,13 @@ function liveLoadSmokeArgs(baseUrl, lectureToken) {
   const anchorRounds = args.get("load-anchor-rounds") || envValue("LEARNBUDDY_RELEASE_GATE_LOAD_ANCHOR_ROUNDS");
   const answers = args.get("load-answers") || envValue("LEARNBUDDY_RELEASE_GATE_LOAD_ANSWERS");
   const maxP95Ms = args.get("load-max-p95-ms") || envValue("LEARNBUDDY_RELEASE_GATE_LOAD_MAX_P95_MS");
+  const allowPublicWrite = args.has("allow-public-write-smokes") || envValue("LEARNBUDDY_RELEASE_GATE_ALLOW_PUBLIC_WRITE_SMOKES") === "1";
   if (participants) commandArgs.push("--participants", participants);
   if (concurrency) commandArgs.push("--concurrency", concurrency);
   if (anchorRounds) commandArgs.push("--anchor-rounds", anchorRounds);
   if (answers) commandArgs.push("--answers", answers);
   if (maxP95Ms) commandArgs.push("--max-p95-ms", maxP95Ms);
+  if (allowPublicWrite) commandArgs.push("--allow-public-write");
   return commandArgs;
 }
 

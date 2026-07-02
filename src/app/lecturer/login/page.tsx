@@ -24,10 +24,10 @@ export default async function LecturerLoginPage({
     <main className="mode-screen lb-motion-root">
       <section className="mode-card lb-enter-sheet">
         <p className="eyebrow">Dozentenbereich</p>
-        <h1>Einloggen oder Konto anlegen</h1>
+        <h1>Einloggen oder Konto erstellen</h1>
         <p>
-          Gib deine dienstliche E-Mail-Adresse ein. Wenn noch kein Zugang existiert,
-          wird dein Dozentenbereich nach dem ersten bestätigten Link automatisch angelegt.
+          Eine dienstliche E-Mail reicht. Ist die Adresse neu, wird dein Dozentenkonto
+          nach der Link-Bestätigung erstellt; ist sie bekannt, wirst du direkt angemeldet.
         </p>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
       </section>

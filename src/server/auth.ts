@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 
 import type { LecturerSession } from "@/lib/types";
 import { getDb } from "./db/client";
-import { magicLoginRateLimits, magicLoginTokens } from "./db/schema";
+import { magicLoginRateLimits, magicLoginTokens, users } from "./db/schema";
 import { configuredPublicAppUrl, isProductionDeployment, shouldUseSecureCookies } from "./runtime-config";
 
 const COOKIE_NAME = "lb_lecturer_session";
@@ -289,19 +289,37 @@ async function storeMagicToken(input: { email: string; token: string; expiresAt:
   });
 }
 
-async function consumeStoredMagicToken(input: { email: string; token: string }) {
-  const rows = await getDb()
-    .update(magicLoginTokens)
-    .set({ consumedAt: new Date() })
-    .where(and(
-      eq(magicLoginTokens.email, input.email),
-      eq(magicLoginTokens.tokenHash, tokenHash(input.token)),
-      isNull(magicLoginTokens.consumedAt),
-      gt(magicLoginTokens.expiresAt, new Date())
-    ))
-    .returning({ id: magicLoginTokens.id });
+async function consumeStoredMagicTokenAndEnsureAccount(input: { email: string; token: string }) {
+  return getDb().transaction(async (tx) => {
+    const rows = await tx
+      .update(magicLoginTokens)
+      .set({ consumedAt: new Date() })
+      .where(and(
+        eq(magicLoginTokens.email, input.email),
+        eq(magicLoginTokens.tokenHash, tokenHash(input.token)),
+        isNull(magicLoginTokens.consumedAt),
+        gt(magicLoginTokens.expiresAt, new Date())
+      ))
+      .returning({ id: magicLoginTokens.id });
 
-  return rows.length === 1;
+    if (rows.length !== 1) return false;
+
+    const cleanEmail = normalizedEmail(input.email);
+    await tx
+      .insert(users)
+      .values({
+        email: cleanEmail,
+        role: "lecturer"
+      })
+      .onConflictDoUpdate({
+        target: users.email,
+        set: {
+          email: cleanEmail
+        }
+      });
+
+    return true;
+  });
 }
 
 export async function createMagicToken(email: string) {
@@ -339,7 +357,7 @@ export async function consumeMagicToken(token: string) {
   }
 
   if (canPersistMagicTokens()) {
-    const consumed = await consumeStoredMagicToken({ email: payload.email, token });
+    const consumed = await consumeStoredMagicTokenAndEnsureAccount({ email: payload.email, token });
     if (!consumed) return null;
   } else if (isProductionDeployment()) {
     return null;

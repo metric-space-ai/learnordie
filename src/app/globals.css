@@ -5210,12 +5210,21 @@ textarea.review-live-explanation {
 }
 
 .login-support,
+.login-flow-note,
 .login-dev-link,
 .form-success {
   color: var(--muted);
   font-size: 14px;
   font-weight: 650;
   line-height: 1.45;
+}
+
+.login-flow-note {
+  margin: -2px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: oklch(97% 0.01 205 / 0.84);
 }
 
 .login-dev-link a {

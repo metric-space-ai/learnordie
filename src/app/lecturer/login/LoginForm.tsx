@@ -63,15 +63,21 @@ export function LoginForm({
           suppressHydrationWarning
         />
       </label>
+      <p className="login-flow-note">
+        Neu hier? Der gleiche Link erstellt dein Konto. Bestehende Konten werden damit angemeldet.
+      </p>
       <button className="primary-button" type="submit" disabled={pending}>
-        {pending ? "Anmeldelink wird gesendet ..." : "Anmeldelink senden"}
+        {pending ? "Link wird gesendet ..." : "Einloggen oder Konto erstellen"}
       </button>
       <p className="login-support">
-        Noch kein Konto? Kein separates Registrierungsformular nötig. Der bestätigte Link
-        richtet deinen Dozentenbereich ein.
+        Der Link ist 15 Minuten gültig. Nach der Bestätigung öffnet sich dein Dozentenbereich.
       </p>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {sentWithoutLocalLink && <p className="form-success">Anmeldelink ist unterwegs. Bitte Postfach prüfen.</p>}
+      {sentWithoutLocalLink && (
+        <p className="form-success">
+          Link ist unterwegs. Wenn diese E-Mail noch nicht registriert ist, wird dein Konto beim Öffnen des Links angelegt.
+        </p>
+      )}
       {magicLink && (
         <p className="login-dev-link">
           Entwicklungsmodus: <a href={magicLink}>Direkt zum Dozentenbereich</a>

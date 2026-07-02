@@ -23,10 +23,11 @@ Options:
   --anchor-rounds <n>               Repeated answer rounds for anchor participants. Defaults to 3.
   --max-p95-ms <ms>                 Maximum accepted p95 latency. Defaults to 5000.
   --answers <map>                   Correct answers per level, for example 4.0=B,3.0=A.
+  --allow-public-write              Required for public HTTPS targets because this smoke writes real leaderboard events.
   --timeout-ms <ms>                 Overall timeout. Defaults to 90000.
 
 Example:
-  npm run smoke:live-load -- --url https://<preview-url> --lecture-token gleitlagerung-demo --participants 30
+  npm run smoke:live-load -- --url http://127.0.0.1:3000 --lecture-token gleitlagerung-demo --participants 30
 `;
 
 function parseArgs() {
@@ -200,16 +201,34 @@ function isLocalOrPrivateHost(hostname) {
   return false;
 }
 
+function allowPublicWrite() {
+  return args.has("allow-public-write") || envValue("LEARNBUDDY_LIVE_LOAD_SMOKE_ALLOW_PUBLIC_WRITE") === "1";
+}
+
 function targetProblem(baseUrl) {
   const parsed = new URL(baseUrl);
-  if (parsed.protocol === "https:" || isLocalOrPrivateHost(parsed.hostname)) return null;
-  return {
-    message: "Public live load smoke requires a HTTPS app URL.",
-    details: {
-      origin: parsed.origin,
-      protocol: parsed.protocol
-    }
-  };
+  const publicTarget = !isLocalOrPrivateHost(parsed.hostname);
+  if (!publicTarget) return null;
+  if (parsed.protocol !== "https:") {
+    return {
+      message: "Public live load smoke requires a HTTPS app URL.",
+      details: {
+        origin: parsed.origin,
+        protocol: parsed.protocol
+      }
+    };
+  }
+  if (!allowPublicWrite()) {
+    return {
+      message: "Live load smoke writes real participant sessions and leaderboard events; public targets require --allow-public-write.",
+      details: {
+        origin: parsed.origin,
+        allowFlag: "--allow-public-write",
+        envFlag: "LEARNBUDDY_LIVE_LOAD_SMOKE_ALLOW_PUBLIC_WRITE=1"
+      }
+    };
+  }
+  return null;
 }
 
 function appUrl(baseUrl, path) {
