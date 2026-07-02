@@ -369,7 +369,9 @@ async function checkStudentLive(page, token, timeoutMs) {
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl(`/l/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.getByPlaceholder("z. B. LagerProfi42").fill(`Smoke ${Date.now().toString(36)}`);
+  await page.getByText("Pseudonym für diese Runde").waitFor({ state: "visible", timeout: timeoutMs });
+  await page.getByLabel("Pseudonym-Vorschläge").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
+  await page.getByPlaceholder("z. B. Lagerstern-42").fill(`Smoke ${Date.now().toString(36)}`);
   await page.getByRole("button", { name: "Teilnehmen" }).click();
   await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
   await page.getByLabel("Quizfrage").waitFor({ state: "visible", timeout: timeoutMs });
