@@ -74,10 +74,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatAnswer, setChatAnswer] = useState("Der KI-Assistent erklärt die aktuelle Frage im Kontext der Folie.");
+  const [chatAnswer, setChatAnswer] = useState("");
   const [chatSources, setChatSources] = useState<ChatSource[]>([]);
   const [chatBudget, setChatBudget] = useState("");
-  const [chatMessage, setChatMessage] = useState("Erkläre mir das mit einem Praxisbeispiel");
+  const [chatMessage, setChatMessage] = useState("");
   const [chatError, setChatError] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatProviderMeta, setChatProviderMeta] = useState<ChatProviderMeta>({
@@ -156,6 +156,24 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     if (!forcedLevel) return lecture.questions;
     return [...lecture.questions].sort((a, b) => (a.level === forcedLevel ? -1 : b.level === forcedLevel ? 1 : 0));
   }, [forcedLevel, lecture.questions]);
+  const activeQuestion = questions[0];
+  const chatStarterPrompts = useMemo(() => {
+    const questionText = activeQuestion?.text ?? "die aktuelle Frage";
+    return [
+      {
+        label: "Begriffe klären",
+        message: `Erkläre die zentralen Begriffe zu dieser Frage: ${questionText}`
+      },
+      {
+        label: "Antwort herleiten",
+        message: `Hilf mir, die richtige Antwort zu dieser Frage herzuleiten, ohne nur den Buchstaben zu nennen: ${questionText}`
+      },
+      {
+        label: "Praxisbeispiel",
+        message: `Erkläre mir diese Frage mit einem Praxisbeispiel: ${questionText}`
+      }
+    ];
+  }, [activeQuestion?.text]);
   const inspectorOpen = chatOpen || evaluationOpen || leaderboardOpen;
   const originStyle = activeHotspotIndex === null
     ? undefined
@@ -212,7 +230,19 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   }
 
   function openChat() {
-    const question = questions[0];
+    const question = activeQuestion;
+    setChatAnswer("");
+    setChatSources([]);
+    setChatBudget("");
+    setChatMessage("");
+    setChatError("");
+    setChatLoading(false);
+    setChatProviderMeta({
+      answerState: "idle",
+      provider: "",
+      model: "",
+      streamSource: ""
+    });
     setChatOpen(true);
     void recordLearnEvent("ai_chat_opened", {
       mode: "learn",
@@ -221,15 +251,18 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     });
   }
 
-  async function askAI() {
-    const question = questions[0];
+  async function askAI(messageOverride?: string) {
+    const question = activeQuestion;
     if (!question) return;
+    const outgoingMessage = (messageOverride ?? chatMessage).trim();
+    if (!outgoingMessage) return;
 
     setChatError("");
     setChatLoading(true);
     setChatAnswer("");
     setChatSources([]);
     setChatBudget("Antwort wird gestreamt.");
+    setChatMessage(outgoingMessage);
     setChatProviderMeta({
       answerState: "loading",
       provider: "",
@@ -244,7 +277,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         body: JSON.stringify({
           lectureToken: lecture.publicToken,
           question: question.text,
-          message: chatMessage,
+          message: outgoingMessage,
           anonymousKey: getAnonymousKey(),
           pseudonym: getLearnPseudonym(),
           stream: true
@@ -527,11 +560,29 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           <div className="chat-body">
             <div className="chat-message lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
               <strong>Thema</strong>
-              <span>{questions[0].text}</span>
+              <span>{activeQuestion?.text ?? "Aktuelle Frage"}</span>
             </div>
             <div className="chat-message lb-enter-row" style={{ "--lb-i": 1 } as MotionStyle}>
-              <strong>Erklärung</strong>
-              <span aria-live="polite">{chatAnswer || "Antwort wird aufgebaut..."}</span>
+              <strong>{chatProviderMeta.answerState === "answered" ? "Antwort" : "Assistent"}</strong>
+              <span aria-live="polite">
+                {chatLoading
+                  ? chatAnswer || "Antwort wird aufgebaut..."
+                  : chatAnswer || "Was möchtest du zuerst klären?"}
+              </span>
+              {!chatLoading && !chatAnswer && (
+                <div className="chat-starter-actions" aria-label="Startfragen">
+                  {chatStarterPrompts.map((prompt) => (
+                    <button
+                      className="plain-button"
+                      key={prompt.label}
+                      type="button"
+                      onClick={() => void askAI(prompt.message)}
+                    >
+                      {prompt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {chatSources.length > 0 && (
               <div className="chat-message source-message lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle}>
@@ -549,8 +600,15 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             {chatError && <p role="alert" className="form-error">{chatError}</p>}
           </div>
           <div className="chat-input">
-            <input value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} suppressHydrationWarning />
-            <button className="primary-button" type="button" onClick={askAI} disabled={chatLoading}>{chatLoading ? "Sendet" : "Senden"}</button>
+            <input
+              value={chatMessage}
+              onChange={(event) => setChatMessage(event.target.value)}
+              placeholder="Eigene Nachfrage stellen"
+              suppressHydrationWarning
+            />
+            <button className="primary-button" type="button" onClick={() => void askAI()} disabled={chatLoading || !chatMessage.trim()}>
+              {chatLoading ? "Sendet" : "Fragen"}
+            </button>
           </div>
         </aside>
         )}

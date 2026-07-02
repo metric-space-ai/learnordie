@@ -6333,6 +6333,20 @@ textarea.review-live-explanation {
   overflow-wrap: anywhere;
 }
 
+.chat-starter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-starter-actions .plain-button {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .export-meta {
   display: grid;
   gap: 4px;

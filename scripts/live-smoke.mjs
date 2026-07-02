@@ -405,9 +405,11 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   await page.getByRole("button", { name: "KI fragen" }).click();
   const chatPanel = page.getByLabel("KI Chat");
   await chatPanel.waitFor({ state: "visible", timeout: timeoutMs });
+  await chatPanel.getByText("Was möchtest du zuerst klären?").waitFor({ state: "visible", timeout: timeoutMs });
+  await chatPanel.getByRole("button", { name: "Praxisbeispiel" }).waitFor({ state: "visible", timeout: timeoutMs });
 
   if (includeAI) {
-    await page.getByRole("button", { name: "Senden" }).click();
+    await chatPanel.getByRole("button", { name: "Praxisbeispiel" }).click();
     await page.waitForFunction(() => {
       const panel = document.querySelector('[aria-label="KI Chat"]');
       const state = panel?.getAttribute("data-ai-answer-state");
@@ -428,7 +430,7 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
       fail("learn_ai_browser", "Learn AI chat answered, but provider-backed stream was not visible.", aiState);
       return;
     }
-    await page.locator(".chat-body").getByText(/Tokens|Quelle|Mock-Erklärung|Erklärung/i).first().waitFor({
+    await page.locator(".chat-body").getByText(/Tokens|Quelle|Mock-Erklärung|Antwort|Praxisbeispiel/i).first().waitFor({
       state: "visible",
       timeout: Math.min(timeoutMs, 5000)
     });
