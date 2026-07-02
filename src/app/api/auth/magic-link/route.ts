@@ -47,6 +47,6 @@ export async function POST(request: Request) {
       });
     }
     console.error("Magic link delivery failed", error);
-    return NextResponse.json({ error: "Magic Link konnte nicht versendet werden." }, { status: 502 });
+    return NextResponse.json({ error: "Anmeldelink konnte nicht versendet werden." }, { status: 502 });
   }
 }

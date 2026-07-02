@@ -13,19 +13,22 @@ export default async function LecturerLoginPage({
     errorCode === "invalid-email"
       ? "Bitte eine gültige E-Mail eingeben."
       : errorCode === "invalid-token"
-        ? "Dieser Magic Link ist abgelaufen oder wurde bereits verwendet."
+        ? "Dieser Anmeldelink ist abgelaufen oder wurde bereits verwendet."
       : errorCode === "rate-limited"
-        ? "Zu viele Magic-Link-Anfragen. Bitte später erneut versuchen."
+        ? "Zu viele Anfragen. Bitte später erneut versuchen."
       : errorCode === "send-failed"
-        ? "Magic Link konnte nicht versendet werden."
+        ? "Anmeldelink konnte nicht versendet werden."
         : "";
 
   return (
     <main className="mode-screen lb-motion-root">
       <section className="mode-card lb-enter-sheet">
-        <p className="eyebrow">Referentenlogin</p>
-        <h1>Login per Magic Link</h1>
-        <p>Produktiv wird der Link per Mail versendet. Nur im lokalen Console-Modus zeigt die App einen Testlink direkt an.</p>
+        <p className="eyebrow">Dozentenbereich</p>
+        <h1>Einloggen oder Konto anlegen</h1>
+        <p>
+          Gib deine dienstliche E-Mail-Adresse ein. Wenn noch kein Zugang existiert,
+          wird dein Dozentenbereich nach dem ersten bestätigten Link automatisch angelegt.
+        </p>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
       </section>
     </main>
