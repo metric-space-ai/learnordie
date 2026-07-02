@@ -11,6 +11,7 @@ import {
 import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
 import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
+import { MarkdownContent } from "./MarkdownContent";
 import { Presence } from "./Presence";
 import { QuizDrawer } from "./QuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
@@ -564,11 +565,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             </div>
             <div className="chat-message lb-enter-row" style={{ "--lb-i": 1 } as MotionStyle}>
               <strong>{chatProviderMeta.answerState === "answered" ? "Antwort" : "Assistent"}</strong>
-              <span aria-live="polite">
-                {chatLoading
-                  ? chatAnswer || "Antwort wird aufgebaut..."
-                  : chatAnswer || "Was möchtest du zuerst klären?"}
-              </span>
+              <div aria-live="polite">
+                {chatAnswer ? (
+                  <MarkdownContent content={chatAnswer} />
+                ) : (
+                  <span>{chatLoading ? "Antwort wird aufgebaut..." : "Was möchtest du zuerst klären?"}</span>
+                )}
+              </div>
               {!chatLoading && !chatAnswer && (
                 <div className="chat-starter-actions" aria-label="Startfragen">
                   {chatStarterPrompts.map((prompt) => (

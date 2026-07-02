@@ -432,6 +432,17 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
       fail("learn_ai_browser", "Learn AI chat answered, but provider-backed stream was not visible.", aiState);
       return;
     }
+    await chatPanel.locator(".markdown-content").first().waitFor({ state: "visible", timeout: Math.min(timeoutMs, 5000) });
+    const markdownState = await chatPanel.locator(".markdown-content").first().evaluate((element) => ({
+      text: element.textContent ?? "",
+      headings: element.querySelectorAll("h3,h4,h5").length,
+      strong: element.querySelectorAll("strong").length,
+      tables: element.querySelectorAll("table").length
+    }));
+    if (/(^|\s)#{1,4}\s|\*\*/.test(markdownState.text)) {
+      fail("learn_ai_markdown_browser", "Learn AI chat rendered raw Markdown markers.", markdownState);
+      return;
+    }
     await page.locator(".chat-body").getByText(/Tokens|Quelle|Mock-Erklärung|Antwort|Praxisbeispiel/i).first().waitFor({
       state: "visible",
       timeout: Math.min(timeoutMs, 5000)

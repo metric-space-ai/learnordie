@@ -6333,6 +6333,93 @@ textarea.review-live-explanation {
   overflow-wrap: anywhere;
 }
 
+.markdown-content {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.markdown-content > * {
+  margin: 0;
+}
+
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5 {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 880;
+}
+
+.markdown-content h4,
+.markdown-content h5 {
+  font-size: 14px;
+}
+
+.markdown-content p,
+.markdown-content li {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  display: grid;
+  gap: 5px;
+  padding-left: 20px;
+}
+
+.markdown-content strong {
+  display: inline;
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  text-transform: none;
+}
+
+.markdown-content code {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 5px;
+  background: var(--panel);
+  font-size: 0.92em;
+}
+
+.markdown-content a {
+  color: var(--accent);
+  font-weight: 820;
+}
+
+.markdown-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-content table {
+  width: 100%;
+  min-width: 360px;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-content th {
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .chat-starter-actions {
   display: flex;
   flex-wrap: wrap;
