@@ -115,6 +115,8 @@ export class ModellSceneHost {
     this.renderer.render(this.scene, this.camera);
     const width = this.port.clientWidth;
     const height = this.port.clientHeight;
+    // Ohne gemessene Buehne (versteckt, noch nicht gelayoutet) bleiben Beschriftungen verborgen.
+    if (!width || !height) return;
     const vec = this.projected;
     for (const { anchor, el } of this.labelItems) {
       anchor.getWorldPosition(vec);
@@ -167,6 +169,7 @@ export class ModellSceneHost {
     const el = document.createElement("div");
     el.className = `lb-scene3d-label ${cls}`.trim();
     el.textContent = text;
+    el.style.display = "none";
     this.labels.append(el);
     this.labelItems.push({ anchor, el });
     return el;
