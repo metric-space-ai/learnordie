@@ -21,9 +21,8 @@ export default async function LecturerLoginPage({
         : "";
 
   return (
-    <main className="mode-screen lb-motion-root">
-      <section className="mode-card lb-enter-sheet">
-        <p className="eyebrow">Dozentenbereich</p>
+    <main className="mode-screen login-screen lb-motion-root">
+      <section className="mode-card login-card lb-enter-sheet">
         <h1>Anmelden</h1>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
       </section>

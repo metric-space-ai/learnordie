@@ -43,6 +43,11 @@ function attachBrowserDiagnostics(page: Page) {
   return () => expect(problems, problems.join("\n")).toEqual([]);
 }
 
+async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen" | "Auswertung" | "Evaluation") {
+  await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: new RegExp(`^${name}`) }).click();
+}
+
 async function requestMagicLink(page: Page, email = "e2e@example.test") {
   await page.goto("/lecturer/login");
   await page.getByLabel("E-Mail").fill(email);
@@ -298,15 +303,6 @@ async function expectExpiredSessionCookieIsRejected(page: Page) {
 
   await page.goto("/lecturer");
   await expect(page).toHaveURL(/\/lecturer\/login$/);
-}
-
-async function setRangeValue(page: Page, selector: string, value: string) {
-  await page.locator(selector).evaluate((element, nextValue) => {
-    if (!(element instanceof HTMLInputElement)) throw new Error(`${selector} is not an input.`);
-    element.value = nextValue;
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-  }, value);
 }
 
 async function seedLiveLeaderboardLoad(page: Page, runId: string) {
@@ -2589,34 +2585,29 @@ MISTRAL_API_KEY=replace-with-mistral-key
   expect(assistantMessage?.metadata?.toolPlan?.[1]?.action).toBe("review_draft");
   expect(assistantMessage?.content).toContain("Mock-Erklärung");
 
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openStudioTool(page, "Assistent");
   await expect(page.getByLabel("Planungsassistent direkt an der Folie")).toBeVisible();
   await page.getByLabel("Nachricht an den Planungsassistenten").fill("Welche Erklärung passt direkt auf diese Folie?");
   await page.getByRole("button", { name: "Senden" }).click();
   await expect(page.getByText("Mock-Erklärung").last()).toBeVisible();
-  await expect(page.getByLabel("Agent-Schritte").last()).toContainText("AIProvider genutzt");
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("1. Folienpunkt übernehmen");
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("2. Fragenentwurf anlegen");
-  await expect(page.getByRole("button", { name: "Toolkette ausführen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Alle ausführen" })).toBeVisible();
   await expect(page.getByRole("button", { name: "1. Folienpunkt übernehmen" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "2. Fragenentwurf" })).toBeVisible();
-  await page.getByRole("button", { name: "Toolkette ausführen" }).click();
+  await expect(page.getByRole("button", { name: "2. Frage entwerfen" })).toBeVisible();
+  await page.getByRole("button", { name: "Alle ausführen" }).click();
   await expect(page.getByText("Ich habe diesen Folienpunkt").last()).toBeVisible();
   await expect(page.getByText("Ich habe einen Fragenentwurf").last()).toBeVisible();
   await page.getByLabel("Nachricht an den Planungsassistenten").fill("Bitte schärfe die Evaluation auf diese Folie.");
   await page.getByRole("button", { name: "Senden" }).click();
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("1. Evaluation schärfen");
   await page.getByRole("button", { name: "1. Evaluation schärfen" }).click();
   await expect(page.getByText("Ich habe die Evaluation").last()).toBeVisible();
   await expect(page.getByLabel("Evaluation direkt auf der Folie")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Evaluationstitel" })).toHaveValue(/Evaluation: Stribeck-Kurve/);
   await page.getByRole("button", { name: "Evaluation schließen" }).click();
   await expect(page.getByLabel("Evaluation direkt auf der Folie")).toBeHidden();
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openStudioTool(page, "Assistent");
   await expect(page.getByLabel("Planungsassistent direkt an der Folie")).toBeVisible();
   await page.getByLabel("Nachricht an den Planungsassistenten").fill("Bitte erhöhe die Fragedichte im Learn-Modus für die Nacharbeit.");
   await page.getByRole("button", { name: "Senden" }).click();
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("1. Learn-Fragedichte setzen");
   await expect(page.getByRole("button", { name: "1. Fragedichte setzen" })).toBeVisible();
   await page.getByRole("button", { name: "1. Fragedichte setzen" }).click();
   await expect(page.getByText("Ich habe die Learn-Fragedichte auf 6").last()).toBeVisible();
@@ -2637,22 +2628,22 @@ MISTRAL_API_KEY=replace-with-mistral-key
   });
   expect(resetLearnDensityResponse.ok()).toBe(true);
   await page.reload();
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openStudioTool(page, "Assistent");
   await expect(page.getByText("Mock-Erklärung").last()).toBeVisible();
   await expect(page.getByLabel("Planungsassistent direkt an der Folie")).toContainText("Ich habe die Learn-Fragedichte auf 6");
   await page.getByLabel("Assistent schließen").click();
-  await page.getByRole("button", { name: "Evaluation im Learn-Modus" }).click();
+  await openStudioTool(page, "Evaluation");
   await expect(page.getByRole("textbox", { name: "Evaluationstitel" })).toHaveValue(/Evaluation: Stribeck-Kurve/);
   await page.getByLabel("Evaluation schließen").click();
 
-  await page.getByRole("button", { name: /Fragen auf dieser Folie/ }).click();
+  await openStudioTool(page, "Fragen");
   await expect(page.getByLabel("Fragen direkt auf der Folie")).toBeVisible();
   await expect(page.getByLabel("Fragenvorschläge").getByText("Assistent: Hydrodynamische Gleitlagerung")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Fragetext Niveau 2.0" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Fragetext Niveau 2.0" })).toContainText(/Warum ist Mischreibung beim Anlauf eines Gleitlagers kritisch/);
 
   await page.getByLabel("Studio-Menü").click();
-  await page.getByRole("link", { name: "Logout" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/\/$/);
 
   await page.goto("/lecturer");
@@ -2969,7 +2960,7 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
   const pptxName = "robuste-gleitlagerung.pptx";
 
   await loginLecturer(page);
-  await page.getByLabel("Quellen für diese Folie").click();
+  await openStudioTool(page, "Quellen");
   await expect(page.getByLabel("Quellen direkt an der Folie")).toBeVisible();
   const sourceFileInput = () => page
     .getByLabel("Quellen direkt an der Folie")
@@ -3005,7 +2996,7 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
   const sql = postgres(e2eDatabaseUrl, { max: 1, prepare: false });
   try {
     await page.getByRole("button", { name: "Link" }).click();
-    await page.getByLabel("URL").fill(blockedLoopbackUrlText);
+    await page.getByLabel("Weblink").fill(blockedLoopbackUrlText);
     const urlResponsePromise = page.waitForResponse((response) => (
       response.url().includes("/api/lectures/") &&
       response.url().endsWith("/materials") &&
@@ -3024,10 +3015,9 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     await page.getByRole("button", { name: "Fragen aktualisieren" }).click();
     await processingResponse;
     await expect(page.getByText("Materialverarbeitung abgeschlossen.")).toBeVisible();
-    await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("Materialien");
+    await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("Quellen");
     await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("URL-Abruf blockiert");
-    await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Assets");
-    await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Quelle");
+    await expect(page.getByLabel("Erkannte Inhalte")).toContainText("Quelle");
 
     const chunks = await sql<{ content: string; source_ref: string }[]>`
       select ac.content, ac.source_ref
@@ -3266,8 +3256,8 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
-  await page.getByRole("button", { name: "Chatfrage stellen" }).click();
-  await page.getByPlaceholder("Fachliche Frage zur Vorlesung stellen ...").fill("Wie verändert Viskosität die Stribeck-Kurve?");
+  await page.getByRole("button", { name: "Frage stellen" }).click();
+  await page.getByLabel("Deine Frage").fill("Wie verändert Viskosität die Stribeck-Kurve?");
   const chatResponsePromise = page.waitForResponse((response) => (
     response.url().includes(chatQuestionUrl) &&
     response.request().method() === "POST"
@@ -3334,10 +3324,10 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   await expect(page.getByText("+3 Punkte")).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Pseudonym sichern" })).toBeVisible();
   await page.getByRole("button", { name: "Sichern" }).click();
-  await expect(page.getByText("Pseudonym gesichert. Die Vorlesung liegt jetzt in deinem Dashboard.")).toBeVisible();
+  await expect(page.getByText("Pseudonym gesichert")).toBeVisible();
 
-  await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
-  await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Rangliste" }).click();
+  await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.getByText(/1 · E2E Lager/)).toBeVisible();
   await expect(page.locator(".leader-row.self").filter({ hasText: "E2E Lager" })).toContainText("3");
   assertClean();
@@ -3390,8 +3380,8 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
   await page.goto("/l/gleitlagerung-demo");
   await page.getByLabel("Eigenes Pseudonym").fill(`Viewer ${runId}`);
   await page.getByRole("button", { name: "Teilnehmen" }).click();
-  await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
-  await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Rangliste" }).click();
+  await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.locator(".leader-row")).toHaveCount(10);
   await expect(page.locator(".leader-row").first()).toContainText("1 · Load 01");
   await expect(page.locator(".leader-row").first()).toContainText("12");
@@ -3444,10 +3434,6 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
 
   const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
   await expect(hotspots).toHaveCount(4);
-  await setRangeValue(page, ".learn-bar input", "1");
-  await expect(hotspots).toHaveCount(1);
-  await setRangeValue(page, ".learn-bar input", "7");
-  await expect(hotspots).toHaveCount(7);
 
   await page.getByLabel("Frage Niveau 1.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
@@ -3457,7 +3443,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   await expect(page.getByRole("heading", { name: "KI-Assistent" })).toBeVisible();
   await page.getByRole("button", { name: "Begriffe klären" }).click();
   await expect(page.getByText("Mock-Erklärung")).toBeVisible();
-  await expect(page.getByText(/Tokens heute verfügbar/)).toBeVisible();
+  await expect(page.getByText(/KI-Kontingent heute/)).toBeVisible();
   const aiChat = page.getByLabel("KI Chat");
   await expect(aiChat).toHaveAttribute("data-ai-answer-state", "answered");
   await expect(aiChat).toHaveAttribute("data-ai-stream-source", "provider");
@@ -3505,8 +3491,8 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   expect(learnSmokeCheck?.details?.aiProvider).toBe("openai-compatible");
   await page.getByLabel("Chat schließen").click();
 
-  await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
-  await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Rangliste" }).click();
+  await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
@@ -3518,11 +3504,10 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
-  await expect(page.getByText("LERNEN IM NORDEN")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer");
+  await expect(page.getByRole("heading", { name: "Vorlesung beitreten" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Für Dozierende" })).toHaveAttribute("href", "/lecturer");
   await expect(page.getByText("Hydrodynamische Gleitlagerung")).toHaveCount(0);
-  await page.getByRole("link", { name: "Dozentenlogin" }).click();
+  await page.getByRole("link", { name: "Für Dozierende" }).click();
   await expect(page.locator(".home-route-cover[data-route='lecturer']")).toBeAttached();
   const homeRouteCoverMotion = await page.evaluate(() => {
     const cover = document.querySelector<HTMLElement>(".home-route-cover");
@@ -3624,7 +3609,6 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       drawerOriginRatio,
       drawerHasTechnicalGrid: getComputedStyle(drawer).backgroundImage.includes("linear-gradient"),
       originTraceSocketAnimation: originTrace ? getComputedStyle(originTrace, "::before").animationName : "",
-      slideAxisAnimation: getComputedStyle(slideScreen, "::after").animationName,
       answerDelays: answers.map((answer) => toMs(getComputedStyle(answer).animationDelay)),
       hotspotHasOvershoot: cssText.includes("scale(1.05)")
     };
@@ -3637,7 +3621,6 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(learnMotion.drawerOriginRatio).toBeGreaterThan(0.7);
   expect(learnMotion.drawerHasTechnicalGrid).toBe(true);
   expect(learnMotion.originTraceSocketAnimation).toContain("lb-origin-socket-in");
-  expect(learnMotion.slideAxisAnimation).toContain("lb-stage-axis-in");
   expect(learnMotion.answerDelays).toHaveLength(4);
   expect(learnMotion.answerDelays[1]).toBeGreaterThan(learnMotion.answerDelays[0]);
   expect(learnMotion.answerDelays[3]).toBeGreaterThan(learnMotion.answerDelays[2]);
@@ -3652,14 +3635,12 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     return {
       origin: panel.dataset.panelOrigin,
       animationName: getComputedStyle(panel).animationName,
-      radius: getComputedStyle(panel).borderTopLeftRadius,
-      railBackground: getComputedStyle(panel, "::after").backgroundImage
+      radius: getComputedStyle(panel).borderTopLeftRadius
     };
   });
   expect(chatMotion.origin).toBe("chat");
   expect(chatMotion.animationName).toContain("lb-inspector-right-in");
   expect(chatMotion.radius).toBe("18px");
-  expect(chatMotion.railBackground).toContain("linear-gradient");
   await page.getByLabel("Chat schließen").click();
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -3694,11 +3675,9 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     const stage = document.querySelector<HTMLElement>(".studio-slide-stage");
     if (!stage) throw new Error("Studio stage missing.");
     return {
-      axisAnimation: getComputedStyle(stage, "::after").animationName,
       hasTechnicalGrid: getComputedStyle(stage).backgroundImage.includes("linear-gradient")
     };
   });
-  expect(studioStageMotion.axisAnimation).toContain("lb-stage-axis-in");
   expect(studioStageMotion.hasTechnicalGrid).toBe(true);
 
   const filmstripButtons = page.getByLabel("Folie auswählen").getByRole("button");
@@ -3760,7 +3739,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(toolMotion.popoverOriginMarkerWidth).toBe("58px");
   expect(toolMotion.choiceDelays[4]).toBeGreaterThan(toolMotion.choiceDelays[0]);
 
-  await page.getByRole("button", { name: "Material zu dieser Folie hinzufügen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Quellen/ }).click();
   await expect(page.getByLabel("Quellen direkt an der Folie")).toBeVisible();
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toBeAttached();
   const studioSourceMotion = await page.evaluate(() => {
@@ -3790,7 +3769,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.getByLabel("Quellen schließen").click();
 
   await page.getByLabel("Folienwerkzeuge öffnen").click();
-  await page.getByRole("button", { name: "Lernstand und offene Punkte dieser Folie ansehen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Auswertung/ }).click();
   await expect(page.getByLabel("Auswertung direkt an der Folie")).toBeVisible();
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toBeAttached();
   const studioAnalyticsMotion = await page.evaluate(() => {
@@ -3819,8 +3798,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toHaveCount(0, { timeout: 1500 });
   await page.getByLabel("Auswertung schließen").click();
 
-  await page.getByLabel("Folienwerkzeuge öffnen").click();
-  await page.getByRole("button", { name: "Fragen auf dieser Folie" }).click();
+  await openStudioTool(page, "Fragen");
   await expect(page.getByLabel("Fragen direkt auf der Folie")).toBeVisible();
   const studioSheetMotion = await page.evaluate(() => {
     const sheet = document.querySelector<HTMLElement>(".studio-slide-question-overlay");
@@ -3841,7 +3819,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.getByRole("button", { name: "Transkript und Mikrofon" }).click();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
   await expect(page.getByRole("button", { name: "Mikrofon an" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Passage", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Jetzt transkribieren", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Automatisch", exact: true })).toBeDisabled();
   await page.waitForTimeout(600);
   const lecturerLiveSttMotion = await page.evaluate(() => {

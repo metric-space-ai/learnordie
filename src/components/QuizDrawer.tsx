@@ -112,9 +112,9 @@ export function QuizDrawer({
           </div>
           {families.length > 1 ? (
             <div className="question-family-stepper lb-enter-control" aria-label="Fragen dieser Folie">
-              <button type="button" onClick={() => showFamily(activeFamilyIndex - 1)} aria-label="Vorherige Frage">‹</button>
+              <button type="button" onClick={() => showFamily(activeFamilyIndex - 1)} aria-label="Vorherige Frage" title="Vorherige Frage">‹</button>
               <span aria-live="polite">Frage {activeFamilyIndex + 1}/{families.length}</span>
-              <button type="button" onClick={() => showFamily(activeFamilyIndex + 1)} aria-label="Nächste Frage">›</button>
+              <button type="button" onClick={() => showFamily(activeFamilyIndex + 1)} aria-label="Nächste Frage" title="Nächste Frage">›</button>
             </div>
           ) : null}
           {headerAction}
@@ -140,14 +140,9 @@ export function QuizDrawer({
           })}
         </div>
       </div>
-      {revealed && families.length > 1 ? (
-        <button className="question-next-family" type="button" onClick={() => showFamily(activeFamilyIndex + 1)}>
-          Nächste Frage
-        </button>
-      ) : null}
       <aside className="timer lb-enter-control" aria-label="Timer">
         <strong>{String(seconds).padStart(2, "0")}</strong>
-        <span>{revealed ? (question.answers.find((answer) => answer.key === selected)?.correct ? `+${question.points} Punkte` : "0 Punkte") : "schließt"}</span>
+        {revealed ? <span>{question.answers.find((answer) => answer.key === selected)?.correct ? `+${question.points} Punkte` : "0 Punkte"}</span> : null}
       </aside>
     </section>
   );

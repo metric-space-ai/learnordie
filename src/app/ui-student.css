@@ -1,1 +1,49 @@
 /* UI overhaul: ui-student */
+
+/* Live join card: title, pseudonym fields, then a full-width "Teilnehmen" below them. */
+.student-gate-card h1 {
+  margin-bottom: 24px;
+}
+
+.student-gate-card .pseudonym-form {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.student-gate-card .pseudonym-form > .primary-button {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+/* Bottom-right action stack: short text buttons next to the "?" icon button. */
+.action-stack .icon-action.action-text {
+  width: auto;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .action-stack .icon-action.action-text {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+}
+
+/* "Pseudonym sichern?" nudge: one line of text plus its button. */
+.identity-save-nudge {
+  align-items: center;
+}
+
+.identity-save-nudge .plain-button {
+  white-space: nowrap;
+}
+
+/* AI chat: "Quellen" reads as the list's heading, not as an uppercase overline. */
+.chat-body .source-message > strong {
+  color: var(--ink);
+  font-size: 13px;
+  text-transform: none;
+}

@@ -1,1 +1,92 @@
 /* UI overhaul: ui-studio */
+
+/* Werkzeug-Sheets: keine Griffleisten. */
+.studio-context-drawer::before,
+.studio-slide-source-overlay::before,
+.studio-slide-tool-overlay::before,
+.new-lecture-slide::after {
+  content: none;
+}
+
+/* Ohne Griffleiste rückt der Sheet-Kopf nach oben: Platz für den Schließen-Knopf lassen. */
+.studio-context-drawer > .slide-overlay-head {
+  padding-right: 40px;
+}
+
+/* Filmstreifen: Titel und Folienliste, kein unterer Button mehr. */
+.studio-filmstrip-rail {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* Statusknopf: nur der Statustext, ohne Abschneiden. */
+.studio-plan-summary-button {
+  align-content: center;
+}
+
+@media (min-width: 861px) {
+  .studio-plan-summary-button {
+    flex: 0 0 auto;
+  }
+}
+
+/* ☰-Menü: bleibt im Viewport, Vorlesungsliste ohne Statuschip. */
+.studio-command-popover {
+  max-height: calc(100svh - 80px);
+  overflow: auto;
+}
+
+.studio-command-popover .studio-deck-card {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  gap: 2px;
+  min-height: 0;
+}
+
+/* Erkannte Inhalte: normale Überschrift statt Versal-Overline. */
+.studio-asset-library-head {
+  text-transform: none;
+}
+
+.studio-asset-library-head strong {
+  font-size: 13px;
+}
+
+/* Neue Vorlesung: leere Felder mit Beschriftung. */
+.new-lecture-composer.stage .new-lecture-slide,
+.new-lecture-composer.empty .new-lecture-slide {
+  grid-template-rows: none;
+  align-content: start;
+}
+
+.new-lecture-field,
+.new-lecture-composer .new-lecture-dates {
+  align-self: start;
+  width: min(100%, 720px);
+}
+
+.new-lecture-field {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.new-lecture-field input {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 820;
+}
+
+.new-lecture-title-field input {
+  min-height: 56px;
+  font-size: clamp(22px, 2.4vw, 34px);
+  font-weight: 900;
+}

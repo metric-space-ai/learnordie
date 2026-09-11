@@ -58,7 +58,7 @@ test("Dozent setzt Code, Student tritt mit Pseudonym bei und sieht das Dashboard
 
   await page.goto("/");
   await expect(page.getByRole("region", { name: "An Vorlesung teilnehmen" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vorlesung beitreten" })).toBeVisible();
   // Root must not be a demo slide / fake lecture.
   await expect(page.locator(".slide-screen")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Gleitlagerung" })).toHaveCount(0);
@@ -75,7 +75,6 @@ test("Dozent setzt Code, Student tritt mit Pseudonym bei und sieht das Dashboard
 
   await expect(page).toHaveURL(/\/student/);
   await expect(page.getByRole("heading", { name: SERIES_TITLE })).toBeVisible();
-  await expect(page.getByText(`Code ${JOIN_CODE}`)).toBeVisible();
 
   // Persistence: reopening the dashboard keeps the enrollment.
   await page.reload();
@@ -104,8 +103,8 @@ test("Root zeigt für ein bestehendes Profil den Dashboard-Einstieg", async ({ b
     await page.locator(".join-form button[type=submit]").click();
     await expect(page).toHaveURL(/\/student/);
   }
-  // Now the root surfaces "Zum Dashboard".
+  // Now the root surfaces "Meine Vorlesungen".
   await page.goto("/");
-  await expect(page.getByRole("link", { name: "Zum Dashboard" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Meine Vorlesungen" })).toBeVisible();
   await ctx.close();
 });

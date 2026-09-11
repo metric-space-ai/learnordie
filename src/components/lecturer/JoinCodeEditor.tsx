@@ -102,14 +102,13 @@ export function JoinCodeEditor({
   }
 
   return (
-    <section className="join-code-editor" aria-label="Vorlesungscode teilen">
-      {share?.joinCode ? (
+    <section className="join-code-editor" aria-label="Beitrittscode">
+      {share?.joinCode && (
         <div className="join-code-active">
-          <p className="join-code-label">Aktiver Code für Studierende</p>
           <p className="join-code-value">{share.joinCode}</p>
           <div className="join-code-actions">
             <button type="button" className="plain-button small" onClick={copyLink}>
-              {copied ? "Link kopiert ✓" : "Link kopieren"}
+              {copied ? "Link kopiert" : "Link kopieren"}
             </button>
             <button type="button" className="plain-button small" onClick={disableCode} disabled={busy}>
               Deaktivieren
@@ -117,8 +116,6 @@ export function JoinCodeEditor({
           </div>
           {share.joinPath && <p className="join-code-link">{`${typeof window !== "undefined" ? window.location.origin : ""}${share.joinPath}`}</p>}
         </div>
-      ) : (
-        <p className="join-code-empty">Noch kein Code gesetzt — Studierende brauchen einen Code zum Beitreten.</p>
       )}
 
       <form className="join-code-form" onSubmit={saveCode}>
@@ -127,7 +124,6 @@ export function JoinCodeEditor({
           <input
             value={codeInput}
             onChange={(event) => setCodeInput(event.target.value)}
-            placeholder="z. B. ME1-GL-2026"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
@@ -136,7 +132,7 @@ export function JoinCodeEditor({
         </label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button type="submit" className="studio-command-primary" disabled={busy}>
-          {busy ? "Speichern …" : "Code speichern"}
+          {busy ? "Speichert …" : "Speichern"}
         </button>
       </form>
     </section>

@@ -90,7 +90,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
           const added = incoming.filter((question) => question.familyId && !known.has(question.familyId));
           if (added.length > 0) {
             const slideNumber = lecture.slides.findIndex((item) => item.id === added[0].slideId) + 1;
-            setFeedback(slideNumber > 0 ? `Neue Live-Frage zu Folie ${slideNumber}.` : "Neue Live-Frage.");
+            setFeedback(slideNumber > 0 ? `Neue Frage zu Folie ${slideNumber}.` : "Neue Frage.");
           }
           return incoming.length === current.length && added.length === 0 ? current : incoming;
         });
@@ -171,7 +171,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     setIdentityMessage("");
     const profile = await saveProfile(clean);
     if (!profile) {
-      setIdentityMessage("Konnte gerade nicht sichern. Live-Teilnahme bleibt aktiv.");
+      setIdentityMessage("Sichern hat nicht geklappt.");
       setIdentitySaving(false);
       return;
     }
@@ -188,10 +188,10 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         })
       });
       setIdentitySaved(true);
-      setIdentityMessage("Pseudonym gesichert. Die Vorlesung liegt jetzt in deinem Dashboard.");
+      setIdentityMessage("Pseudonym gesichert.");
     } catch {
       setIdentitySaved(true);
-      setIdentityMessage("Pseudonym gesichert. Dashboard-Zuordnung wird später erneut versucht.");
+      setIdentityMessage("Pseudonym gesichert.");
     } finally {
       setIdentitySaving(false);
     }
@@ -220,7 +220,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     setChatSending(false);
 
     if (!response.ok) {
-      setChatFeedback(payload.error ?? "Chatfrage konnte nicht gesendet werden.");
+      setChatFeedback(payload.error ?? "Frage konnte nicht gesendet werden.");
       return;
     }
 
@@ -232,16 +232,14 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     return (
       <main className="mode-screen student-gate-screen lb-motion-root" data-joining={joining ? "true" : "false"}>
         <section className="mode-card student-gate-card lb-enter-sheet" data-joining={joining ? "true" : "false"}>
-          <p className="eyebrow">Live Student Modus</p>
-          <h1>{lecture.seriesTitle}: {lecture.title}</h1>
-          <p>Du kannst sofort live teilnehmen. Dein Pseudonym ist nur die Anzeige; Punkte hängen an diesem Browser.</p>
+          <h1>{lecture.title}</h1>
           <div className="pseudonym-form">
             <PseudonymChooser
               value={pseudonym}
               onChange={setPseudonym}
               seed={lecture.publicToken}
               disabled={joining}
-              label="Pseudonym für diese Runde"
+              label="Pseudonym"
             />
             <button className="primary-button" type="button" onClick={join} disabled={joining}>Teilnehmen</button>
           </div>
@@ -267,8 +265,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         <button
           className="icon-action"
           type="button"
-          title="Frage mit Leertaste ein-/ausklappen"
-          aria-label="Frage ein- oder ausklappen"
+          title="Quiz (Leertaste)"
+          aria-label="Quiz (Leertaste)"
           aria-pressed={questionOpen}
           onClick={() => {
             setQuestionOrigin("control");
@@ -279,26 +277,25 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         </button>
         {lecture.leaderboardEnabled && (
           <button
-            className="icon-action"
+            className="icon-action action-text"
             type="button"
-            aria-label="Leaderboard anzeigen"
             onClick={() => {
               setLeaderboardOpen(true);
               void loadLeaderboard();
             }}
           >
-            <span className="lb-icon lb-icon-rank" aria-hidden="true" />
+            Rangliste
           </button>
         )}
-        <button className="icon-action" type="button" aria-label="Chatfrage stellen" title="Fachliche Frage an den Referenten senden" onClick={() => setChatOpen((current) => !current)}>
-          <span className="lb-icon lb-icon-chat" aria-hidden="true" />
+        <button className="icon-action action-text" type="button" onClick={() => setChatOpen((current) => !current)}>
+          Frage stellen
         </button>
       </div>
       <Presence show={chatOpen}>
         {(motionState) => (
-        <aside className="chat-question-panel lb-enter-overlay" data-panel-origin="chat-question" data-state={motionState} aria-label="Chatfrage">
+        <aside className="chat-question-panel lb-enter-overlay" data-panel-origin="chat-question" data-state={motionState} aria-label="Frage an Dozierende">
           <div className="lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
-            <strong>Chatfrage</strong>
+            <strong>Frage an Dozierende</strong>
             <button className="plain-button" type="button" onClick={() => setChatOpen(false)}>Schließen</button>
           </div>
           <textarea
@@ -306,7 +303,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
             style={{ "--lb-i": 1 } as MotionStyle}
             value={chatText}
             onChange={(event) => setChatText(event.target.value)}
-            placeholder="Fachliche Frage zur Vorlesung stellen ..."
+            aria-label="Deine Frage"
             rows={3}
             suppressHydrationWarning
           />
@@ -317,7 +314,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
             type="button"
             onClick={submitChatQuestion}
           >
-            {chatSending ? "Sendet" : "Senden"}
+            {chatSending ? "Sendet …" : "Senden"}
           </button>
           {chatFeedback && <p className="form-note lb-enter-row" style={{ "--lb-i": 3 } as MotionStyle} aria-live="polite">{chatFeedback}</p>}
         </aside>
@@ -333,7 +330,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
             onAnswered={({ question, correct, selected }) => {
               const selectedAnswer = question.answers.find((answer) => answer.key === selected);
               const correctAnswer = question.answers.find((answer) => answer.correct);
-              setFeedback(correct ? "Antwort gespeichert: richtig." : "Antwort gespeichert: bitte Erklärung ansehen.");
+              setFeedback(correct ? "Antwort gespeichert: richtig." : "Antwort gespeichert: falsch.");
               setAnsweredOnce(true);
               void (async () => {
                 await recordEvent("answer_selected", {
@@ -360,20 +357,15 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       {feedback && <div className="toast-inline" aria-live="polite">{feedback}</div>}
       {answeredOnce && (!identitySaved || identityMessage) && (
         <aside className="identity-save-nudge lb-enter-panel" aria-label="Pseudonym sichern">
-          <div>
-            <strong>Pseudonym sichern?</strong>
-            <p>
-              {identitySaved
-                ? "Dieses Pseudonym ist jetzt für dein Dashboard gesichert."
-                : "Deine Punkte sind jetzt diesem Browser zugeordnet. Sichere das Pseudonym, damit die Vorlesung auch im Dashboard erscheint."}
-            </p>
-            {identityMessage && <p className="form-note" aria-live="polite">{identityMessage}</p>}
+          <div aria-live="polite">
+            <strong>{identitySaved ? "Pseudonym gesichert" : "Pseudonym sichern?"}</strong>
+            {identityMessage && !identitySaved && <p className="form-note">{identityMessage}</p>}
           </div>
           {identitySaved ? (
-            <a className="plain-button small" href="/student">Dashboard</a>
+            <a className="plain-button small" href="/student">Meine Vorlesungen</a>
           ) : (
             <button className="plain-button small" type="button" onClick={saveLiveIdentity} disabled={identitySaving}>
-              {identitySaving ? "Sichert ..." : "Sichern"}
+              {identitySaving ? "Sichert …" : "Sichern"}
             </button>
           )}
         </aside>

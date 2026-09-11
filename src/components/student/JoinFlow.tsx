@@ -37,11 +37,7 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
     return (
       <main className="join-screen lb-motion-root" aria-label="Code nicht gefunden">
         <section className="join-card lb-enter-panel">
-          <p className="eyebrow">Code prüfen</p>
           <h1>Diesen Code kennen wir nicht</h1>
-          <p className="join-lead">
-            Der Code „{code}“ gehört zu keiner Vorlesung. Bitte prüfe die Schreibweise und versuche es erneut.
-          </p>
           <form
             className="join-form"
             onSubmit={(event) => {
@@ -55,7 +51,6 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
               <input
                 value={retryCode}
                 onChange={(event) => setRetryCode(event.target.value)}
-                placeholder="z. B. ME1-GL-2026"
                 autoComplete="off"
                 autoCapitalize="characters"
               />
@@ -114,18 +109,11 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
   return (
     <main className="join-screen lb-motion-root" aria-label="Vorlesung beitreten">
       <section className="join-card lb-enter-panel">
-        <p className="eyebrow">Vorlesung gefunden</p>
         <h1>{targetLabel}</h1>
-        <p className="join-lead">
-          {target.scope === "lecture"
-            ? `Einzeltermin aus „${target.seriesTitle}".`
-            : "Vorlesungsreihe — du siehst danach alle Termine in deinem Dashboard."}
-        </p>
 
         {hasProfile ? (
           <>
             <p className="join-note">Angemeldet als <strong>{pseudonym}</strong>.</p>
-            <p className="join-hint">Deine Punkte sind an deinen anonymen Browser-Schlüssel gebunden, nicht nur an den Anzeigenamen.</p>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button" type="button" onClick={enroll} disabled={busy}>
               {busy ? "Wird hinzugefügt …" : "Zu meinen Vorlesungen hinzufügen"}
@@ -138,14 +126,10 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
               onChange={setPseudonymInput}
               seed={code}
               disabled={busy}
-              label="Wähle ein Pseudonym"
             />
-            <p className="join-hint">
-              Punkte und Dashboard-Zugriff hängen an diesem Browser-Schlüssel. Jemand mit gleichem Pseudonym übernimmt deine Punkte nicht.
-            </p>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button" type="submit" disabled={busy}>
-              {busy ? "Trete bei …" : "Pseudonym wählen und beitreten"}
+              {busy ? "Trete bei …" : "Beitreten"}
             </button>
           </form>
         )}

@@ -14,6 +14,11 @@ function attachDiagnostics(page: Page) {
   return () => expect(problems, problems.join("\n")).toEqual([]);
 }
 
+async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen" | "Auswertung" | "Evaluation") {
+  await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: new RegExp(`^${name}`) }).click();
+}
+
 async function loginLecturer(page: Page) {
   const email = `engine-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   await page.goto("/lecturer/login");
@@ -175,9 +180,9 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   if (!libraryAsset) throw new Error("Processed presentation diagram asset was not returned by /api/lectures.");
 
   await page.reload();
-  await page.getByLabel("Quellen für diese Folie").click();
-  await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Diagramm");
-  await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Prüfen");
+  await openStudioTool(page, "Quellen");
+  await expect(page.getByLabel("Erkannte Inhalte")).toContainText("Diagramm");
+  await expect(page.getByLabel("Erkannte Inhalte")).toContainText("Prüfen");
   await page.getByLabel("Quellen schließen").click();
 
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();

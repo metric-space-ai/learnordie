@@ -11465,3 +11465,43 @@ a.plain-button {
   font: inherit;
 }
 
+
+/* Keine Zierlinien, Griffleisten oder Farbstreifen: sie tragen keine Information. */
+.mode-card::before,
+.overlay-panel::before,
+.transcript-panel::before,
+.chat-question-panel::before,
+.overlay-panel::after,
+.transcript-panel::after,
+.chat-question-panel::after,
+.overlay-head::after,
+.studio-context-drawer::before,
+.studio-slide-source-overlay::before,
+.studio-slide-tool-overlay::before,
+.slide-screen::after,
+.studio-slide-stage::after,
+.studio-filmstrip-rail::before,
+.studio-bottom-bar::before,
+.learn-bar::before {
+  content: none;
+}
+
+.mode-screen {
+  background: linear-gradient(155deg, oklch(12% 0.03 236), oklch(18% 0.032 226));
+}
+
+.join-screen {
+  background: var(--stage);
+}
+
+/* Aktionen rechts unten stapeln, damit sie neben dem Quizfenster frei bleiben. */
+@media (min-width: 861px) {
+  .action-stack {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .action-stack > .icon-action {
+    width: 100%;
+  }
+}

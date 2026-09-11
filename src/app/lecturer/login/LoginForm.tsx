@@ -85,7 +85,6 @@ export function LoginForm({
             inputMode="numeric"
             autoComplete="one-time-code"
             pattern="\d{6}"
-            placeholder="123456"
             autoFocus
             required
           />
@@ -97,7 +96,6 @@ export function LoginForm({
         {notice && <p className="form-success">{notice}</p>}
         <p className="login-support">
           <button className="plain-button" type="button" disabled={pending} onClick={() => requestCode()}>Neuen Code senden</button>
-          {" · "}
           <button className="plain-button" type="button" onClick={() => { setStep("email"); setError(""); setNotice(""); }}>Andere E-Mail</button>
         </p>
         {devLink && (
@@ -118,7 +116,6 @@ export function LoginForm({
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@hochschule.de"
           autoComplete="email"
           required
           suppressHydrationWarning

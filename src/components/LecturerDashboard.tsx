@@ -26,6 +26,7 @@ import type { PresenceState } from "./Presence";
 import type {
   Lecture,
   LectureAnalyticsSummary,
+  LectureMaterial,
   LectureStatus,
   LecturerAssistantToolPlanItem,
   MaterialProcessingRun,
@@ -45,10 +46,10 @@ import type { FormEvent, KeyboardEvent } from "react";
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
   { value: "draft", label: "Entwurf" },
   { value: "material_processing", label: "Material wird verarbeitet" },
-  { value: "question_review", label: "Fragenreview" },
+  { value: "question_review", label: "Fragen prüfen" },
   { value: "ready_for_live", label: "Bereit für Live" },
   { value: "live", label: "Live" },
-  { value: "learn_active", label: "Learn aktiv" },
+  { value: "learn_active", label: "Lernmodus aktiv" },
   { value: "archived", label: "Archiviert" }
 ];
 
@@ -72,8 +73,15 @@ const workspaceTools: Array<{ value: WorkspaceTool; label: string; shortLabel: s
   { value: "materials", label: "Material zu dieser Folie hinzufügen", shortLabel: "Quellen" },
   { value: "assistant", label: "Planungsassistent direkt an dieser Folie", shortLabel: "Assistent" },
   { value: "analytics", label: "Lernstand und offene Punkte dieser Folie ansehen", shortLabel: "Auswertung" },
-  { value: "evaluation", label: "Evaluation im Learn-Modus bearbeiten", shortLabel: "Evaluation" }
+  { value: "evaluation", label: "Evaluation im Lernmodus bearbeiten", shortLabel: "Evaluation" }
 ];
+
+const emptyCreateDraft = {
+  title: "",
+  seriesTitle: "",
+  liveAt: "",
+  examDate: ""
+};
 
 // datetime-local-Felder arbeiten in der Ortszeit des Browsers; gespeichert wird UTC.
 function formatDateTime(value: string) {
@@ -92,14 +100,14 @@ function formatPercent(value: number) {
   return `${Number.isFinite(value) ? value : 0}%`;
 }
 
-function formatEventTime(value?: string) {
-  if (!value) return "Noch keine Events";
+function formatLectureDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
+    year: "numeric"
+  }).format(date);
 }
 
 function formatPlanDateTime(value: string) {
@@ -134,11 +142,6 @@ function formatExportTime(value: string) {
   }).format(new Date(value));
 }
 
-function formatSha(value?: string) {
-  if (!value) return "Keine Prüfsumme";
-  return `${value.slice(0, 12)}…${value.slice(-8)}`;
-}
-
 function formatExportJobStatus(status: StandaloneExportJob["status"]) {
   const labels: Record<StandaloneExportJob["status"], string> = {
     queued: "Wartet",
@@ -166,12 +169,23 @@ function formatPresentationAssetKind(kind: PresentationAsset["kind"]) {
     figure: "Abbildung",
     photo: "Foto",
     diagram: "Diagramm",
-    chart: "Chart",
+    chart: "Grafik",
     formula: "Formel",
     table: "Tabelle",
     audio: "Audio",
     video: "Video",
     sourceDocument: "Quelle"
+  } as const)[kind] ?? kind;
+}
+
+function formatMaterialKind(kind: LectureMaterial["kind"]) {
+  return ({
+    pptx: "PowerPoint",
+    pdf: "PDF",
+    url: "Link",
+    notes: "Notiz",
+    audio: "Audio",
+    other: "Datei"
   } as const)[kind] ?? kind;
 }
 
@@ -185,7 +199,7 @@ function formatPresentationAssetQuality(asset: PresentationAsset) {
 
 function assetPreview(asset: PresentationAsset) {
   const preview = asset.extractedText?.replace(/\s+/g, " ").trim();
-  if (!preview) return asset.description ?? "Für den Folienaufbau verfügbar.";
+  if (!preview) return asset.description ?? "";
   return preview.length > 130 ? `${preview.slice(0, 127)}...` : preview;
 }
 
@@ -232,7 +246,7 @@ function formatVisibleRunMessage(run: MaterialProcessingRun) {
 function formatVisibleExportJobMessage(job: StandaloneExportJob) {
   if (!job.message) return formatExportTime(job.createdAt);
   if (isTechnicalProviderMessage(job.message)) {
-    return "Archivjob konnte nicht gestartet werden.";
+    return "Archiv konnte nicht erstellt werden.";
   }
   return job.message;
 }
@@ -490,7 +504,7 @@ export function LecturerDashboard({
   const [processingMessage, setProcessingMessage] = useState("");
   const [improvementMessage, setImprovementMessage] = useState("");
   const [workspaceTool, setWorkspaceTool] = useState<WorkspaceTool>(initialTool ?? "presentation");
-  const [assistantDraft, setAssistantDraft] = useState("Welche Fragevarianten passen zu dieser Folie?");
+  const [assistantDraft, setAssistantDraft] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantActionLoading, setAssistantActionLoading] = useState(false);
   const [assistantSlideActionLoading, setAssistantSlideActionLoading] = useState(false);
@@ -546,12 +560,7 @@ export function LecturerDashboard({
     slides: selected?.slides ?? [],
     slideDocument: selected?.slideDocument
   });
-  const [createDraft, setCreateDraft] = useState({
-    title: "Wälzlager und Lebensdauer",
-    seriesTitle: "Maschinenelemente I",
-    liveAt: "2026-06-17T10:00",
-    examDate: "2027-07-23"
-  });
+  const [createDraft, setCreateDraft] = useState(emptyCreateDraft);
 
   useEffect(() => {
     if (!selected) return;
@@ -609,7 +618,7 @@ export function LecturerDashboard({
     setAnalyticsLoading(false);
 
     if (!response.ok || !payload.summary) {
-      setAnalyticsError(payload.error ?? "Analytics konnten nicht geladen werden.");
+      setAnalyticsError(payload.error ?? "Auswertung konnte nicht geladen werden.");
       return;
     }
 
@@ -674,7 +683,7 @@ export function LecturerDashboard({
       setReviewFocusId(review.id);
       setReviewLevel(review.variants.find((variant) => variant.level === "2.0")?.level ?? review.variants[0]?.level ?? "2.0");
     }
-    setReviewMessage("Fragenentwurf aus dem Assistenten angelegt.");
+    setReviewMessage("Fragenentwurf angelegt.");
     setWorkspaceTool("questions");
   }
 
@@ -729,12 +738,12 @@ export function LecturerDashboard({
     setAssistantSourceActionLoading(false);
 
     if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Quellen-Notiz konnte nicht angelegt werden.");
+      setAssistantError(payload.error ?? "Quelle konnte nicht gespeichert werden.");
       return;
     }
 
     setLectures(payload.lectures);
-    setProcessingMessage("Quellen-Notiz aus dem Assistenten angelegt.");
+    setProcessingMessage("Als Quelle gespeichert.");
     setWorkspaceTool("materials");
   }
 
@@ -768,7 +777,7 @@ export function LecturerDashboard({
         evaluationConfig: updatedLecture.evaluationConfig
       }));
     }
-    setReviewMessage("Ich habe die Evaluation auf diese Folie geschärft.");
+    setReviewMessage("Evaluation angepasst.");
     setWorkspaceTool("evaluation");
   }
 
@@ -791,7 +800,7 @@ export function LecturerDashboard({
     setAssistantLearnDensityActionLoading(false);
 
     if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Learn-Fragedichte konnte nicht gesetzt werden.");
+      setAssistantError(payload.error ?? "Fragedichte konnte nicht gesetzt werden.");
       return;
     }
 
@@ -803,7 +812,7 @@ export function LecturerDashboard({
         learnQuestionDensity: String(normalizeLearnQuestionDensity(updatedLecture.learnQuestionDensity))
       }));
     }
-    setReviewMessage("Learn-Fragedichte aus dem Assistenten gesetzt.");
+    setReviewMessage("Fragedichte gesetzt.");
     setPlanEditor("learn");
   }
 
@@ -827,7 +836,7 @@ export function LecturerDashboard({
     setAssistantPlanActionLoading(false);
 
     if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Toolkette konnte nicht ausgeführt werden.");
+      setAssistantError(payload.error ?? "Schritte konnten nicht ausgeführt werden.");
       return;
     }
 
@@ -851,8 +860,8 @@ export function LecturerDashboard({
 
     const labels = payload.executed?.map((item) => item.label).filter(Boolean) ?? [];
     setReviewMessage(labels.length > 0
-      ? `Toolkette ausgeführt: ${labels.join(", ")}.`
-      : "Toolkette ausgeführt.");
+      ? `Ausgeführt: ${labels.join(", ")}.`
+      : "Ausgeführt.");
   }
 
   async function createLecture(event: FormEvent<HTMLFormElement>) {
@@ -879,12 +888,7 @@ export function LecturerDashboard({
     setSelectedId(payload.lecture.id);
     setShowCreateForm(false);
     form.reset();
-    setCreateDraft({
-      title: "Wälzlager und Lebensdauer",
-      seriesTitle: "Maschinenelemente I",
-      liveAt: "2026-06-17T10:00",
-      examDate: "2027-07-23"
-    });
+    setCreateDraft(emptyCreateDraft);
   }
 
   function visibleStageEditDraft(current: typeof edit): typeof edit {
@@ -1033,15 +1037,6 @@ export function LecturerDashboard({
     return element.textContent?.replace(/\s+/g, " ").trim() ?? "";
   }
 
-  function updateCreateDraftText(field: "title" | "seriesTitle", element: HTMLElement) {
-    const value = inlineDraftValue(element);
-    if (!value) {
-      element.textContent = createDraft[field];
-      return;
-    }
-    setCreateDraft((current) => ({ ...current, [field]: value }));
-  }
-
   function finishInlineEdit(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== "Enter") return;
     event.preventDefault();
@@ -1058,11 +1053,11 @@ export function LecturerDashboard({
     });
     const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
     if (!response.ok || !payload.lectures) {
-      setReviewMessage(payload.error ?? "Review konnte nicht gespeichert werden.");
+      setReviewMessage(payload.error ?? "Entscheidung konnte nicht gespeichert werden.");
       return;
     }
     setLectures(payload.lectures);
-    setReviewMessage(decision === "approved" ? "Frage freigegeben und als aktive Live-Frage übernommen." : "Frage abgelehnt.");
+    setReviewMessage(decision === "approved" ? "Frage freigegeben." : "Frage abgelehnt.");
   }
 
   function updateReviewDraft(reviewId: string, level: QuestionLevel, updater: (variant: QuestionVariant) => QuestionVariant) {
@@ -1101,7 +1096,7 @@ export function LecturerDashboard({
       return remaining;
     });
     setEditingReviewId("");
-    setReviewMessage("Review-Änderungen gespeichert.");
+    setReviewMessage("Änderungen gespeichert.");
   }
 
   async function processMaterials() {
@@ -1111,7 +1106,7 @@ export function LecturerDashboard({
       return;
     }
     setProcessingLectureId(selected.id);
-    setProcessingMessage("Materialverarbeitung läuft. Quellen werden gelesen, Assets gespeichert und Review-Vorschläge erzeugt.");
+    setProcessingMessage("Quellen werden verarbeitet.");
     const response = await fetch(`/api/lectures/${selected.id}/process-materials`, { method: "POST", headers: csrfHeaders });
     const payload = (await response.json()) as { lectures?: Lecture[]; error?: string; queued?: boolean };
     setProcessingLectureId("");
@@ -1154,7 +1149,7 @@ export function LecturerDashboard({
       const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
 
       if (!response.ok || !payload.lectures) {
-        setEditError(payload.error ?? "Material konnte nicht hinzugefügt werden.");
+        setEditError(payload.error ?? "Quelle konnte nicht hinzugefügt werden.");
         return;
       }
 
@@ -1175,7 +1170,7 @@ export function LecturerDashboard({
   async function applyImprovementDraft(draft: ImprovementDraft, source?: HTMLElement | null) {
     if (!selected) return;
     setImprovementMessage("");
-    const questionTarget = document.querySelector<HTMLElement>(".studio-hotspot[aria-label='Fragen auf dieser Folie']");
+    const questionTarget = document.querySelector<HTMLElement>(".studio-tool-trigger");
     animateStudioInsightSharedElement({
       kind: draft.kind,
       label: draft.kind === "slide" ? "Folie" : draft.questionLevel ?? "Frage",
@@ -1445,9 +1440,7 @@ export function LecturerDashboard({
   function renderQuestionStage() {
     if (reviews.length === 0) {
       const activeQuestion = studioFamily.find((question) => question.level === reviewLevel) ?? studioFamily[0];
-      if (!activeQuestion) {
-        return <p className="tool-empty-note">Noch keine Frage im Deck.</p>;
-      }
+      if (!activeQuestion) return null;
 
       return (
         <div className="question-stage active-question-stage" aria-label="Aktive Live-Frage prüfen">
@@ -1584,7 +1577,7 @@ export function LecturerDashboard({
       : composerMode === "url"
         ? "Link hinzufügen"
         : composerMode === "notes"
-          ? "Notiz übernehmen"
+          ? "Notiz hinzufügen"
           : "";
     const modeOptions: Array<{ value: SourceComposer; label: string }> = [
       { value: "file", label: "Datei" },
@@ -1639,13 +1632,13 @@ export function LecturerDashboard({
           {composerMode === "url" && (
             <label className="source-composer-field">
               <span>Weblink</span>
-              <input name="url" type="url" placeholder="https://..." aria-label="URL" suppressHydrationWarning />
+              <input name="url" type="url" aria-label="Weblink" suppressHydrationWarning />
             </label>
           )}
           {composerMode === "notes" && (
             <label className="source-composer-field">
               <span>Notiz</span>
-              <textarea name="notes" rows={6} placeholder="z. B. Lernziel, Transkriptstelle oder ergänzende Erklärung" aria-label="Notiz" suppressHydrationWarning />
+              <textarea name="notes" rows={6} aria-label="Notiz" suppressHydrationWarning />
             </label>
           )}
           <button className="primary-button" disabled={materialUploading} type="submit">
@@ -1663,22 +1656,19 @@ export function LecturerDashboard({
     const visiblePresentationAssets = [...presentationAssets].sort((left, right) => (
       Number(Boolean(presentationAssetPreviewUrl(right))) - Number(Boolean(presentationAssetPreviewUrl(left)))
     ));
-    const materialLabel = materials.length === 1 ? "1 Quelle" : `${materials.length} Quellen`;
-    const assetLabel = presentationAssets.length === 1 ? "1 Asset" : `${presentationAssets.length} Assets`;
     const lastRunCountLabel = lastRun
       ? lastRun.materialCount > 0
-        ? `${lastRun.materialCount} Materialien · ${lastRun.chunkCount} Chunks · ${lastRun.reviewCount} Reviews`
+        ? `${lastRun.materialCount} ${lastRun.materialCount === 1 ? "Quelle" : "Quellen"} · ${lastRun.reviewCount} ${lastRun.reviewCount === 1 ? "Fragenvorschlag" : "Fragenvorschläge"}`
         : "Keine neuen Quellen"
       : "";
     const extractionWarning = lastRun?.steps.find((step) => step.label.startsWith("Extraktion eingeschränkt"))?.detail;
 
     return (
       <aside className="studio-context-drawer materials studio-slide-source-overlay lb-enter-sheet" data-panel-origin="studio-sources" data-state={motionState} aria-label="Quellen direkt an der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Quellen schließen">×</button>
+        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Quellen schließen" title="Quellen schließen">×</button>
         <header className="slide-overlay-head">
           <div>
             <strong>Quellen</strong>
-            <span>{materialLabel} · {assetLabel}</span>
           </div>
           {materials.length > 0 && (
             <button
@@ -1702,17 +1692,15 @@ export function LecturerDashboard({
             {extractionWarning && <small>{extractionWarning}</small>}
           </div>
         )}
-        <section className="studio-asset-library" aria-label="Asset-Bibliothek">
-          <div className="studio-asset-library-head">
-            <strong>Asset-Bibliothek</strong>
-            <span>{assetLabel}</span>
-          </div>
-          {presentationAssets.length === 0 ? (
-            <p className="muted">Noch keine extrahierten Präsentationsassets. Quellen verarbeiten erzeugt Text-, Diagramm-, Formel- und Tabellenkandidaten.</p>
-          ) : (
+        {presentationAssets.length > 0 && (
+          <section className="studio-asset-library" aria-label="Erkannte Inhalte">
+            <div className="studio-asset-library-head">
+              <strong>Erkannte Inhalte</strong>
+            </div>
             <div className="studio-asset-list compact">
               {visiblePresentationAssets.slice(0, 6).map((asset) => {
                 const previewUrl = presentationAssetPreviewUrl(asset);
+                const preview = assetPreview(asset);
                 return (
                   <article className={`studio-asset-card${previewUrl ? " has-preview" : ""}`} key={asset.id}>
                     {previewUrl && (
@@ -1723,7 +1711,7 @@ export function LecturerDashboard({
                       <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
                     </header>
                     <strong>{asset.title}</strong>
-                    <p>{assetPreview(asset)}</p>
+                    {preview && <p>{preview}</p>}
                     <footer>
                       <span>{asset.source.originalName}</span>
                       {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
@@ -1732,20 +1720,18 @@ export function LecturerDashboard({
                 );
               })}
             </div>
-          )}
-        </section>
-        <div className="studio-source-list compact" aria-label="Hinterlegte Quellen">
-          {materials.length === 0 ? (
-            <p className="muted">Noch keine Quelle an dieser Folie.</p>
-          ) : (
-            materials.slice(0, 4).map((material) => (
+          </section>
+        )}
+        {materials.length > 0 && (
+          <div className="studio-source-list compact" aria-label="Hinterlegte Quellen">
+            {materials.slice(0, 4).map((material) => (
               <span className="studio-source-chip" key={material.id} title={material.originalName}>
                 <strong>{material.originalName}</strong>
-                <small>{material.kind}</small>
+                <small>{formatMaterialKind(material.kind)}</small>
               </span>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </aside>
     );
   }
@@ -1753,17 +1739,13 @@ export function LecturerDashboard({
   function renderSlideQuestionOverlay(motionState: PresenceState) {
     const focusedReviewIndex = focusedReview ? reviews.findIndex((review) => review.id === focusedReview.id) : -1;
     const visibleVariants = focusedVariants.length > 0 ? focusedVariants : studioFamily;
-    const sourceLabel = reviews.length > 0 && focusedReview
-      ? `Vorschlag ${focusedReviewIndex + 1} / ${reviews.length}`
-      : `${slideFamilies.length} ${slideFamilies.length === 1 ? "Frage" : "Fragen"} · ${slideQuestions.length} Varianten`;
 
     return (
       <aside className="studio-context-drawer questions studio-slide-tool-overlay studio-slide-question-overlay lb-enter-sheet" data-state={motionState} aria-label="Fragen direkt auf der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Fragen schließen">×</button>
+        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Fragen schließen" title="Fragen schließen">×</button>
         <header className="slide-overlay-head">
           <div>
             <strong>Fragen</strong>
-            <span>{sourceLabel}</span>
           </div>
         </header>
 
@@ -1775,18 +1757,20 @@ export function LecturerDashboard({
                 onClick={() => selectReviewOffset(-1)}
                 disabled={focusedReviewIndex <= 0}
                 aria-label="Vorheriger Fragenvorschlag"
+                title="Vorheriger Fragenvorschlag"
               >
                 ‹
               </button>
               <div>
                 <span>{focusedReview.sourceTitle}</span>
-                <strong>{formatQuestionReviewStatus(focusedReview.status)}</strong>
+                <strong>Vorschlag {focusedReviewIndex + 1} / {reviews.length}</strong>
               </div>
               <button
                 type="button"
                 onClick={() => selectReviewOffset(1)}
                 disabled={focusedReviewIndex >= reviews.length - 1}
                 aria-label="Nächster Fragenvorschlag"
+                title="Nächster Fragenvorschlag"
               >
                 ›
               </button>
@@ -1798,11 +1782,11 @@ export function LecturerDashboard({
                 onClick={() => setStudioFamilyIndex((activeStudioFamilyIndex + slideFamilies.length - 1) % Math.max(slideFamilies.length, 1))}
                 disabled={slideFamilies.length < 2}
                 aria-label="Vorherige Frage"
+                title="Vorherige Frage"
               >
                 ‹
               </button>
               <div>
-                <span>Aktive Fragen dieser Folie</span>
                 <strong>Frage {slideFamilies.length > 0 ? activeStudioFamilyIndex + 1 : 0} / {slideFamilies.length}</strong>
               </div>
               <button
@@ -1810,6 +1794,7 @@ export function LecturerDashboard({
                 onClick={() => setStudioFamilyIndex((activeStudioFamilyIndex + 1) % Math.max(slideFamilies.length, 1))}
                 disabled={slideFamilies.length < 2}
                 aria-label="Nächste Frage"
+                title="Nächste Frage"
               >
                 ›
               </button>
@@ -1857,11 +1842,10 @@ export function LecturerDashboard({
   function renderSlideEvaluationOverlay(motionState: PresenceState) {
     return (
       <aside className="studio-context-drawer evaluation studio-slide-tool-overlay studio-slide-evaluation-overlay lb-enter-sheet" data-state={motionState} aria-label="Evaluation direkt auf der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Evaluation schließen">×</button>
+        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Evaluation schließen" title="Evaluation schließen">×</button>
         <header className="slide-overlay-head">
           <div>
             <strong>Evaluation</strong>
-            <span>Learn-Modus Vorschau</span>
           </div>
           <button className="primary-button" type="button" onClick={persistLectureEdits}>Speichern</button>
         </header>
@@ -1872,7 +1856,7 @@ export function LecturerDashboard({
             onChange={(event) => updateEvaluationConfig((config) => ({ ...config, enabled: event.target.checked }))}
             suppressHydrationWarning
           />
-          im Learn-Modus anzeigen
+          Im Lernmodus anzeigen
         </label>
         {reviewMessage && <p className="form-note" aria-live="polite">{reviewMessage}</p>}
         {renderEvaluationPreview()}
@@ -1883,52 +1867,41 @@ export function LecturerDashboard({
             onChange={(event) => setEdit((current) => ({ ...current, saveEvaluationAsSeriesTemplate: event.target.checked }))}
             suppressHydrationWarning
           />
-          als Vorlage für die Reihe merken
+          Als Vorlage für die Reihe merken
         </label>
       </aside>
     );
   }
 
   function renderSlideAnalyticsOverlay(motionState: PresenceState) {
-    const topCluster = analytics?.topicClusters.items[0];
     const topDraft = improvementDrafts[0];
     const visibleChatQuestions = (selected.studentChatQuestions ?? []).slice(0, 2);
 
     return (
       <aside className="studio-context-drawer analytics studio-slide-tool-overlay studio-slide-analytics-overlay lb-enter-sheet" data-panel-origin="studio-analytics" data-state={motionState} aria-label="Auswertung direkt an der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Auswertung schließen">×</button>
+        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Auswertung schließen" title="Auswertung schließen">×</button>
         <header className="slide-overlay-head">
           <div>
             <strong>Auswertung</strong>
-            <span>{analytics ? `${analytics.participants} Teilnehmende · ${formatPercent(analytics.correctRate)} korrekt` : "Noch keine Daten"}</span>
           </div>
           <button className="plain-button" type="button" onClick={() => loadAnalytics(selected.id)}>Aktualisieren</button>
         </header>
 
         {analyticsError && <p role="alert" className="form-error">{analyticsError}</p>}
-        {analyticsLoading && <p className="form-note">Analytics werden geladen.</p>}
+        {analyticsLoading && <p className="form-note">Wird geladen.</p>}
         {chatModerationMessage && <p className="form-note" aria-live="polite">{chatModerationMessage}</p>}
         {improvementMessage && <p className="form-note" aria-live="polite">{improvementMessage}</p>}
 
-        {analytics ? (
+        {analytics && (
           <div className="studio-analytics-compact">
-            <div className="studio-analytics-numbers" aria-label="Analytics-Kennzahlen">
+            <div className="studio-analytics-numbers" aria-label="Kennzahlen">
               <span><strong>{analytics.answers}</strong> Antworten</span>
               <span><strong>{formatPercent(analytics.correctRate)}</strong> korrekt</span>
               <span><strong>{analytics.aiUsage.messages}</strong> KI-Fragen</span>
             </div>
 
-            {topCluster && (
-              <section className={`studio-insight-card ${topCluster.riskLevel}`} aria-label="Wichtigster Themencluster">
-                <span>{topCluster.signalCount} Signale · {topCluster.riskLevel}</span>
-                <strong>{topCluster.topic}</strong>
-                <p>{topCluster.recommendation}</p>
-              </section>
-            )}
-
             {topDraft && (
-              <section className="studio-insight-card draft" aria-label="Nächster Änderungsentwurf">
-                <span>{topDraft.kind === "slide" ? "Folie" : "Frage"} · {topDraft.targetLabel}</span>
+              <section className="studio-insight-card draft" aria-label="Änderungsvorschlag">
                 <strong>{topDraft.title}</strong>
                 <p>{topDraft.after}</p>
                 <button
@@ -1943,7 +1916,7 @@ export function LecturerDashboard({
             )}
 
             {visibleChatQuestions.length > 0 && (
-              <div className="studio-signal-pills" aria-label="Live-Signale">
+              <div className="studio-signal-pills" aria-label="Chatfragen">
                 {visibleChatQuestions.map((question) => (
                   <button
                     key={question.id}
@@ -1957,11 +1930,7 @@ export function LecturerDashboard({
                 ))}
               </div>
             )}
-
-            <p className="muted">Letztes Event: {formatEventTime(analytics.lastEventAt)}</p>
           </div>
-        ) : (
-          <p className="muted">Noch keine Analytics für diese Vorlesung.</p>
         )}
       </aside>
     );
@@ -1971,7 +1940,6 @@ export function LecturerDashboard({
     const sourceRefs = visibleAssistantMessages.flatMap((message) => message.sourceRefs ?? []).slice(-4);
     const latestAgentMetadata = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant" && message.metadata)?.metadata;
     const orderedToolPlan = [...(latestAgentMetadata?.toolPlan ?? [])].sort((left, right) => left.order - right.order);
-    const primaryTool = orderedToolPlan.find((tool) => tool.status !== "blocked") ?? orderedToolPlan[0] ?? latestAgentMetadata?.toolSuggestions?.[0];
     const plannedByAction = new Map(orderedToolPlan.map((tool) => [tool.action, tool]));
     const executableToolPlan = orderedToolPlan.filter((tool) => tool.status !== "blocked").slice(0, 3);
     const assistantActionButtons: Array<{
@@ -1983,8 +1951,8 @@ export function LecturerDashboard({
     }> = [
       {
         action: "source_note" as LecturerAssistantToolPlanItem["action"],
-        label: "Quellen-Notiz",
-        loadingLabel: "Legt an",
+        label: "Als Quelle speichern",
+        loadingLabel: "Speichert",
         loading: assistantSourceActionLoading,
         onClick: () => void createAssistantSourceNote()
       },
@@ -1997,8 +1965,8 @@ export function LecturerDashboard({
       },
       {
         action: "review_draft" as LecturerAssistantToolPlanItem["action"],
-        label: "Fragenentwurf",
-        loadingLabel: "Legt an",
+        label: "Frage entwerfen",
+        loadingLabel: "Entwirft",
         loading: assistantActionLoading,
         onClick: () => void createAssistantReviewDraft()
       },
@@ -2024,12 +1992,10 @@ export function LecturerDashboard({
 
     return (
       <aside className="studio-context-drawer assistant studio-slide-tool-overlay studio-slide-assistant-overlay lb-enter-sheet" data-state={motionState} aria-label="Planungsassistent direkt an der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Assistent schließen">×</button>
+        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Assistent schließen" title="Assistent schließen">×</button>
         <header className="slide-overlay-head">
           <div>
             <strong>Assistent</strong>
-            <span>{studioSlide?.title ?? selected.title}</span>
-            {primaryTool && <em>Nächster Schritt: {primaryTool.label}</em>}
           </div>
           <div className="assistant-actions">
             {executableToolPlan.length > 1 && (
@@ -2038,9 +2004,8 @@ export function LecturerDashboard({
                 type="button"
                 onClick={() => void applyAssistantToolPlan()}
                 disabled={assistantPlanActionLoading || assistantActionLoading || assistantSlideActionLoading || assistantSourceActionLoading || assistantEvaluationActionLoading || assistantLearnDensityActionLoading}
-                title="Führt die vorgeschlagenen Agent-Aktionen in der angegebenen Reihenfolge aus."
               >
-                {assistantPlanActionLoading ? "Führt aus" : "Toolkette ausführen"}
+                {assistantPlanActionLoading ? "Führt aus" : "Alle ausführen"}
               </button>
             )}
             {assistantActionButtons.map((button) => {
@@ -2063,48 +2028,18 @@ export function LecturerDashboard({
         </header>
 
         <div className="assistant-thread" aria-live="polite">
-          {visibleAssistantMessages.length === 0 ? (
-            <p className="assistant-empty">Noch keine Planung an dieser Folie.</p>
-          ) : (
-            visibleAssistantMessages.map((message) => (
-              <article className={`assistant-message ${message.role}`} key={message.id}>
-                <strong>{message.role === "assistant" ? "Assistent" : "Du"}</strong>
-                {message.content.split("\n").filter(Boolean).map((line, index) => (
-                  <p key={`${message.id}-${index}`}>{line}</p>
-                ))}
-                {message.role === "assistant" && message.metadata?.steps && message.metadata.steps.length > 0 && (
-                  <div className="assistant-agent-steps" aria-label="Agent-Schritte">
-                    {message.metadata.steps.slice(0, 5).map((step) => (
-                      <span className={step.status} key={`${message.id}-${step.title}`}>
-                        <strong>{step.title}</strong>
-                        {step.detail}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {message.role === "assistant" && message.metadata?.sourceWeights && message.metadata.sourceWeights.length > 0 && (
-                  <div className="assistant-source-weights" aria-label="Quellengewichtung">
-                    {message.metadata.sourceWeights.slice(0, 4).map((source) => (
-                      <span key={`${message.id}-${source.label}`}>
-                        <strong>{Math.round(source.weight * 100)}%</strong>
-                        {source.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {message.role === "assistant" && message.metadata?.toolPlan && message.metadata.toolPlan.length > 0 && (
-                  <div className="assistant-tool-plan" aria-label="Nächste Agent-Aktionen">
-                    {message.metadata.toolPlan.slice(0, 3).map((tool) => (
-                      <span className={tool.status} key={`${message.id}-${tool.order}-${tool.action}`}>
-                        <strong>{tool.order}. {tool.label}</strong>
-                        {tool.prerequisite ? `${tool.reason} Voraussetzung: ${tool.prerequisite}` : tool.reason}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </article>
-            ))
-          )}
+          {visibleAssistantMessages.map((message) => (
+            <article
+              className={`assistant-message ${message.role}`}
+              data-ai-provider-used={message.metadata?.steps?.some((step) => step.title === "AIProvider genutzt") ? "true" : undefined}
+              key={message.id}
+            >
+              <strong>{message.role === "assistant" ? "Assistent" : "Du"}</strong>
+              {message.content.split("\n").filter(Boolean).map((line, index) => (
+                <p key={`${message.id}-${index}`}>{line}</p>
+              ))}
+            </article>
+          ))}
         </div>
 
         {sourceRefs.length > 0 && (
@@ -2119,7 +2054,7 @@ export function LecturerDashboard({
             aria-label="Nachricht an den Planungsassistenten"
             value={assistantDraft}
             onChange={(event) => setAssistantDraft(event.target.value)}
-            placeholder="z. B. Welche 1.0-Frage passt hier?"
+            placeholder="Nachricht an den Assistenten"
             rows={3}
             suppressHydrationWarning
           />
@@ -2134,33 +2069,36 @@ export function LecturerDashboard({
   function renderCreateLectureForm(context: "empty" | "stage") {
     return (
       <form className={`new-lecture-composer ${context}`} onSubmit={createLecture}>
-        <article className="new-lecture-slide" aria-label="Neue Vorlesung Vorschau">
-          <span>Neue Vorlesung</span>
-          <h2
-            aria-label="Titel"
-            contentEditable
-            onBlur={(event) => updateCreateDraftText("title", event.currentTarget)}
-            onKeyDown={finishInlineEdit}
-            role="textbox"
-            suppressContentEditableWarning
-            tabIndex={0}
-          >
-            {createDraft.title}
-          </h2>
-          <p
-            aria-label="Vorlesungsreihe"
-            contentEditable
-            onBlur={(event) => updateCreateDraftText("seriesTitle", event.currentTarget)}
-            onKeyDown={finishInlineEdit}
-            role="textbox"
-            suppressContentEditableWarning
-            tabIndex={0}
-          >
-            {createDraft.seriesTitle}
-          </p>
+        <article className="new-lecture-slide" aria-label="Neue Vorlesung">
+          <label className="new-lecture-field new-lecture-title-field">
+            Titel
+            <input
+              name="title"
+              type="text"
+              value={createDraft.title}
+              onChange={(event) => setCreateDraft((current) => ({ ...current, title: event.target.value }))}
+              autoComplete="off"
+              minLength={3}
+              required
+              suppressHydrationWarning
+            />
+          </label>
+          <label className="new-lecture-field">
+            Vorlesungsreihe
+            <input
+              name="seriesTitle"
+              type="text"
+              value={createDraft.seriesTitle}
+              onChange={(event) => setCreateDraft((current) => ({ ...current, seriesTitle: event.target.value }))}
+              autoComplete="off"
+              minLength={3}
+              required
+              suppressHydrationWarning
+            />
+          </label>
           <div className="new-lecture-dates">
             <label>
-              Live
+              Termin
               <input
                 name="liveAt"
                 type="datetime-local"
@@ -2183,15 +2121,13 @@ export function LecturerDashboard({
             </label>
           </div>
         </article>
-        <input name="title" type="hidden" value={createDraft.title} readOnly />
-        <input name="seriesTitle" type="hidden" value={createDraft.seriesTitle} readOnly />
         <div className="new-lecture-actions">
           {context === "stage" && selected && (
             <button className="plain-button" type="button" onClick={() => setShowCreateForm(false)}>
               Abbrechen
             </button>
           )}
-          <button className="primary-button" type="submit">Vorlesung öffnen</button>
+          <button className="primary-button" type="submit">Anlegen</button>
         </div>
         {createError && <p role="alert" className="form-error">{createError}</p>}
       </form>
@@ -2236,7 +2172,7 @@ export function LecturerDashboard({
     const assistantCount = selected.assistantMessages?.length ?? 0;
     const activeTool = workspaceTools.find((tool) => tool.value === workspaceTool);
     const toolItems: Array<{ tool: WorkspaceTool; detail: string; count?: string }> = [
-      { tool: "assistant", detail: "Assistent", count: assistantCount > 0 ? String(assistantCount) : "KI" },
+      { tool: "assistant", detail: "Assistent", count: assistantCount > 0 ? String(assistantCount) : undefined },
       { tool: "questions", detail: "Fragen", count: String(questionCount) },
       { tool: "materials", detail: "Quellen", count: String(materialCount) },
       { tool: "analytics", detail: "Auswertung", count: String(analyticsCount) },
@@ -2258,10 +2194,8 @@ export function LecturerDashboard({
           {(motionState) => (
             <div className="studio-tool-popover lb-enter-panel" data-state={motionState} aria-label="Folienwerkzeuge">
               {toolItems.map((item, index) => {
-                const tool = workspaceTools.find((candidate) => candidate.value === item.tool)!;
                 return (
                   <button
-                    aria-label={tool.label}
                     aria-pressed={workspaceTool === item.tool}
                     className={`studio-tool-choice lb-enter-row ${workspaceTool === item.tool ? "active" : ""}`}
                     key={item.tool}
@@ -2287,8 +2221,8 @@ export function LecturerDashboard({
         className={`studio-plan-summary-button ${planEditor ? "active" : ""}`}
         type="button"
         onClick={() => setPlanEditor((current) => (current ? null : "status"))}
+        title="Status"
       >
-        <span>Planung</span>
         <strong>{formatLectureStatus(edit.status)}</strong>
       </button>
     );
@@ -2299,7 +2233,7 @@ export function LecturerDashboard({
       { editor: "status", label: "Status", value: formatLectureStatus(edit.status) },
       { editor: "live", label: "Live", value: formatPlanDateTime(edit.liveAt) },
       { editor: "exam", label: "Prüfung", value: formatPlanDate(edit.examDate) },
-      { editor: "learn", label: "Learn", value: `${normalizeLearnQuestionDensity(edit.learnQuestionDensity)} Hotspots` },
+      { editor: "learn", label: "Lernmodus", value: `Fragedichte ${normalizeLearnQuestionDensity(edit.learnQuestionDensity)}` },
       { editor: "leaderboard", label: "Rangliste", value: edit.leaderboardEnabled ? "an" : "aus" },
       { editor: "budget", label: "KI", value: `${edit.aiDailyLimit}/${edit.seriesAiDailyLimit}/${edit.tenantAiDailyLimit}` }
     ];
@@ -2321,46 +2255,11 @@ export function LecturerDashboard({
     );
   }
 
-  function renderStudioHotspots() {
-    const questionCount = reviews.length || slideQuestions.length;
-    const materialCount = selected.materials?.length ?? 0;
-    const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
-    const assistantCount = selected.assistantMessages?.length ?? 0;
-    const hotspots: Array<{ tool: WorkspaceTool; icon: string; label: string; count?: string }> = [
-      { tool: "assistant", icon: "assistant", label: "Assistent an dieser Folie", count: assistantCount > 0 ? String(assistantCount) : undefined },
-      { tool: "questions", icon: "question", label: "Fragen auf dieser Folie", count: String(questionCount) },
-      { tool: "materials", icon: "source", label: "Quellen für diese Folie", count: materialCount > 0 ? String(materialCount) : undefined },
-      { tool: "analytics", icon: "analytics", label: "Lernsignale zu dieser Folie", count: analyticsCount > 0 ? String(analyticsCount) : undefined },
-      { tool: "evaluation", icon: "eval", label: "Evaluation im Learn-Modus", count: edit.evaluationConfig?.enabled === false ? "aus" : undefined }
-    ];
-
-    return (
-      <div className="studio-hotspots" aria-label="Direktwerkzeuge auf der Folie">
-        {hotspots.map((item, index) => (
-          <button
-            aria-label={item.label}
-            aria-pressed={workspaceTool === item.tool}
-            className={`studio-hotspot lb-enter-hotspot ${workspaceTool === item.tool ? "active" : ""}`}
-            key={item.tool}
-            style={{ "--lb-i": index } as MotionStyle}
-            title={item.label}
-            type="button"
-            onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
-          >
-            <span className={`lb-icon lb-icon-${item.icon}`} aria-hidden="true" />
-            {item.count ? <small>{item.count}</small> : null}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   function renderFilmstripRail() {
     return (
       <aside className="studio-filmstrip-rail" aria-label="Folien">
         <div className="studio-account-mini">
           <strong>{edit.title}</strong>
-          <span>{formatLectureStatus(edit.status)}</span>
         </div>
         <div className="studio-filmstrip-list" aria-label="Folie auswählen">
           {studioSlides.map((slide, index) => (
@@ -2385,17 +2284,6 @@ export function LecturerDashboard({
             </button>
           ))}
         </div>
-        <button
-          className="studio-create-trigger"
-          type="button"
-          onClick={() => {
-            setWorkspaceTool("presentation");
-            setPlanEditor(null);
-            setShowCreateForm(true);
-          }}
-        >
-          Neue Vorlesung
-        </button>
       </aside>
     );
   }
@@ -2406,7 +2294,7 @@ export function LecturerDashboard({
       status: "Status",
       live: "Live-Termin",
       exam: "Prüfungstag",
-      learn: "Learn-Modus",
+      learn: "Lernmodus",
       leaderboard: "Rangliste",
       budget: "KI-Budget"
     } satisfies Record<Exclude<PlanEditor, null>, string>;
@@ -2418,6 +2306,7 @@ export function LecturerDashboard({
           type="button"
           onClick={() => setPlanEditor(null)}
           aria-label="Planung schließen"
+          title="Planung schließen"
         >
           ×
         </button>
@@ -2474,7 +2363,7 @@ export function LecturerDashboard({
             <label>
               Fragedichte
               <input
-                aria-label="Learn-Fragedichte"
+                aria-label="Fragedichte"
                 type="range"
                 min={MIN_LEARN_QUESTION_DENSITY}
                 max={MAX_LEARN_QUESTION_DENSITY}
@@ -2487,7 +2376,6 @@ export function LecturerDashboard({
               />
               <strong>{normalizeLearnQuestionDensity(edit.learnQuestionDensity)}</strong>
             </label>
-            <p className="form-note">Steuert die Anzahl der Frageanker auf jeder Learn-Folie.</p>
           </div>
         )}
 
@@ -2533,12 +2421,12 @@ export function LecturerDashboard({
               <small>Fragen/Tag</small>
             </label>
             <details className="plan-token-details">
-              <summary>Tokenbudget</summary>
+              <summary>Textmenge pro Tag</summary>
               <div>
                 <label>
                   Vorlesung
                   <input
-                    aria-label="Vorlesung: KI-Tokens/Tag"
+                    aria-label="Vorlesung: KI-Textmenge/Tag"
                     type="number"
                     min={100}
                     max={200000}
@@ -2551,7 +2439,7 @@ export function LecturerDashboard({
                 <label>
                   Reihe
                   <input
-                    aria-label="Reihe: KI-Tokens/Tag"
+                    aria-label="Reihe: KI-Textmenge/Tag"
                     type="number"
                     min={100}
                     max={200000}
@@ -2564,7 +2452,7 @@ export function LecturerDashboard({
                 <label>
                   Konto
                   <input
-                    aria-label="Konto: KI-Tokens/Tag"
+                    aria-label="Konto: KI-Textmenge/Tag"
                     type="number"
                     min={100}
                     max={200000}
@@ -2588,18 +2476,14 @@ export function LecturerDashboard({
                 onChange={(event) => setEdit((current) => ({ ...current, leaderboardEnabled: event.target.checked }))}
                 suppressHydrationWarning
               />
-              Leaderboard für Studierende anzeigen
+              Rangliste für Studierende anzeigen
             </label>
-            <p className="form-note">Nur zur Motivation und Selbsteinschätzung, nicht prüfungsrelevant.</p>
           </div>
         )}
 
         <div className="studio-plan-actions">
           <button className="primary-button" type="button" onClick={() => void savePlanEdits()}>
             Speichern
-          </button>
-          <button className="plain-button" type="button" onClick={() => setPlanEditor(null)}>
-            Schließen
           </button>
         </div>
       </section>
@@ -2612,7 +2496,7 @@ export function LecturerDashboard({
         <section className="lecturer-studio lecturer-studio-empty">
           <section className="studio-slide-stage" aria-label="Neue Vorlesung anlegen">
             <div className="studio-slide-shell">
-              <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-create-stage" role="dialog" aria-label="Neue Vorlesung als Folie anlegen">
+              <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-create-stage" role="dialog" aria-label="Neue Vorlesung anlegen">
                 {renderCreateLectureForm("empty")}
               </div>
             </div>
@@ -2630,16 +2514,15 @@ export function LecturerDashboard({
             open={commandMenuOpen}
             onToggle={(event) => setCommandMenuOpen(event.currentTarget.open)}
           >
-            <summary aria-label="Studio-Menü">☰</summary>
+            <summary aria-label="Studio-Menü" title="Studio-Menü">☰</summary>
             <div className="studio-command-popover">
               <section className="studio-menu-section" aria-label="Vorlesung wechseln">
                 <div className="studio-menu-heading">
-                  <span>Vorlesung</span>
-                  <strong>{selected.title}</strong>
+                  <strong>Vorlesungen</strong>
                 </div>
                 <div className="studio-deck-picker compact" role="listbox" aria-label="Vorlesung auswählen">
-                  {lectures.slice(0, 4).map((lecture) => {
-                    const previewSlide = lecture.slides[0];
+                  {lectures.map((lecture) => {
+                    const lectureDate = formatLectureDate(lecture.liveAt);
                     return (
                       <button
                         aria-selected={lecture.id === selected.id}
@@ -2652,14 +2535,12 @@ export function LecturerDashboard({
                           setCommandMenuOpen(false);
                         }}
                       >
-                        <span>{formatLectureStatus(lecture.status)}</span>
                         <strong>{lecture.title}</strong>
-                        <small>{previewSlide?.title ?? lecture.seriesTitle}</small>
+                        {lectureDate && <small>{lectureDate}</small>}
                       </button>
                     );
                   })}
                 </div>
-                {lectures.length > 4 && <p className="studio-menu-note">{lectures.length - 4} weitere Vorlesungen werden später über Suche gefiltert.</p>}
                 <button
                   className="studio-command-primary"
                   type="button"
@@ -2672,32 +2553,18 @@ export function LecturerDashboard({
                   Neue Vorlesung
                 </button>
               </section>
-              <section className="studio-menu-section" aria-label="Ansichten öffnen">
+              <section className="studio-menu-section" aria-label="Ansichten">
                 <div className="studio-menu-heading">
-                  <span>Ansichten</span>
-                  <strong>Öffnen und prüfen</strong>
+                  <strong>Ansichten</strong>
                 </div>
                 <nav>
-                  <Link href={`/lecturer/live/${selected.publicToken}`}>Dozent Live</Link>
-                  <Link href={`/l/${selected.publicToken}`}>Student Link</Link>
-                  <Link href={`/learn/${selected.publicToken}`}>Learn prüfen</Link>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCommandMenuOpen(false);
-                      openWorkspaceTool("evaluation");
-                    }}
-                  >
-                    Evaluation
-                  </button>
-                  <a href={`/api/lecture/${selected.publicToken}/export`} download>Standalone HTML</a>
-                  <a href={`/api/lecture/${selected.publicToken}/export?format=zip`} download>Archiv ZIP</a>
+                  <Link href={`/l/${selected.publicToken}`}>Ansicht für Studierende</Link>
+                  <Link href={`/learn/${selected.publicToken}`}>Lernmodus</Link>
                 </nav>
               </section>
-              <section className="studio-menu-section" aria-label="Code teilen">
+              <section className="studio-menu-section" aria-label="Beitrittscode">
                 <div className="studio-menu-heading">
-                  <span>Code teilen</span>
-                  <strong>{selected.seriesTitle}</strong>
+                  <strong>Beitrittscode</strong>
                 </div>
                 <JoinCodeEditor
                   seriesId={seriesIdFromTitle(selected.seriesTitle)}
@@ -2707,16 +2574,15 @@ export function LecturerDashboard({
               </section>
               <section className="studio-menu-section studio-menu-export" aria-label="Archiv">
                 <div className="studio-menu-heading">
-                  <span>Archiv</span>
-                  <strong>Standalone</strong>
+                  <strong>Archiv</strong>
                 </div>
-                <span className={`studio-export-status ${latestExportJob?.status ?? "queued"}`}>
-                  {latestExportJob
-                    ? `${formatExportJobStatus(latestExportJob.status)} · ${formatVisibleExportJobMessage(latestExportJob)}`
-                    : latestStandaloneExport
-                      ? `${formatExportTime(latestStandaloneExport.createdAt)} · ${formatSha(latestStandaloneExport.sha256)}`
-                      : "Noch kein archivierter Stand."}
-                </span>
+                {latestExportJob ? (
+                  <span className={`studio-export-status ${latestExportJob.status}`}>
+                    {`${formatExportJobStatus(latestExportJob.status)} · ${formatVisibleExportJobMessage(latestExportJob)}`}
+                  </span>
+                ) : latestStandaloneExport ? (
+                  <span className="studio-export-status queued">{formatExportTime(latestStandaloneExport.createdAt)}</span>
+                ) : null}
                 <form action={`/lecturer/actions/exports/${selected.id}`} method="post">
                   <input type="hidden" name="csrfToken" value={csrfToken} />
                   <button type="submit">Archiv speichern</button>
@@ -2724,8 +2590,12 @@ export function LecturerDashboard({
                 {latestStoredArchive?.storageUrl && (
                   <a className="studio-command-link" href={latestStoredArchive.storageUrl} download>Gespeicherten Stand laden</a>
                 )}
+                <nav>
+                  <a href={`/api/lecture/${selected.publicToken}/export`} download>Offline-Datei</a>
+                  <a href={`/api/lecture/${selected.publicToken}/export?format=zip`} download>Archiv herunterladen</a>
+                </nav>
               </section>
-              <a className="studio-command-link" href="/api/auth/logout">Logout</a>
+              <a className="studio-command-link" href="/api/auth/logout">Abmelden</a>
             </div>
           </details>
           {renderFilmstripRail()}
@@ -2733,7 +2603,7 @@ export function LecturerDashboard({
           <section className={`studio-slide-stage ${workspaceTool === "questions" ? "question-active" : ""}`} aria-label="Präsentation bearbeiten">
             <div className="studio-slide-shell">
               {showCreateForm ? (
-                <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-create-stage" role="dialog" aria-label="Neue Vorlesung als Folie anlegen">
+                <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-create-stage" role="dialog" aria-label="Neue Vorlesung anlegen">
                   {renderCreateLectureForm("stage")}
                 </div>
               ) : studioSlide ? (
@@ -2843,6 +2713,7 @@ export function LecturerDashboard({
                             <button
                               type="button"
                               aria-label={`Folientext ${index + 1} entfernen`}
+                              title={`Folientext ${index + 1} entfernen`}
                               onClick={() => removeSlideCopyLine(studioSlide.id, index)}
                               disabled={studioSlide.copy.length <= 1}
                             >
@@ -2928,11 +2799,8 @@ export function LecturerDashboard({
                       onSlideDocumentChange={updateSlideDocumentFromEngine}
                     />
                   )}
-                  {renderStudioHotspots()}
                 </>
-              ) : (
-                <div className="workspace-empty-inline">Noch keine Folien vorhanden.</div>
-              )}
+              ) : null}
             </div>
 
             {!showCreateForm && (
@@ -2943,6 +2811,7 @@ export function LecturerDashboard({
                     onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)}
                     disabled={activeStudioSlideIndex === 0}
                     aria-label="Vorherige Folie"
+                    title="Vorherige Folie"
                   >
                     ‹
                   </button>
@@ -2952,6 +2821,7 @@ export function LecturerDashboard({
                     onClick={() => moveToStudioSlide(activeStudioSlideIndex + 1)}
                     disabled={activeStudioSlideIndex >= studioSlides.length - 1}
                     aria-label="Nächste Folie"
+                    title="Nächste Folie"
                   >
                     ›
                   </button>

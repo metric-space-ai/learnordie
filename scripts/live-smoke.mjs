@@ -369,20 +369,20 @@ async function checkStudentLive(page, token, timeoutMs) {
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl(`/l/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.getByText("Pseudonym für diese Runde").waitFor({ state: "visible", timeout: timeoutMs });
+  await page.getByLabel("Pseudonym-Vorschläge").waitFor({ state: "visible", timeout: timeoutMs });
   await page.getByLabel("Pseudonym-Vorschläge").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByPlaceholder("z. B. Lagerstern-42").fill(`Smoke ${Date.now().toString(36)}`);
+  await page.getByLabel("Eigenes Pseudonym").fill(`Smoke ${Date.now().toString(36)}`);
   await page.getByRole("button", { name: "Teilnehmen" }).click();
   await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
   await page.getByLabel("Quizfrage").waitFor({ state: "visible", timeout: timeoutMs });
   await page.locator(".question-drawer .answer").first().click();
   await page.locator(".toast-inline").waitFor({ state: "visible", timeout: timeoutMs });
 
-  const leaderboardButton = page.getByRole("button", { name: "Leaderboard anzeigen" });
+  const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
   if (leaderboardAvailable) {
     await leaderboardButton.click();
-    await page.getByRole("complementary", { name: "Leaderboard" }).waitFor({ state: "visible", timeout: timeoutMs });
+    await page.getByRole("complementary", { name: "Rangliste" }).waitFor({ state: "visible", timeout: timeoutMs });
   }
 
   if (!failOnDiagnostics("student_live_browser", problems)) return;
@@ -443,7 +443,7 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
       fail("learn_ai_markdown_browser", "Learn AI chat rendered raw Markdown markers.", markdownState);
       return;
     }
-    await page.locator(".chat-body").getByText(/Tokens|Quelle|Mock-Erklärung|Antwort|Praxisbeispiel/i).first().waitFor({
+    await page.locator(".chat-body").getByText(/KI-Kontingent|Quelle|Mock-Erklärung|Antwort|Praxisbeispiel/i).first().waitFor({
       state: "visible",
       timeout: Math.min(timeoutMs, 5000)
     });
@@ -451,11 +451,11 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   await page.getByLabel("Chat schließen").click();
   await page.getByLabel("KI Chat").waitFor({ state: "hidden", timeout: timeoutMs });
 
-  const leaderboardButton = page.getByRole("button", { name: "Leaderboard anzeigen" });
+  const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
   if (leaderboardAvailable) {
     await leaderboardButton.click();
-    await page.getByRole("complementary", { name: "Leaderboard" }).waitFor({ state: "visible", timeout: timeoutMs });
+    await page.getByRole("complementary", { name: "Rangliste" }).waitFor({ state: "visible", timeout: timeoutMs });
   }
 
   if (!failOnDiagnostics("learn_browser", problems)) return;
@@ -474,17 +474,21 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
 
 async function checkLecturerAssistant(page, timeoutMs, requireProvider) {
   const panel = page.getByLabel("Planungsassistent direkt an der Folie");
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  const openAssistant = async () => {
+    await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
+    await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Assistent/ }).click();
+  };
+  await openAssistant();
   await panel.waitFor({ state: "visible", timeout: timeoutMs });
   await panel.getByLabel("Nachricht an den Planungsassistenten").fill("Live-Smoke: Welche Erklärung passt direkt auf diese Folie?");
   await panel.getByRole("button", { name: "Senden" }).click();
   await panel.locator(".assistant-message.assistant").last().waitFor({ state: "visible", timeout: timeoutMs });
   await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openAssistant();
   await panel.waitFor({ state: "visible", timeout: timeoutMs });
   await panel.locator(".assistant-message.assistant").last().waitFor({ state: "visible", timeout: timeoutMs });
 
-  const providerVisible = await visible(panel.getByText("AIProvider genutzt").last(), 1500);
+  const providerVisible = await visible(panel.locator('.assistant-message.assistant[data-ai-provider-used="true"]').last(), 1500);
   if (requireProvider && !providerVisible) {
     fail("lecturer_assistant_browser", "Lecturer assistant answered, but provider-backed Agent step was not visible.");
     return;
@@ -498,7 +502,7 @@ async function checkLecturerAssistant(page, timeoutMs, requireProvider) {
 async function waitForLecturerStudio(page, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   const editorTitle = page.getByRole("textbox", { name: "Folientitel" });
-  const createDialog = page.getByRole("dialog", { name: "Neue Vorlesung als Folie anlegen" });
+  const createDialog = page.getByRole("dialog", { name: "Neue Vorlesung anlegen" });
 
   while (Date.now() < deadline) {
     if (await visible(editorTitle, 500)) return "lecture-editor";
@@ -567,7 +571,7 @@ async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth,
   }
 
   await page.getByLabel("Studio-Menü").click();
-  await page.getByRole("link", { name: "Logout" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
   await page.waitForURL((url) => url.pathname === "/" || url.pathname === "/lecturer/login", { timeout: timeoutMs });
   await page.goto(appUrl("/lecturer"), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await page.waitForURL(/\/lecturer\/login/, { timeout: timeoutMs });

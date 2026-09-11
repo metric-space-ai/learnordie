@@ -115,7 +115,7 @@ export function StudioSlideDocumentEditor({
 
   function selectBlock(selection: SlideBlockSelection) {
     setSelectedBlockId(selection.blockId);
-    setStatus(`Block ${selection.blockId} ausgewählt.`);
+    setStatus("");
     setIssue("");
   }
 
@@ -155,7 +155,6 @@ export function StudioSlideDocumentEditor({
       }
       setAgentThread(payload.thread);
       if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setStatus("KI-Vorschlag liegt vor.");
     } catch (error) {
       setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht erstellt werden.");
     } finally {
@@ -382,9 +381,8 @@ export function StudioSlideDocumentEditor({
           >
             <div className="studio-agent-popover-head">
               <strong>Mit KI bearbeiten</strong>
-              <button type="button" aria-label="Schließen" onClick={() => setAgentPopover(null)}>×</button>
+              <button type="button" aria-label="Schließen" title="Schließen" onClick={() => setAgentPopover(null)}>×</button>
             </div>
-            <p>{currentSlide.title}</p>
             <label>
               <span>Was soll die KI ändern?</span>
               <textarea
@@ -392,7 +390,6 @@ export function StudioSlideDocumentEditor({
                 rows={3}
                 value={agentPrompt}
                 onChange={(event) => setAgentPrompt(event.currentTarget.value)}
-                placeholder="z. B. Kernaussage kürzer formulieren"
               />
             </label>
             <div className="studio-agent-actions">
@@ -404,20 +401,19 @@ export function StudioSlideDocumentEditor({
             {agentThread ? (
               <div className="studio-agent-result">
                 <strong>Vorschlag</strong>
-                <ol>
-                  {(agentThread.events ?? []).slice(-6).map((event) => (
-                    <li key={event.id}>
-                      <span>{event.label}</span>
-                      <small>{event.status}</small>
-                    </li>
-                  ))}
-                </ol>
+                {agentThread.reviewPatch ? (
+                  proposedTexts(agentThread).map((text, index) => (
+                    <p className="studio-agent-proposal" key={index}>{text}</p>
+                  ))
+                ) : (
+                  <p>Die KI hat keinen Vorschlag erstellt.</p>
+                )}
                 {agentThread.reviewPatch?.qa.warnings.length ? (
                   <p className="studio-agent-warning">{agentThread.reviewPatch.qa.warnings.join(" ")}</p>
                 ) : null}
                 <button
                   type="button"
-                  disabled={agentBusy || agentThread.status === "accepted"}
+                  disabled={agentBusy || !agentThread.reviewPatch || agentThread.status === "accepted"}
                   onClick={acceptAgentPatch}
                 >
                   Änderung übernehmen
@@ -444,9 +440,9 @@ export function StudioSlideDocumentEditor({
 
         {selectedField ? (
           <label>
-            <span>{selectedField.label.replace(/^Engine /, "")}</span>
+            <span>{selectedField.label}</span>
             <textarea
-              aria-label={selectedField.label}
+              aria-label={selectedField.ariaLabel}
               rows={4}
               value={editorValue}
               onChange={(event) => setEditorValue(event.currentTarget.value)}
@@ -463,14 +459,14 @@ export function StudioSlideDocumentEditor({
               onChange={(event) => updateFigureAsset(event.currentTarget.value)}
             >
               {figureAssets.map((asset) => (
-                <option key={asset.id} value={asset.id}>{asset.title} · {asset.kind}</option>
+                <option key={asset.id} value={asset.id}>{asset.title}</option>
               ))}
             </select>
           </label>
         ) : null}
 
         {selectedTable ? (
-          <div className="studio-engine-editor-group" aria-label="Engine Tabelleneditor">
+          <div className="studio-engine-editor-group" aria-label="Tabelle">
             <label>
               <span>Zeile</span>
               <select
@@ -514,7 +510,7 @@ export function StudioSlideDocumentEditor({
         ) : null}
 
         {selectedBlock ? (
-          <div className="studio-engine-editor-group" aria-label="Engine Quizanker Editor">
+          <div className="studio-engine-editor-group" aria-label="Quizpunkt">
             <label>
               <span>Quizniveau</span>
               <select
@@ -551,6 +547,7 @@ export function StudioSlideDocumentEditor({
 function editableField(block: SlideBlock, slideId: string): {
   key: string;
   label: string;
+  ariaLabel: string;
   value: string;
   operations: (value: string) => SlideDocumentEditOperation[];
 } | null {
@@ -558,7 +555,8 @@ function editableField(block: SlideBlock, slideId: string): {
     case "heading":
       return {
         key: "heading",
-        label: "Engine Folientitel",
+        label: "Folientitel",
+        ariaLabel: "Folientitel",
         value: block.text,
         operations: (text) => [
           {
@@ -579,55 +577,81 @@ function editableField(block: SlideBlock, slideId: string): {
     case "paragraph":
       return {
         key: "text",
-        label: "Engine Folientext",
+        label: "Folientext",
+        ariaLabel: "Engine Folientext",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "figure":
       return {
         key: "caption",
-        label: "Engine Folienthema",
+        label: "Bildunterschrift",
+        ariaLabel: "Bildunterschrift",
         value: block.caption ?? "",
         operations: (caption) => [patchBlockOperation(slideId, block.id, { caption })]
       };
     case "formula":
       return {
         key: "latex",
-        label: "Engine Formel",
+        label: "Formel",
+        ariaLabel: "Engine Formel",
         value: block.latex ?? block.mathMl ?? "",
         operations: (latex) => [patchBlockOperation(slideId, block.id, { latex, mathMl: undefined })]
       };
     case "callout":
       return {
         key: "callout",
-        label: "Engine Hinweistext",
+        label: "Hinweistext",
+        ariaLabel: "Hinweistext",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "definition":
       return {
         key: "definition",
-        label: "Engine Definition",
+        label: "Definition",
+        ariaLabel: "Definition",
         value: block.definition,
         operations: (definition) => [patchBlockOperation(slideId, block.id, { definition })]
       };
     case "quote":
       return {
         key: "quote",
-        label: "Engine Zitat",
+        label: "Zitat",
+        ariaLabel: "Zitat",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "code":
       return {
         key: "code",
-        label: "Engine Code",
+        label: "Code",
+        ariaLabel: "Code",
         value: block.code,
         operations: (code) => [patchBlockOperation(slideId, block.id, { code })]
       };
     default:
       return null;
   }
+}
+
+const proposalTextKeys = ["text", "definition", "caption", "latex", "code"] as const;
+
+function proposedTexts(thread: AgentThread): string[] {
+  return (thread.reviewPatch?.operations ?? []).flatMap((operation) => {
+    const fields: Record<string, unknown> | undefined = operation.kind === "patchBlock"
+      ? operation.patch
+      : operation.kind === "insertBlock" || operation.kind === "replaceBlock"
+        ? operation.block
+        : undefined;
+    if (!fields) return [];
+    for (const key of proposalTextKeys) {
+      const value = fields[key];
+      if (typeof value === "string" && value.trim()) return [value.trim()];
+    }
+    const items = Array.isArray(fields.items) ? fields.items.filter((item): item is string => typeof item === "string") : [];
+    return items.length ? [items.join("\n")] : [];
+  });
 }
 
 function patchBlockOperation(slideId: string, blockId: string, patch: SlideBlockPatch): SlideDocumentEditOperation {
@@ -687,7 +711,7 @@ function presentationAssetToSlideAssetRef(asset: PresentationAsset): SlideAssetR
   return {
     id,
     kind: asset.kind,
-    title: boundedText(asset.title, 160) ?? "Asset",
+    title: boundedText(asset.title, 160) ?? "Grafik",
     description: boundedText(asset.description, 500),
     storageKey: boundedText(asset.storageKey, 500),
     previewKey: boundedText(asset.previewKey, 500),

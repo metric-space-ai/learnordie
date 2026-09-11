@@ -321,7 +321,6 @@ expectContains("studio_contract", lecturerDashboard, [
   "<Presence show={toolMenuOpen} exitMs={200}>",
   "data-state={motionState}",
   "studio-bottom-bar lb-enter-control",
-  "studio-hotspot lb-enter-hotspot",
   "style={{ \"--lb-i\": index } as MotionStyle}",
   "studio-context-drawer materials",
   "studio-context-drawer questions",

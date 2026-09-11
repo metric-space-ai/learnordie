@@ -16,16 +16,16 @@ export function LeaderboardModal({
   onClose: () => void;
 }) {
   return (
-    <aside className="overlay-panel lb-enter-overlay" data-panel-origin="leaderboard" data-state={motionState} aria-label="Leaderboard">
+    <aside className="overlay-panel lb-enter-overlay" data-panel-origin="leaderboard" data-state={motionState} aria-label="Rangliste">
       <div className="overlay-head">
-        <h2>Leaderboard</h2>
-        <button type="button" onClick={onClose} aria-label="Leaderboard schließen">×</button>
+        <h2>Rangliste</h2>
+        <button type="button" onClick={onClose} aria-label="Rangliste schließen" title="Schließen">×</button>
       </div>
       <div className="leaderboard-list">
-        {loading && <p className="form-note lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>Ranking wird geladen.</p>}
+        {loading && <p className="form-note lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>Lädt …</p>}
         {!loading && entries.length === 0 && (
           <p className="form-note lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
-            Noch keine Punkte. Beantworte eine Frage, um im Ranking zu erscheinen.
+            Beantworte eine Frage, um hier zu erscheinen.
           </p>
         )}
         {entries.map((entry, index) => (

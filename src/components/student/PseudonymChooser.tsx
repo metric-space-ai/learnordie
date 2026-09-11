@@ -25,7 +25,6 @@ export function PseudonymChooser({
     <div className="pseudonym-choice">
       <div className="pseudonym-choice-head">
         <span>{label}</span>
-        <small>kein Klarname</small>
       </div>
       <div className="pseudonym-suggestions" aria-label="Pseudonym-Vorschläge">
         {suggestions.map((suggestion) => (
@@ -46,7 +45,6 @@ export function PseudonymChooser({
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="z. B. Lagerstern-42"
           autoComplete="off"
           maxLength={80}
           disabled={disabled}

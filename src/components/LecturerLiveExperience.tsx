@@ -61,7 +61,6 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
-  const latestTranscript = transcriptDrafts[0]?.text ?? transcriptSegments[0]?.text ?? "";
 
   function stopListening() {
     autoSegmentingRef.current = false;
@@ -109,7 +108,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.error ?? "Passage konnte nicht transkribiert werden.");
+      throw new Error(payload.error ?? "Transkription fehlgeschlagen.");
     }
 
     const draft: TranscriptDraft = {
@@ -147,7 +146,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       const endedAt = new Date().toISOString();
       await transcribeAudioBlob(audio, startedAt, endedAt, slideRef.current, "manual");
     } catch (error) {
-      setTranscriptMessage(error instanceof Error ? error.message : "Audiopassage konnte nicht aufgenommen werden.");
+      setTranscriptMessage(error instanceof Error ? error.message : "Aufnahme fehlgeschlagen.");
       setSttStatus("error");
     }
   }
@@ -167,7 +166,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       })
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error ?? "Transkriptsegment konnte nicht gespeichert werden.");
+    if (!response.ok) throw new Error(payload.error ?? "Transkript konnte nicht gespeichert werden.");
     setTranscriptSegments((current) => [payload.segment, ...current]);
     setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
     return payload.segment as TranscriptSegment;
@@ -186,7 +185,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         body: JSON.stringify({ slideId, transcript })
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error ?? "Live-Frage konnte nicht erzeugt werden.");
+      if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
       setQuestions(payload.questions);
       pendingTranscriptRef.current = "";
       lastLiveQuestionAtRef.current = Date.now();
@@ -195,7 +194,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       setLiveQuestionMessage(`Neue Frage auf Folie ${slideIndex + 1}${preview ? `: ${preview.text}` : ""}`);
     } catch (error) {
       setLiveQuestionStatus("error");
-      setLiveQuestionMessage(error instanceof Error ? error.message : "Live-Frage konnte nicht erzeugt werden.");
+      setLiveQuestionMessage(error instanceof Error ? error.message : "Frage konnte nicht erzeugt werden.");
     } finally {
       liveGeneratingRef.current = false;
     }
@@ -208,7 +207,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       try {
         await persistTranscriptDraft(draft);
       } catch (error) {
-        setLiveQuestionMessage(error instanceof Error ? error.message : "Transkriptsegment konnte nicht gespeichert werden.");
+        setLiveQuestionMessage(error instanceof Error ? error.message : "Transkript konnte nicht gespeichert werden.");
         return;
       }
       pendingTranscriptRef.current = `${pendingTranscriptRef.current} ${draft.text}`.trim().slice(-LIVE_QUESTION_MAX_PENDING_CHARS);
@@ -221,12 +220,9 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     };
   });
 
-  async function submitTranscriptSegment(draftId?: string) {
-    const draft = transcriptDrafts.find((item) => item.id === draftId) ?? transcriptDrafts[0];
-    if (!draft) {
-      setTranscriptMessage("Noch keine Passage.");
-      return;
-    }
+  async function submitTranscriptSegment(draftId: string) {
+    const draft = transcriptDrafts.find((item) => item.id === draftId);
+    if (!draft) return;
     setTranscriptSavingId(draft.id);
     setTranscriptMessage("");
 
@@ -246,14 +242,14 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      setTranscriptMessage(payload.error ?? "Transkriptsegment konnte nicht gespeichert werden.");
+      setTranscriptMessage(payload.error ?? "Transkript konnte nicht gespeichert werden.");
       setTranscriptSavingId(null);
       return;
     }
 
     setTranscriptSegments((current) => [payload.segment, ...current]);
     setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
-    setTranscriptMessage(payload.message ?? "Transkriptsegment gespeichert.");
+    setTranscriptMessage(payload.message ?? "Transkript gespeichert.");
     setTranscriptSavingId(null);
   }
 
@@ -321,7 +317,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           }
         } catch (error) {
           if (!cancelled) {
-            setTranscriptMessage(error instanceof Error ? error.message : "Automatisches STT-Segment konnte nicht verarbeitet werden.");
+            setTranscriptMessage(error instanceof Error ? error.message : "Automatische Transkription fehlgeschlagen.");
             setSttStatus("error");
           }
         }
@@ -360,7 +356,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         <aside className="transcript-panel lb-enter-overlay" data-panel-origin="transcript" data-state={motionState} aria-label="Transkriptstatus">
           <div className="overlay-head">
             <h2>Transkript</h2>
-            <button type="button" aria-label="Transkript ausblenden" onClick={() => setTranscriptVisible(false)}>×</button>
+            <button type="button" aria-label="Transkript ausblenden" title="Transkript ausblenden" onClick={() => setTranscriptVisible(false)}>×</button>
           </div>
           <p className="lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
             <span className={`status-dot ${listening ? "live" : ""}`} />
@@ -372,9 +368,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
                   ? (autoSegmenting ? "Hört zu · automatisch" : "Hört zu")
                   : "Mikrofon aus"}
           </p>
-          {latestTranscript ? <p className="muted lb-enter-row" style={{ "--lb-i": 1 } as MotionStyle}>{latestTranscript}</p> : null}
           {transcriptDrafts.length > 0 && (
-            <div className="transcript-draft-list lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle} aria-label="STT-Kandidaten">
+            <div className="transcript-draft-list lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle} aria-label="Neues Transkript">
               {transcriptDrafts.map((draft) => (
                 <div className="transcript-draft" key={draft.id}>
                   <p>{draft.text}</p>
@@ -387,7 +382,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           )}
           {transcriptMessage && <p className="form-note lb-enter-row" style={{ "--lb-i": 3 } as MotionStyle}>{transcriptMessage}</p>}
           {transcriptSegments.length > 0 && (
-            <div className="transcript-mini-list" aria-label="Übernommene Transkriptsegmente">
+            <div className="transcript-mini-list" aria-label="Übernommenes Transkript">
               {transcriptSegments.slice(0, 3).map((segment, index) => (
                 <span
                   className={`${segment.status} lb-enter-row`}
@@ -404,17 +399,18 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
               {listening ? "Mikrofon aus" : "Mikrofon an"}
             </button>
             <button className="plain-button" disabled={!listening || sttStatus === "transcribing" || autoSegmenting} type="button" onClick={transcribeCurrentPassage}>
-              {sttStatus === "transcribing" ? "Transkribiert …" : "Passage"}
+              Jetzt transkribieren
             </button>
-            <button className="plain-button" disabled={!listening} type="button" onClick={() => setAutoSegmenting((current) => !current)}>
-              {autoSegmenting ? "Automatik aus" : "Automatisch"}
+            <button
+              className="plain-button"
+              disabled={!listening}
+              type="button"
+              aria-pressed={autoSegmenting}
+              onClick={() => setAutoSegmenting((current) => !current)}
+            >
+              Automatisch
             </button>
           </div>
-          {transcriptDrafts.length > 0 && (
-            <button className="primary-button lb-enter-row" style={{ "--lb-i": 8 } as MotionStyle} disabled={Boolean(transcriptSavingId)} type="button" onClick={() => submitTranscriptSegment()}>
-              {transcriptSavingId ? "Speichert" : "Passage übernehmen"}
-            </button>
-          )}
           <div className="live-question-pipeline lb-enter-row" style={{ "--lb-i": 9 } as MotionStyle} aria-label="Live-Fragen aus dem Transkript" data-status={liveQuestionStatus}>
             <div className="transcript-actions">
               <button
@@ -431,7 +427,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
                 disabled={liveQuestionStatus === "generating"}
                 onClick={() => generateLiveQuestion(slide, pendingTranscriptRef.current)}
               >
-                {liveQuestionStatus === "generating" ? "Erzeugt …" : "Live-Frage jetzt"}
+                {liveQuestionStatus === "generating" ? "Erzeugt …" : "Frage erzeugen"}
               </button>
             </div>
             {liveQuestionMessage ? <p className="form-note" aria-live="polite">{liveQuestionMessage}</p> : null}
@@ -441,9 +437,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       </Presence>
 
       <div className="action-stack lb-enter-control">
-        <a className="icon-action live-back-link" href="/lecturer" title="Zurück zum Studio" aria-label="Zurück zum Studio">
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
-        </a>
+        <a className="live-back-link" href="/lecturer">Beenden</a>
         <button
           className="icon-action"
           type="button"
@@ -474,8 +468,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         <button
           className="icon-action"
           type="button"
-          title="Fragen mit Leertaste ein-/ausklappen"
-          aria-label="Fragen ein- oder ausklappen"
+          title="Quiz (Leertaste)"
+          aria-label="Quiz (Leertaste)"
           aria-pressed={questionOpen}
           onClick={() => {
             setQuestionOrigin("control");
