@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 
 import type { ModellSceneHost } from "../scenes/modell-host";
 import {
@@ -58,6 +58,25 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
       intersection.disconnect();
       resize.disconnect();
     };
+  }, []);
+
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element) return;
+    // Nativ am Element, weil React seine Listener am document registriert und dort
+    // die Folien-Tastenkuerzel nicht mehr aufhalten kann. Nur Tasten, die das
+    // fokussierte Bedienelement selbst verbraucht, bleiben in der Szene.
+    const rangeKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+    const keepControlKeys = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isRange = target instanceof HTMLInputElement && target.type === "range";
+      const isButton = target instanceof HTMLButtonElement;
+      if ((isRange && rangeKeys.has(event.key)) || (isButton && (event.key === " " || event.key === "Enter"))) {
+        event.stopPropagation();
+      }
+    };
+    element.addEventListener("keydown", keepControlKeys);
+    return () => element.removeEventListener("keydown", keepControlKeys);
   }, []);
 
   useEffect(() => {
@@ -128,9 +147,11 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
     rerender();
   };
 
-  const stopDeckKeys = (event: KeyboardEvent<HTMLDivElement>) => {
-    // Pfeiltasten und Leertaste gehoeren in den Reglern der Szene, nicht der Foliennavigation.
-    event.stopPropagation();
+  // Nach Mausbedienung geht der Fokus zurueck an die Folie, damit Leertaste (Quiz)
+  // und Pfeiltasten (Navigation) sofort wieder greifen. Tastaturnutzer behalten den Fokus.
+  const releasePointerFocus = (event: PointerEvent<HTMLDivElement>) => {
+    const control = (event.target as HTMLElement).closest("button, input");
+    if (control instanceof HTMLElement) requestAnimationFrame(() => control.blur());
   };
 
   const rootStyle = {
@@ -161,7 +182,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           <div aria-hidden="true" className="lb-scene3d-labels" ref={labelsRef} />
         </div>
         {mode === "live" ? (
-          <div className="lb-scene3d-tools" onKeyDown={stopDeckKeys}>
+          <div className="lb-scene3d-tools" onPointerUp={releasePointerFocus}>
             <button
               aria-label={state.playing ? "Animation pausieren" : "Animation fortsetzen"}
               aria-pressed={!state.playing}
@@ -186,7 +207,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
         {failed ? <span className="lb-scene3d-note">WebGL ist nicht verfügbar. Die Inhalte bleiben als 2D-Ersatzansicht zugänglich.</span> : null}
       </div>
       {wide ? (
-        <div aria-label="Steuerung der Demonstration" className="lb-scene3d-controls" role="group" onKeyDown={stopDeckKeys}>
+        <div aria-label="Steuerung der Demonstration" className="lb-scene3d-controls" role="group" onPointerUp={releasePointerFocus}>
           <SceneControls sceneKey={sceneKey} state={state} update={update} />
         </div>
       ) : null}
