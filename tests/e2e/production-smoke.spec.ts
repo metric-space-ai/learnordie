@@ -3837,6 +3837,8 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.goto("/lecturer/live/gleitlagerung-demo");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expect(page.getByLabel("Transkriptstatus")).toHaveCount(0);
+  await page.getByRole("button", { name: "Transkript und Mikrofon" }).click();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
   await expect(page.getByRole("button", { name: "Mikrofon an" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Passage", exact: true })).toBeDisabled();

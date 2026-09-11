@@ -57,12 +57,12 @@ test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async
   await loginLecturer(page);
   await expect(page.getByRole("textbox", { name: "Folientitel" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   await expect(page.locator('[data-studio-engine-editor="true"]')).toBeVisible();
   await clickVisibleEditorBlock(page.locator('[data-studio-engine-editor="true"] [data-editor-block-type="paragraph"]').first());
   await page.getByLabel("Engine Folientext").fill(replacementText);
-  await page.getByRole("button", { name: "Engine-Block speichern" }).click();
-  await expect(page.getByText("Engine-Block gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await page.getByRole("button", { name: "Übernehmen" }).click();
+  await expect(page.getByText("Text geändert. Mit „Speichern“ sichern.")).toBeVisible();
   await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(replacementText);
 
   const saveResponsePromise = page.waitForResponse((response) => (
@@ -97,27 +97,26 @@ test("Dozentenstudio startet Pi-Agent-Thread und übernimmt Review-Diff", async 
   const agentInstruction = `Mischreibung präziser einordnen ${Date.now()}`;
 
   await loginLecturer(page);
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   const editor = page.locator('[data-studio-engine-editor="true"]');
   await expect(editor).toBeVisible();
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="paragraph"]').first());
 
   const preview = editor.locator(".studio-engine-editor-preview");
   await preview.click({ button: "right", position: { x: 96, y: 84 } });
-  await expect(page.getByRole("dialog", { name: "KI Agent Thread" })).toBeVisible();
-  await page.getByLabel("Agent Prompt").fill(agentInstruction);
+  await expect(page.getByRole("dialog", { name: "Mit KI bearbeiten" })).toBeVisible();
+  await page.getByLabel("Was soll die KI ändern?").fill(agentInstruction);
 
   const threadResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/api/lectures/") &&
     response.url().includes("/agent-threads") &&
     response.request().method() === "POST"
   ));
-  await page.getByRole("button", { name: "Agent starten" }).click();
+  await page.getByRole("button", { name: "Vorschlag holen" }).click();
   const threadResponse = await threadResponsePromise;
   expect(threadResponse.ok()).toBe(true);
-  const agentDialog = page.getByRole("dialog", { name: "KI Agent Thread" });
-  await expect(agentDialog.getByText("Review-Diff", { exact: true })).toBeVisible();
-  await expect(agentDialog.getByText(/Operation/)).toBeVisible();
+  const agentDialog = page.getByRole("dialog", { name: "Mit KI bearbeiten" });
+  await expect(agentDialog.getByText("Vorschlag", { exact: true })).toBeVisible();
 
   const acceptResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/agent-threads/") &&
@@ -127,7 +126,7 @@ test("Dozentenstudio startet Pi-Agent-Thread und übernimmt Review-Diff", async 
   await page.getByRole("button", { name: "Änderung übernehmen" }).click();
   const acceptResponse = await acceptResponsePromise;
   expect(acceptResponse.ok()).toBe(true);
-  await expect(page.getByText("Agent-Patch übernommen.")).toBeVisible();
+  await expect(page.getByText("KI-Vorschlag übernommen.")).toBeVisible();
   await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(agentInstruction);
 
   await page.reload();
@@ -181,32 +180,32 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Prüfen");
   await page.getByLabel("Quellen schließen").click();
 
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   const editor = page.locator('[data-studio-engine-editor="true"]');
   await expect(editor).toBeVisible();
 
   await page.getByLabel("Engine Layout").selectOption("technical_two_column");
-  await expect(page.getByText("Engine-Layout gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await expect(page.getByText("Layout geändert. Mit „Speichern“ sichern.")).toBeVisible();
 
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="figure"]').first());
   await page.getByLabel("Engine Asset").selectOption(libraryAsset.id);
-  await expect(page.getByText("Engine-Asset gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await expect(page.getByText("Grafik geändert. Mit „Speichern“ sichern.")).toBeVisible();
 
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-formula-test"]'));
   await page.getByLabel("Engine Formel").fill(formulaLatex);
-  await page.getByRole("button", { name: "Engine-Block speichern" }).click();
-  await expect(page.getByText("Engine-Block gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await page.getByRole("button", { name: "Übernehmen" }).click();
+  await expect(page.getByText("Text geändert. Mit „Speichern“ sichern.")).toBeVisible();
 
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-table-test"]'));
   await page.getByLabel("Engine Tabellenzeile").selectOption("0");
   await page.getByLabel("Engine Tabellenspalte").selectOption("1");
   await page.getByLabel("Engine Tabellenzelle").fill(tableCell);
   await page.getByRole("button", { name: "Zelle speichern" }).click();
-  await expect(page.getByText("Engine-Tabellenzelle gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await expect(page.getByText("Zelle geändert. Mit „Speichern“ sichern.")).toBeVisible();
 
   await page.getByLabel("Engine Quizanker Niveau").selectOption("1.0");
-  await page.getByRole("button", { name: "Quizanker setzen" }).click();
-  await expect(page.getByText("Engine-Quizanker gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await page.getByRole("button", { name: "Quizpunkt setzen" }).click();
+  await expect(page.getByText("Quizpunkt gesetzt. Mit „Speichern“ sichern.")).toBeVisible();
 
   const saveResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/api/lectures/") &&
@@ -248,7 +247,7 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   ]));
 
   await page.reload();
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByLabel("Engine Layout")).toHaveValue("technical_two_column");
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="figure"]').first());
   await expect(page.getByLabel("Engine Asset")).toHaveValue(libraryAsset.id);

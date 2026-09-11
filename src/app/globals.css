@@ -11436,3 +11436,32 @@ a.plain-button {
   font-size: 13px;
   font-weight: 760;
 }
+
+.studio-present-link {
+  white-space: nowrap;
+}
+
+.studio-engine-editor-panel button,
+.studio-agent-popover button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.studio-engine-editor-panel select,
+.studio-engine-editor-panel textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+

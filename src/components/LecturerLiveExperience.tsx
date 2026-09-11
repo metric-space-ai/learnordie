@@ -1,12 +1,13 @@
 "use client";
 
-import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
+import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { audioFileExtension, recordAudioSnippet } from "@/lib/audio-capture";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { Presence } from "./Presence";
+import { QuizDrawer } from "./QuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
 
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -34,8 +35,9 @@ const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
   const [slide, setSlide] = useState(0);
   const [questionOpen, setQuestionOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
-  const [transcriptVisible, setTranscriptVisible] = useState(true);
+  const [transcriptVisible, setTranscriptVisible] = useState(false);
   const [listening, setListening] = useState(false);
   const [autoSegmenting, setAutoSegmenting] = useState(false);
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>(lecture.transcriptSegments ?? []);
@@ -57,7 +59,6 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const autoLoopRunningRef = useRef(false);
   const slideRef = useRef(slide);
 
-  const slideFamilies = groupQuestionFamilies(questionsForSlide(questions, lecture.slides[slide]?.id));
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
   const latestTranscript = transcriptDrafts[0]?.text ?? transcriptSegments[0]?.text ?? "";
@@ -257,7 +258,19 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   }
 
   useEffect(() => {
+    const onChange = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if ((event.key === "f" || event.key === "F") && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        toggleFullscreen();
+        return;
+      }
       if (event.code === "Space") {
         event.preventDefault();
         setQuestionOrigin("space");
@@ -428,6 +441,36 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       </Presence>
 
       <div className="action-stack lb-enter-control">
+        <a className="icon-action live-back-link" href="/lecturer" title="Zurück zum Studio" aria-label="Zurück zum Studio">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+        </a>
+        <button
+          className="icon-action"
+          type="button"
+          title="Transkript und Mikrofon"
+          aria-label="Transkript und Mikrofon"
+          aria-pressed={transcriptVisible}
+          onClick={() => setTranscriptVisible((current) => !current)}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="3" width="6" height="11" rx="3" />
+            <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+          </svg>
+        </button>
+        <button
+          className="icon-action"
+          type="button"
+          title="Vollbild (Taste F)"
+          aria-label="Vollbild"
+          aria-pressed={fullscreen}
+          onClick={toggleFullscreen}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {fullscreen
+              ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+              : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+          </svg>
+        </button>
         <button
           className="icon-action"
           type="button"
@@ -445,38 +488,22 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
       <Presence show={questionOpen}>
         {(motionState) => (
-        <section
-          className="question-drawer compact lb-enter-sheet"
-          data-origin={questionOrigin}
-          data-state={motionState}
-          aria-label="Live-Fragen"
-        >
-          <div className="drawer-main">
-            <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
-              Fragen für diese Folie · {slideFamilies.length}
-            </p>
-            <div className="answers">
-              {slideFamilies.map((family, index) => {
-                const preview = family.find((question) => question.level === "2.0") ?? family[0];
-                return (
-                  <div
-                    className="lecturer-question lb-enter-row"
-                    key={preview.familyId ?? `${preview.level}-${index}`}
-                    style={{ "--lb-i": Math.min(index + 1, 8) } as MotionStyle}
-                  >
-                    <strong>
-                      Frage {index + 1}
-                      {preview.familySource === "live_transcript" ? " · live" : ""} · {family.map((question) => question.level).join(" / ")}
-                    </strong>
-                    <span>{preview.text}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+          <QuizDrawer
+            key={lecture.slides[slide]?.id}
+            questions={questionsForSlide(questions, lecture.slides[slide]?.id)}
+            origin={questionOrigin}
+            motionState={motionState}
+          />
         )}
       </Presence>
     </main>
   );
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => undefined);
+    return;
+  }
+  void document.documentElement.requestFullscreen?.().catch(() => undefined);
 }

@@ -303,7 +303,7 @@ expectContains("lecturer_live_contract", lecturerLiveExperience, [
   "className={`slide-screen lb-motion-root",
   "transcript-panel lb-enter-overlay",
   "data-panel-origin=\"transcript\"",
-  "question-drawer compact lb-enter-sheet",
+  "<QuizDrawer",
   "<Presence show={transcriptVisible}>",
   "<Presence show={questionOpen}>"
 ], "src/components/LecturerLiveExperience.tsx");

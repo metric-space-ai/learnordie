@@ -38,6 +38,7 @@ import type {
   StandaloneExportJob,
   StudentChatQuestion
 } from "@/lib/types";
+import { DeckRenderer } from "@learnordie/slide-engine";
 import type { SlideAssetRef, SlideDocument } from "@learnordie/slide-engine";
 import type { FormEvent, KeyboardEvent } from "react";
 
@@ -2738,6 +2739,21 @@ export function LecturerDashboard({
               ) : studioSlide ? (
                 <>
                   <div className="slide-preview-frame editable-slide-frame studio-editor-frame" ref={stageFrameRef}>
+                    {hasEngineOnlyBlocks(edit.slideDocument) ? (
+                    <article
+                      className="slide-engine-stage studio-engine-stage lb-enter-stage"
+                      data-slide-engine="v1"
+                      data-slide-id={studioSlide.id}
+                      key={studioSlide.id}
+                    >
+                      <DeckRenderer
+                        className="slide-engine-deck"
+                        currentSlideId={edit.slideDocument.slides[activeStudioSlideIndex]?.id ?? studioSlide.id}
+                        document={edit.slideDocument}
+                        renderMode="current"
+                      />
+                    </article>
+                    ) : (
                     <article className="dashboard-slide-preview editable-slide studio-editor-slide lb-enter-stage" data-slide-id={studioSlide.id} key={studioSlide.id}>
                     <div className="slide-meta editable-meta lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
                       <span
@@ -2882,6 +2898,7 @@ export function LecturerDashboard({
                       <span>{activeStudioSlideIndex + 1} / {studioSlides.length}</span>
                     </footer>
                     </article>
+                    )}
                   </div>
                   <Presence show={workspaceTool === "materials"}>
                     {(motionState) => renderSlideSourceOverlay(motionState)}
@@ -2948,9 +2965,14 @@ export function LecturerDashboard({
                   type="button"
                   onClick={() => setEngineEditorOpen((open) => !open)}
                 >
-                  Engine
+                  Bearbeiten
                 </button>
-                <button className="primary-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
+                <button className="plain-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
+                {selected && (
+                  <a className="primary-button studio-present-link" href={`/lecturer/live/${selected.publicToken}`}>
+                    ▶ Präsentieren
+                  </a>
+                )}
                 {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
               </div>
             )}
