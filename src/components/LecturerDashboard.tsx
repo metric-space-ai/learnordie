@@ -74,8 +74,17 @@ const workspaceTools: Array<{ value: WorkspaceTool; label: string; shortLabel: s
   { value: "evaluation", label: "Evaluation im Learn-Modus bearbeiten", shortLabel: "Evaluation" }
 ];
 
+// datetime-local-Felder arbeiten in der Ortszeit des Browsers; gespeichert wird UTC.
 function formatDateTime(value: string) {
-  return new Date(value).toISOString().slice(0, 16);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function localDateTimeToIso(value: FormDataEntryValue | string | null | undefined) {
+  if (typeof value !== "string" || !value) return value ?? undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function formatPercent(value: number) {
@@ -540,7 +549,7 @@ export function LecturerDashboard({
     title: "Wälzlager und Lebensdauer",
     seriesTitle: "Maschinenelemente I",
     liveAt: "2026-06-17T10:00",
-    examDate: "2026-07-24"
+    examDate: "2027-07-23"
   });
 
   useEffect(() => {
@@ -856,7 +865,7 @@ export function LecturerDashboard({
       body: JSON.stringify({
         title: formData.get("title") ?? createDraft.title,
         seriesTitle: formData.get("seriesTitle") ?? createDraft.seriesTitle,
-        liveAt: formData.get("liveAt") ?? createDraft.liveAt,
+        liveAt: localDateTimeToIso(formData.get("liveAt") ?? createDraft.liveAt),
         examDate: formData.get("examDate") ?? createDraft.examDate
       })
     });
@@ -873,7 +882,7 @@ export function LecturerDashboard({
       title: "Wälzlager und Lebensdauer",
       seriesTitle: "Maschinenelemente I",
       liveAt: "2026-06-17T10:00",
-      examDate: "2026-07-24"
+      examDate: "2027-07-23"
     });
   }
 
@@ -925,7 +934,7 @@ export function LecturerDashboard({
     const response = await fetch(`/api/lectures/${selected.id}`, {
       method: "PATCH",
       headers: csrfJsonHeaders,
-      body: JSON.stringify(draft)
+      body: JSON.stringify({ ...draft, liveAt: localDateTimeToIso(draft.liveAt) })
     });
     const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
     if (!response.ok || !payload.lectures) {

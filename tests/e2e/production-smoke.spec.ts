@@ -72,7 +72,7 @@ async function expectMagicLinkCannotBeReused(browser: Browser, magicLink: string
   try {
     await page.goto(magicLink);
     await expect(page).toHaveURL(/\/lecturer\/login\?error=invalid-token$/);
-    await expect(page.getByText("Dieser Magic Link ist abgelaufen oder wurde bereits verwendet.")).toBeVisible();
+    await expect(page.getByText("Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an.")).toBeVisible();
   } finally {
     await context.close();
   }
@@ -1082,7 +1082,7 @@ test("Production-Mailprovider blockiert reservierte Absenderdomain zur Laufzeit"
     });
     expect(response.status()).toBe(502);
     const payload = await response.json() as { error?: string; magicLink?: string };
-    expect(payload.error).toBe("Magic Link konnte nicht versendet werden.");
+    expect(payload.error).toBe("Anmeldelink konnte nicht versendet werden.");
     expect(payload.magicLink).toBeUndefined();
   } finally {
     await app.close();
@@ -1091,7 +1091,7 @@ test("Production-Mailprovider blockiert reservierte Absenderdomain zur Laufzeit"
 
 test("Operative CLI-Hilfe startet keine Checks", async () => {
   const helpContracts = [
-    ["scripts/admin.mjs", "LearnBuddy Admin CLI"],
+    ["scripts/admin.mjs", "learnordie.app Admin CLI"],
     ["scripts/backup-restore-smoke.mjs", "Usage: npm run smoke:backup-restore -- [options]"],
     ["scripts/deploy-readiness.mjs", "Usage: npm run deploy:readiness -- [options]"],
     ["scripts/e2e-server.mjs", "Usage: node scripts/e2e-server.mjs"],
@@ -1657,7 +1657,15 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
     "--skip-worker"
   ], {
     NEXT_PUBLIC_APP_URL: "https://learnbuddy-preview.learnbuddy.cloud",
-    LEARNBUDDY_DEPLOYMENT_ENV: "production"
+    LEARNBUDDY_DEPLOYMENT_ENV: "production",
+    // Provider-Keys aus der Shell des Entwicklers duerfen dieses Szenario nicht verfaelschen.
+    LEARNORDIE_LLM_PROXY_API_KEY: "",
+    LEARNBUDDY_LLM_PROXY_API_KEY: "",
+    CTOX_LLM_PROXY_API_KEY: "",
+    LEARNORDIE_MINIMAX_API_KEY: "",
+    MINIMAX_API_KEY: "",
+    MISTRAL_API_KEY: "",
+    LEARNBUDDY_STT_API_KEY: ""
   });
   expect(missingEnvReleaseGate.ok).toBe(false);
   expect(missingEnvReleaseGate.releaseReady).toBe(false);
@@ -2309,7 +2317,7 @@ MISTRAL_API_KEY=replace-with-mistral-key
 
   await page.goto(`/auth/magic?token=${"x".repeat(2000)}`);
   await expect(page).toHaveURL(/\/lecturer\/login\?error=invalid-token$/);
-  await expect(page.getByText("Dieser Magic Link ist abgelaufen oder wurde bereits verwendet.")).toBeVisible();
+  await expect(page.getByText("Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an.")).toBeVisible();
 
   const oversizedPublicEvent = await page.request.post("/api/events", {
     data: {
@@ -2777,7 +2785,7 @@ test("Magic-Link-Rate-Limit blockiert zu viele Anfragen", async ({ page }) => {
   expect(blocked.status()).toBe(429);
   expect(blocked.headers()["retry-after"]).toBeTruthy();
   const payload = await blocked.json() as { error?: string; retryAfterSeconds?: number };
-  expect(payload.error).toBe("Zu viele Magic-Link-Anfragen. Bitte später erneut versuchen.");
+  expect(payload.error).toBe("Zu viele Anfragen. Bitte in ein paar Minuten erneut versuchen.");
   expect(payload.retryAfterSeconds).toBeGreaterThan(0);
   assertClean();
 });
@@ -3447,7 +3455,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
   await expect(page.getByRole("heading", { name: "KI-Assistent" })).toBeVisible();
-  await page.getByRole("button", { name: "Senden" }).click();
+  await page.getByRole("button", { name: "Begriffe klären" }).click();
   await expect(page.getByText("Mock-Erklärung")).toBeVisible();
   await expect(page.getByText(/Tokens heute verfügbar/)).toBeVisible();
   const aiChat = page.getByLabel("KI Chat");
@@ -3830,14 +3838,14 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.goto("/lecturer/live/gleitlagerung-demo");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
-  await expect(page.getByRole("button", { name: "STT starten" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Passage transkribieren" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Auto-Segmente" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Mikrofon an" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Passage", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Automatisch", exact: true })).toBeDisabled();
   await page.waitForTimeout(600);
   const lecturerLiveSttMotion = await page.evaluate(() => {
     const panel = document.querySelector<HTMLElement>(".transcript-panel");
     const autoButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".transcript-actions button"))
-      .find((button) => button.textContent?.includes("Auto-Segmente"));
+      .find((button) => button.textContent?.trim() === "Automatisch");
     if (!panel) throw new Error("Transkriptpanel fehlt.");
     if (!autoButton) throw new Error("Auto-Segment-Button fehlt.");
     const panelBox = panel.getBoundingClientRect();

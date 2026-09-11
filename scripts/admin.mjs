@@ -18,8 +18,8 @@ const demoLecture = {
   language: "de",
   status: "learn_active",
   liveAt: "2026-06-17T10:00:00.000Z",
-  examDate: "2026-07-24T00:00:00.000Z",
-  aiAccessUntil: "2026-07-24T21:59:59.999Z",
+  examDate: "2027-07-23T00:00:00.000Z",
+  aiAccessUntil: "2027-07-23T21:59:59.999Z",
   leaderboardEnabled: true,
   learnQuestionDensity: 4,
   evaluationConfig: {

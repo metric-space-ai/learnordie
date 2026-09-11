@@ -36,7 +36,7 @@ async function loginLecturer(page: Page) {
         title: "Gleitlagerung",
         seriesTitle: "Maschinenelemente I",
         liveAt: "2026-06-19T11:00",
-        examDate: "2026-07-24"
+        examDate: "2027-07-23"
       }
     });
     expect(createResponse.ok()).toBe(true);
