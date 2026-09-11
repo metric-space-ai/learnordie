@@ -216,3 +216,115 @@ export async function generateQuestionVariantsForMaterial(input: {
     model
   }));
 }
+
+export type LiveQuestionSlideContext = {
+  title: string;
+  lines: string[];
+};
+
+function liveQuestionSystemPrompt() {
+  return [
+    "Du bist ein deutschsprachiger Aufgabenautor und begleitest eine laufende technische Universitätsvorlesung.",
+    "Du erzeugst genau EINE Frage als Fragenfamilie: dieselbe Frage zum selben Thema in vier Schwierigkeitsstufen.",
+    "Grundlage ist, was die Lehrperson gerade gesagt hat (Transkript), eingeordnet durch den Folieninhalt.",
+    "Erfinde keine Fakten, die weder im Transkript noch auf der Folie stehen. Rechne Zahlen selbst nach.",
+    "Verwende korrektes Deutsch mit Umlauten und Unicode-Formelzeichen, kein LaTeX.",
+    "Gib ausschließlich valides JSON zurück. Keine Markdown-Umrandung, keine Erklärung außerhalb des JSON."
+  ].join(" ");
+}
+
+function liveQuestionUserPrompt(input: {
+  lecture: Lecture;
+  slide: LiveQuestionSlideContext;
+  transcript: string;
+  existingQuestionTexts: string[];
+}) {
+  return [
+    `Vorlesung: ${input.lecture.seriesTitle} / ${input.lecture.title}`,
+    `Aktuelle Folie: ${input.slide.title}`,
+    "Folieninhalt:",
+    ...input.slide.lines.map((line) => `- ${compact(line, 400)}`),
+    "Transkript der letzten Minuten (wörtlich, automatisch erkannt, kann Hör- und Erkennungsfehler enthalten):",
+    compact(input.transcript, 3200),
+    input.existingQuestionTexts.length > 0 ? "Bereits gestellte Fragen zu dieser Folie (nicht wiederholen, anderes Thema oder anderer Aspekt):" : "",
+    ...input.existingQuestionTexts.slice(0, 12).map((text) => `- ${compact(text, 200)}`),
+    "Schwierigkeitsstufen (alle vier zum SELBEN Thema):",
+    "4.0 Wiedergeben: zentraler Begriff oder Aussage.",
+    "3.0 Verstehen: Zusammenhang erklären.",
+    "2.0 Anwenden: konkreter Fall, Zahl oder Formel.",
+    "1.0 Übertragen oder Bewerten: neue technische Situation oder Fehlvorstellung beurteilen.",
+    "Anforderung:",
+    "Genau vier Varianten, je eine pro Niveau 4.0, 3.0, 2.0, 1.0, alle zum selben Thema aus dem Transkript.",
+    "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier Antworten, genau eine korrekt, drei plausible Ablenker ähnlicher Länge, Erklärung höchstens 480 Zeichen.",
+    "Keine Antworten wie „alle/keine der genannten“, keine verneinten Fragestellungen.",
+    "Zusätzlich ein Feld \"topic\" mit 2 bis 5 Wörtern.",
+    "JSON-Schema:",
+    "{\"topic\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}"
+  ].filter(Boolean).join("\n");
+}
+
+function clampLiveVariant(variant: QuestionVariant): QuestionVariant {
+  return {
+    ...variant,
+    text: variant.text.length > 260 ? `${variant.text.slice(0, 257)}...` : variant.text,
+    explanation: variant.explanation.length > 520 ? `${variant.explanation.slice(0, 517)}...` : variant.explanation,
+    answers: variant.answers.map((answer) => ({ ...answer, text: answer.text.slice(0, 400) }))
+  };
+}
+
+// Eine neue Fragenfamilie (alle vier Niveaus) aus dem Live-Transkript einer Folie.
+export async function generateLiveQuestionFamily(input: {
+  lecture: Lecture;
+  slide: LiveQuestionSlideContext;
+  transcript: string;
+  existingQuestionTexts: string[];
+}): Promise<QuestionVariant[]> {
+  const liveMetadata = {
+    promptVersion: "live-transcript-v1",
+    reviewStatus: "approved" as const,
+    sourceRef: `Live-Transkript · ${input.slide.title}`
+  };
+
+  if (!usesAIQuestionGenerator()) {
+    const material = {
+      id: "live-transcript",
+      lectureId: input.lecture.id,
+      kind: "notes",
+      source: "notes",
+      originalName: `Live-Transkript ${input.slide.title}`,
+      status: "ready",
+      extractedTextPreview: compact(input.transcript, 240)
+    } as unknown as LectureMaterial;
+    return generateReviewVariants(input.lecture, material).map((variant) => ({ ...variant, ...liveMetadata }));
+  }
+
+  const provider = getAIProvider();
+  if (provider.info.provider === "learnbuddy-demo") {
+    throw new Error("Question generator is not configured: LEARNBUDDY_AI_PROVIDER is required for live questions.");
+  }
+
+  let result;
+  try {
+    result = await provider.complete({
+      system: liveQuestionSystemPrompt(),
+      user: liveQuestionUserPrompt(input),
+      maxOutputTokens: 2600,
+      temperature: 0.3,
+      responseFormat: "json_object",
+      timeoutMs: 45_000
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(message.toLowerCase().includes("timed out") || message.toLowerCase().includes("abort")
+      ? "Question generator request timed out."
+      : `Question generator request failed: ${message}`);
+  }
+
+  const variants = parseGeneratedVariants(result.answer).map(clampLiveVariant);
+  const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
+  if (variants.some((variant) => existing.has(questionFingerprint(variant.text)))) {
+    throw new Error("Question generator returned a duplicate of an existing question.");
+  }
+  const model = `${provider.info.provider}:${provider.info.model}`;
+  return variants.map((variant) => ({ ...variant, ...liveMetadata, promptVersion: `live-transcript-v1:${model}` }));
+}

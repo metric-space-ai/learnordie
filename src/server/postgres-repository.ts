@@ -5,6 +5,7 @@ import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { demoLecture } from "@/lib/demo-data";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import { hasCompleteQuestionFamilies } from "@/lib/questions";
 import {
   buildLegacyLectureSlideDocument,
   hasEngineOnlyBlocks,
@@ -110,23 +111,24 @@ import { getStorageProvider } from "./providers/storage";
 import { configuredWorkerMaxAttempts } from "./worker-policy";
 import type {
   AddMaterialInput,
+  AppendQuestionFamilyInput,
   ApplyLecturerAssistantEvaluationFocusInput,
   ApplyLecturerAssistantLearnDensityInput,
   ApplyLecturerAssistantSlidePointInput,
   CreateAgentThreadInput,
-  CreateLecturerAssistantSourceNoteInput,
-  CreateLecturerAssistantReviewInput,
-  CreateStandaloneExportJobInput,
   CreateLectureInput,
+  CreateLecturerAssistantReviewInput,
+  CreateLecturerAssistantSourceNoteInput,
+  CreateStandaloneExportJobInput,
+  DecideAgentThreadInput,
   LectureRepository,
   ModerateChatQuestionInput,
   RecordStandaloneExportInput,
-  DecideAgentThreadInput,
-  SubmitLecturerAssistantMessageInput,
   SubmitChatQuestionInput,
+  SubmitLecturerAssistantMessageInput,
   SubmitTranscriptSegmentInput,
-  UpdateStandaloneExportJobInput,
-  UpdateLectureInput
+  UpdateLectureInput,
+  UpdateStandaloneExportJobInput
 } from "./repository";
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
 import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
@@ -941,6 +943,26 @@ export class PostgresLectureRepository implements LectureRepository {
     }
 
     return this.materialFromRow(material);
+  }
+
+  // Haengt eine vollstaendige Fragenfamilie an (z. B. live aus dem Transkript),
+  // ohne bestehende Fragen anzutasten.
+  async appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    if (!hasCompleteQuestionFamilies(input.variants.map((variant) => ({ level: variant.level })))) {
+      throw new Error("Question family must contain exactly one variant per level.");
+    }
+    await this.db.transaction(async (tx) => {
+      await this.insertQuestionFamiliesInTransaction(
+        tx,
+        lectureId,
+        input.variants.map((variant) => ({ ...variant, slideId: input.slideId, familyId: undefined, familySource: input.source })),
+        input.source
+      );
+    });
+    return this.getLectureById(lectureId, ownerEmail);
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {

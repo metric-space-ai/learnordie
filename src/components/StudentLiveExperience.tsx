@@ -41,6 +41,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [identitySaved, setIdentitySaved] = useState(false);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityMessage, setIdentityMessage] = useState("");
+  const [questions, setQuestions] = useState(lecture.questions);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(`lb_pseudonym_${lecture.publicToken}`);
@@ -71,6 +72,38 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
+
+  // Live-Fragen aus dem Transkript kommen waehrend der Vorlesung dazu: alle 20 s abholen.
+  useEffect(() => {
+    if (!joined) return;
+    let stopped = false;
+    const poll = async () => {
+      if (document.hidden) return;
+      try {
+        const response = await fetch(`/api/lecture/${lecture.publicToken}/questions`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { questions?: Lecture["questions"] };
+        if (stopped || !payload.questions) return;
+        const incoming = payload.questions;
+        setQuestions((current) => {
+          const known = new Set(current.map((question) => question.familyId ?? ""));
+          const added = incoming.filter((question) => question.familyId && !known.has(question.familyId));
+          if (added.length > 0) {
+            const slideNumber = lecture.slides.findIndex((item) => item.id === added[0].slideId) + 1;
+            setFeedback(slideNumber > 0 ? `Neue Live-Frage zu Folie ${slideNumber}.` : "Neue Live-Frage.");
+          }
+          return incoming.length === current.length && added.length === 0 ? current : incoming;
+        });
+      } catch {
+        // Offline oder kurz nicht erreichbar: beim naechsten Intervall erneut versuchen.
+      }
+    };
+    const timer = window.setInterval(poll, 20_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [joined, lecture.publicToken, lecture.slides]);
 
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
@@ -294,7 +327,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         {(motionState) => (
           <QuizDrawer
             key={lecture.slides[slide]?.id}
-            questions={questionsForSlide(lecture.questions, lecture.slides[slide]?.id)}
+            questions={questionsForSlide(questions, lecture.slides[slide]?.id)}
             origin={questionOrigin}
             motionState={motionState}
             onAnswered={({ question, correct, selected }) => {

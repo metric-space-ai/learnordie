@@ -23,6 +23,12 @@ export type CreateLectureInput = {
   examDate: string;
 };
 
+export type AppendQuestionFamilyInput = {
+  slideId?: string;
+  source: string;
+  variants: QuestionVariant[];
+};
+
 export type UpdateLectureInput = {
   title?: string;
   seriesTitle?: string;
@@ -169,6 +175,7 @@ export interface LectureRepository {
   updateLecture(id: string, input: UpdateLectureInput, ownerEmail?: string): Promise<Lecture | null>;
   addMaterial(lectureId: string, input: AddMaterialInput, ownerEmail?: string): Promise<LectureMaterial | null>;
   processMaterials(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
+  appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string): Promise<Lecture | null>;
   enqueueMaterialProcessingRun?(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
   countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput): Promise<number | null>;
   submitStudentChatQuestion(input: SubmitChatQuestionInput): Promise<StudentChatQuestion | null>;
@@ -216,6 +223,10 @@ class LocalJsonLectureRepository implements LectureRepository {
 
   async processMaterials(lectureId: string, ownerEmail?: string) {
     return this.store.processMaterials(lectureId, ownerEmail);
+  }
+
+  async appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string) {
+    return this.store.appendQuestionFamily(lectureId, input, ownerEmail);
   }
 
   async countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput) {

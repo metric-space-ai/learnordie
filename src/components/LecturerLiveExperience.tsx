@@ -26,6 +26,10 @@ const MANUAL_STT_SEGMENT_MS = 1200;
 const AUTO_STT_SEGMENT_MS = 6500;
 const AUTO_STT_PAUSE_MS = 700;
 const MAX_TRANSCRIPT_DRAFTS = 4;
+// Live-Fragen: etwa eine Minute Sprechen je Frage, nicht oefter als alle 75 s.
+const LIVE_QUESTION_MIN_CHARS = 700;
+const LIVE_QUESTION_MIN_INTERVAL_MS = 75_000;
+const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
   const [slide, setSlide] = useState(0);
@@ -39,12 +43,21 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [transcriptSavingId, setTranscriptSavingId] = useState<string | null>(null);
   const [transcriptDrafts, setTranscriptDrafts] = useState<TranscriptDraft[]>([]);
   const [sttStatus, setSttStatus] = useState<"idle" | "requesting" | "listening" | "transcribing" | "ready" | "error">("idle");
+  const [questions, setQuestions] = useState(lecture.questions);
+  const [liveQuestionsOn, setLiveQuestionsOn] = useState(true);
+  const [liveQuestionStatus, setLiveQuestionStatus] = useState<"idle" | "collecting" | "generating" | "error">("idle");
+  const [liveQuestionMessage, setLiveQuestionMessage] = useState("");
+  const liveQuestionsOnRef = useRef(true);
+  const pendingTranscriptRef = useRef("");
+  const liveGeneratingRef = useRef(false);
+  const lastLiveQuestionAtRef = useRef(0);
+  const livePipelineRef = useRef<((draft: TranscriptDraft, slideIndex: number) => Promise<void>) | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const autoSegmentingRef = useRef(false);
   const autoLoopRunningRef = useRef(false);
   const slideRef = useRef(slide);
 
-  const slideFamilies = groupQuestionFamilies(questionsForSlide(lecture.questions, lecture.slides[slide]?.id));
+  const slideFamilies = groupQuestionFamilies(questionsForSlide(questions, lecture.slides[slide]?.id));
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
   const latestTranscript = transcriptDrafts[0]?.text ?? transcriptSegments[0]?.text ?? "Noch keine Passage übernommen.";
@@ -114,6 +127,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     setTranscriptDrafts((current) => [draft, ...current].slice(0, MAX_TRANSCRIPT_DRAFTS));
     setTranscriptMessage(`Transkript bereit: ${Math.round((payload.confidence ?? 0) * 100)}% Konfidenz, ${payload.audioBytes ?? 0} Bytes Audio.`);
     setSttStatus("ready");
+    return draft;
   }, [csrfToken, lecture.id, lecture.slides, lecture.title]);
 
   async function transcribeCurrentPassage() {
@@ -139,6 +153,75 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       setSttStatus("error");
     }
   }
+
+  async function persistTranscriptDraft(draft: TranscriptDraft) {
+    const response = await fetch(`/api/lectures/${lecture.id}/transcript-segments`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-learnbuddy-csrf": csrfToken
+      },
+      body: JSON.stringify({
+        text: draft.text.slice(0, 1200),
+        provider: draft.provider,
+        startedAt: draft.startedAt,
+        endedAt: draft.endedAt
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error ?? "Transkriptsegment konnte nicht gespeichert werden.");
+    setTranscriptSegments((current) => [payload.segment, ...current]);
+    setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
+    return payload.segment as TranscriptSegment;
+  }
+
+  async function generateLiveQuestion(slideIndex: number, transcript: string) {
+    const slideId = lecture.slides[slideIndex]?.id;
+    if (!slideId || liveGeneratingRef.current) return;
+    liveGeneratingRef.current = true;
+    setLiveQuestionStatus("generating");
+    setLiveQuestionMessage(`Live-Frage zu Folie ${slideIndex + 1} wird erzeugt …`);
+    try {
+      const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
+        body: JSON.stringify({ slideId, transcript })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Live-Frage konnte nicht erzeugt werden.");
+      setQuestions(payload.questions);
+      pendingTranscriptRef.current = "";
+      lastLiveQuestionAtRef.current = Date.now();
+      const preview = (payload.family as Array<{ level: string; text: string }> | undefined)?.find((item) => item.level === "2.0");
+      setLiveQuestionStatus("collecting");
+      setLiveQuestionMessage(`Live-Frage für Folie ${slideIndex + 1} freigeschaltet${preview ? `: ${preview.text}` : "."}`);
+    } catch (error) {
+      setLiveQuestionStatus("error");
+      setLiveQuestionMessage(error instanceof Error ? error.message : "Live-Frage konnte nicht erzeugt werden.");
+    } finally {
+      liveGeneratingRef.current = false;
+    }
+  }
+
+  // Pipeline: Auto-Segment uebernehmen, Transkript sammeln, ab genug Text eine Familie erzeugen.
+  // Die Funktion wird nach jedem Render aktualisiert, damit die Aufnahmeschleife aktuelle Werte sieht.
+  useEffect(() => {
+    livePipelineRef.current = async (draft, slideIndex) => {
+      try {
+        await persistTranscriptDraft(draft);
+      } catch (error) {
+        setLiveQuestionMessage(error instanceof Error ? error.message : "Transkriptsegment konnte nicht gespeichert werden.");
+        return;
+      }
+      pendingTranscriptRef.current = `${pendingTranscriptRef.current} ${draft.text}`.trim().slice(-LIVE_QUESTION_MAX_PENDING_CHARS);
+      setLiveQuestionStatus((current) => (current === "idle" ? "collecting" : current));
+      const enoughText = pendingTranscriptRef.current.length >= LIVE_QUESTION_MIN_CHARS;
+      const pausedLongEnough = Date.now() - lastLiveQuestionAtRef.current >= LIVE_QUESTION_MIN_INTERVAL_MS;
+      if (enoughText && pausedLongEnough) {
+        void generateLiveQuestion(slideIndex, pendingTranscriptRef.current);
+      }
+    };
+  });
 
   async function submitTranscriptSegment(draftId?: string) {
     const draft = transcriptDrafts.find((item) => item.id === draftId) ?? transcriptDrafts[0];
@@ -203,6 +286,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   }, [autoSegmenting]);
 
   useEffect(() => {
+    liveQuestionsOnRef.current = liveQuestionsOn;
+  }, [liveQuestionsOn]);
+
+  useEffect(() => {
     if (!autoSegmenting || !listening || autoLoopRunningRef.current) return;
 
     let cancelled = false;
@@ -217,7 +304,11 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         try {
           const audio = await recordAudioSnippet(stream, AUTO_STT_SEGMENT_MS);
           const endedAt = new Date().toISOString();
-          await transcribeAudioBlob(audio, startedAt, endedAt, slideRef.current, "auto");
+          const slideIndex = slideRef.current;
+          const draft = await transcribeAudioBlob(audio, startedAt, endedAt, slideIndex, "auto");
+          if (liveQuestionsOnRef.current && draft.text.trim()) {
+            await livePipelineRef.current?.(draft, slideIndex);
+          }
         } catch (error) {
           if (!cancelled) {
             setTranscriptMessage(error instanceof Error ? error.message : "Automatisches STT-Segment konnte nicht verarbeitet werden.");
@@ -316,6 +407,31 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           <button className="primary-button lb-enter-row" style={{ "--lb-i": 8 } as MotionStyle} disabled={transcriptDrafts.length < 1 || Boolean(transcriptSavingId)} type="button" onClick={() => submitTranscriptSegment()}>
             {transcriptSavingId ? "Speichert" : "Neueste Passage übernehmen"}
           </button>
+          <div className="live-question-pipeline lb-enter-row" style={{ "--lb-i": 9 } as MotionStyle} aria-label="Live-Fragen aus dem Transkript" data-status={liveQuestionStatus}>
+            <div className="transcript-actions">
+              <button
+                className="plain-button"
+                type="button"
+                aria-pressed={liveQuestionsOn}
+                onClick={() => setLiveQuestionsOn((current) => !current)}
+              >
+                {liveQuestionsOn ? "Live-Fragen: automatisch" : "Live-Fragen: aus"}
+              </button>
+              <button
+                className="plain-button"
+                type="button"
+                disabled={liveQuestionStatus === "generating"}
+                onClick={() => generateLiveQuestion(slide, pendingTranscriptRef.current)}
+              >
+                {liveQuestionStatus === "generating" ? "Erzeugt …" : "Live-Frage jetzt"}
+              </button>
+            </div>
+            <p className="form-note" aria-live="polite">
+              {liveQuestionMessage || (liveQuestionsOn
+                ? "Mit „Auto-Segmente“ entsteht etwa jede Minute eine neue Frage zur aktuellen Folie, in allen vier Niveaus, sofort für Studierende sichtbar."
+                : "Live-Fragen sind ausgeschaltet.")}
+            </p>
+          </div>
         </aside>
         )}
       </Presence>

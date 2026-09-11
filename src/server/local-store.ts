@@ -74,6 +74,12 @@ type LocalStoreData = {
   tenantAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
 };
 
+type AppendQuestionFamilyInput = {
+  slideId?: string;
+  source: string;
+  variants: QuestionVariant[];
+};
+
 type CreateLectureInput = {
   title: string;
   seriesTitle: string;
@@ -471,6 +477,19 @@ export class LocalLectureStore {
     if (input.kind !== "audio" && lecture.status === "draft") lecture.status = "material_processing";
     await writeStore(store);
     return material;
+  }
+
+  async appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    const familyId = `${input.source}:${crypto.randomUUID()}`;
+    lecture.questions = [
+      ...lecture.questions,
+      ...clone(input.variants).map((variant) => ({ ...variant, slideId: input.slideId, familyId, familySource: input.source }))
+    ];
+    await writeStore(store);
+    return lecture;
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {
