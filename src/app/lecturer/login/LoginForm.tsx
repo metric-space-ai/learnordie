@@ -20,16 +20,18 @@ export function LoginForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const submittedEmail = String(new FormData(event.currentTarget).get("email") ?? email).trim();
     setError("");
     setMagicLink("");
     setSentWithoutLocalLink(false);
     setPending(true);
+    setEmail(submittedEmail);
 
     try {
       const response = await fetch("/api/auth/magic-link", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email: submittedEmail })
       });
       const payload = (await response.json()) as { sent?: boolean; magicLink?: string; error?: string };
       if (!response.ok || !payload.sent) {

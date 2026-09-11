@@ -355,7 +355,7 @@ export const slideDocumentV1Schema = z
         mobileMode: z.enum(slideMobileModeValues)
       })
       .strict(),
-    slides: z.array(slideNodeSchema).min(1).max(160),
+    slides: z.array(slideNodeSchema).min(1).max(400),
     assets: z.array(slideAssetRefSchema).max(1000),
     createdBy: z
       .object({

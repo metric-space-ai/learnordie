@@ -46,8 +46,8 @@ function attachBrowserDiagnostics(page: Page) {
 async function requestMagicLink(page: Page, email = "e2e@example.test") {
   await page.goto("/lecturer/login");
   await page.getByLabel("E-Mail").fill(email);
-  await page.getByRole("button", { name: "Magic Link senden" }).click();
-  const href = await page.getByRole("link", { name: "Referentenbereich öffnen" }).getAttribute("href");
+  await page.getByRole("button", { name: "Einloggen oder Konto erstellen" }).click();
+  const href = await page.getByRole("link", { name: "Direkt zum Dozentenbereich" }).getAttribute("href");
   if (!href) throw new Error("Magic link was not rendered in local mail mode.");
   return new URL(href, page.url()).toString();
 }

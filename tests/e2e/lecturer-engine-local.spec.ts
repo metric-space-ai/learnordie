@@ -18,52 +18,34 @@ async function loginLecturer(page: Page) {
   const email = `engine-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   await page.goto("/lecturer/login");
   await page.getByLabel("E-Mail").fill(email);
-  await page.getByRole("button", { name: "Magic Link senden" }).click();
-  const link = page.getByRole("link", { name: "Referentenbereich öffnen" });
+  await page.getByRole("button", { name: "Einloggen oder Konto erstellen" }).click();
+  const link = page.getByRole("link", { name: "Direkt zum Dozentenbereich" });
   await expect(link).toBeVisible();
   const href = await link.getAttribute("href");
   if (!href) throw new Error("Magic link was not rendered in local mail mode.");
   await page.goto(href);
   await expect(page).toHaveURL(/\/lecturer$/);
-
-  const titleInput = page.getByRole("textbox", { name: "Folientitel" });
-  if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
-    const csrfToken = await page.locator("[data-csrf-token]").first().getAttribute("data-csrf-token");
-    if (!csrfToken) throw new Error("Lecturer CSRF token missing during isolated lecture setup.");
-    const createResponse = await page.request.post("/api/lectures", {
-      headers: { "x-learnbuddy-csrf": csrfToken },
-      data: {
-        title: "Gleitlagerung",
-        seriesTitle: "Maschinenelemente I",
-        liveAt: "2026-06-19T11:00",
-        examDate: "2026-07-24"
-      }
-    });
-    expect(createResponse.ok()).toBe(true);
-    await page.reload();
-  }
-
-  await expect(titleInput).toBeVisible();
+  await expect(page.getByLabel("Präsentation bearbeiten")).toBeVisible();
 }
 
 async function clickVisibleEditorBlock(locator: Locator) {
-  await locator.click({ position: { x: 12, y: 12 } });
+  await locator.dispatchEvent("click");
 }
 
-test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async ({ page }) => {
+test("Dozentenstudio speichert direkte Folienänderungen", async ({ page }) => {
   const assertClean = attachDiagnostics(page);
-  const replacementText = `Engine-Editor speichert einen echten Folientext ${Date.now()}.`;
+  const replacementText = `Direktbearbeitung speichert einen echten Folientitel ${Date.now()}.`;
 
   await loginLecturer(page);
-  await expect(page.getByRole("textbox", { name: "Folientitel" })).toBeVisible();
+  await expect(page.getByLabel("Präsentation bearbeiten")).toBeVisible();
 
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Folie direkt bearbeiten" }).click();
   await expect(page.locator('[data-studio-engine-editor="true"]')).toBeVisible();
-  await clickVisibleEditorBlock(page.locator('[data-studio-engine-editor="true"] [data-editor-block-type="paragraph"]').first());
-  await page.getByLabel("Engine Folientext").fill(replacementText);
-  await page.getByRole("button", { name: "Engine-Block speichern" }).click();
-  await expect(page.getByText("Engine-Block gespeichert. Bitte Lecture speichern.")).toBeVisible();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(replacementText);
+  await page.getByText("Direkt bearbeiten", { exact: true }).click();
+  await page.getByLabel("Folientitel", { exact: true }).fill(replacementText);
+  await page.getByRole("button", { name: "Änderung speichern" }).click();
+  await expect(page.getByText("Inhalt geändert. Bitte Vorlesung speichern.")).toBeVisible();
+  await expect(page.locator(".studio-engine-editor-preview").getByText(replacementText, { exact: true }).first()).toBeVisible();
 
   const saveResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/api/lectures/") &&
@@ -84,54 +66,54 @@ test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async
   };
   const savedLecture = savePayload.lectures?.find((lecture) => lecture.title === "Gleitlagerung");
   expect(savedLecture?.slideDocument?.slides?.[0]?.blocks?.some((block) => (
-    block.type === "paragraph" && block.text === replacementText
+    block.type === "heading" && block.text === replacementText
   ))).toBe(true);
 
   await page.reload();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(replacementText);
+  await expect(page.locator(".studio-engine-primary-deck").getByText(replacementText, { exact: true })).toBeVisible();
   assertClean();
 });
 
-test("Dozentenstudio startet Pi-Agent-Thread und übernimmt Review-Diff", async ({ page }) => {
+test("Dozentenstudio schlägt eine kontextbezogene Änderung vor und übernimmt sie", async ({ page }) => {
   const assertClean = attachDiagnostics(page);
   const agentInstruction = `Mischreibung präziser einordnen ${Date.now()}`;
 
   await loginLecturer(page);
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Folie direkt bearbeiten" }).click();
   const editor = page.locator('[data-studio-engine-editor="true"]');
   await expect(editor).toBeVisible();
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="paragraph"]').first());
 
-  const preview = editor.locator(".studio-engine-editor-preview");
-  await preview.click({ button: "right", position: { x: 96, y: 84 } });
-  await expect(page.getByRole("dialog", { name: "KI Agent Thread" })).toBeVisible();
-  await page.getByLabel("Agent Prompt").fill(agentInstruction);
+  await page.getByLabel("Änderungswunsch für Titel").fill(agentInstruction);
 
   const threadResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/api/lectures/") &&
     response.url().includes("/agent-threads") &&
     response.request().method() === "POST"
   ));
-  await page.getByRole("button", { name: "Agent starten" }).click();
+  await page.getByRole("button", { name: "Änderung vorschlagen" }).click();
   const threadResponse = await threadResponsePromise;
   expect(threadResponse.ok()).toBe(true);
-  const agentDialog = page.getByRole("dialog", { name: "KI Agent Thread" });
-  await expect(agentDialog.getByText("Review-Diff", { exact: true })).toBeVisible();
-  await expect(agentDialog.getByText(/Operation/)).toBeVisible();
+  await expect(page.getByText("Vorschlag bereit.")).toBeVisible();
 
   const acceptResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/agent-threads/") &&
     response.url().includes("/accept") &&
     response.request().method() === "POST"
   ));
-  await page.getByRole("button", { name: "Änderung übernehmen" }).click();
+  await page.getByRole("button", { name: "Übernehmen" }).click();
   const acceptResponse = await acceptResponsePromise;
   expect(acceptResponse.ok()).toBe(true);
-  await expect(page.getByText("Agent-Patch übernommen.")).toBeVisible();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(agentInstruction);
+  const acceptPayload = await acceptResponse.json() as {
+    lecture?: { slideDocument?: { slides?: Array<{ blocks?: Array<{ type?: string; text?: string }> }> } };
+  };
+  const acceptedHeading = acceptPayload.lecture?.slideDocument?.slides?.[0]?.blocks?.find((block) => block.type === "heading")?.text;
+  expect(acceptedHeading).toBeTruthy();
+  expect(acceptedHeading).not.toMatch(/<\/?think>/i);
+  await expect(page.getByText("Änderung übernommen.")).toBeVisible();
+  await expect(page.locator(".studio-engine-editor-preview").getByText(acceptedHeading!, { exact: true }).first()).toBeVisible();
 
   await page.reload();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(agentInstruction);
+  await expect(page.locator(".studio-engine-primary-deck").getByText(acceptedHeading!, { exact: true })).toBeVisible();
   assertClean();
 });
 
@@ -167,7 +149,8 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   const processingResponse = await page.request.post(`/api/lectures/${lecture.id}/process-materials`, {
     headers: { "x-learnbuddy-csrf": csrfToken }
   });
-  expect(processingResponse.ok()).toBe(true);
+  const processingPayload = await processingResponse.json() as { error?: string };
+  expect(processingResponse.ok(), processingPayload.error ?? "Material processing failed.").toBe(true);
   const libraryResponse = await page.request.get("/api/lectures");
   expect(libraryResponse.ok()).toBe(true);
   const libraryPayload = await libraryResponse.json() as { lectures?: Array<LectureApiShape> };
@@ -176,37 +159,38 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   if (!libraryAsset) throw new Error("Processed presentation diagram asset was not returned by /api/lectures.");
 
   await page.reload();
-  await page.getByLabel("Quellen für diese Folie").click();
-  await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Diagramm");
-  await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Prüfen");
-  await page.getByLabel("Quellen schließen").click();
+  await page.getByRole("button", { name: /Alle anzeigen/ }).click();
+  await expect(page.getByLabel("Asset-Galerie")).toContainText("Diagramm");
+  await expect(page.getByLabel("Asset-Galerie")).toContainText("Prüfen");
+  await page.getByLabel("Galerie schließen").click();
 
-  await page.getByRole("button", { name: "Engine" }).click();
+  await page.getByRole("button", { name: "Folie direkt bearbeiten" }).click();
   const editor = page.locator('[data-studio-engine-editor="true"]');
   await expect(editor).toBeVisible();
+  await page.getByText("Direkt bearbeiten", { exact: true }).click();
 
-  await page.getByLabel("Engine Layout").selectOption("technical_two_column");
-  await expect(page.getByText("Engine-Layout gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await page.getByLabel("Layout", { exact: true }).selectOption("technical_two_column");
+  await expect(page.getByText("Layout geändert. Bitte Vorlesung speichern.")).toBeVisible();
 
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="figure"]').first());
-  await page.getByLabel("Engine Asset").selectOption(libraryAsset.id);
-  await expect(page.getByText("Engine-Asset gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await page.getByLabel("Bild", { exact: true }).selectOption(libraryAsset.id);
+  await expect(page.getByText("Bild geändert. Bitte Vorlesung speichern.")).toBeVisible();
 
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-formula-test"]'));
-  await page.getByLabel("Engine Formel").fill(formulaLatex);
-  await page.getByRole("button", { name: "Engine-Block speichern" }).click();
-  await expect(page.getByText("Engine-Block gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await page.getByLabel("Formel", { exact: true }).fill(formulaLatex);
+  await page.getByRole("button", { name: "Änderung speichern" }).click();
+  await expect(page.getByText("Inhalt geändert. Bitte Vorlesung speichern.")).toBeVisible();
 
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-table-test"]'));
-  await page.getByLabel("Engine Tabellenzeile").selectOption("0");
-  await page.getByLabel("Engine Tabellenspalte").selectOption("1");
-  await page.getByLabel("Engine Tabellenzelle").fill(tableCell);
+  await page.getByLabel("Tabellenzeile").selectOption("0");
+  await page.getByLabel("Tabellenspalte").selectOption("1");
+  await page.getByLabel("Tabellenzelle").fill(tableCell);
   await page.getByRole("button", { name: "Zelle speichern" }).click();
-  await expect(page.getByText("Engine-Tabellenzelle gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await expect(page.getByText("Tabellenzelle geändert. Bitte Vorlesung speichern.")).toBeVisible();
 
-  await page.getByLabel("Engine Quizanker Niveau").selectOption("1.0");
+  await page.getByLabel("Fragenanker Niveau").selectOption("1.0");
   await page.getByRole("button", { name: "Quizanker setzen" }).click();
-  await expect(page.getByText("Engine-Quizanker gespeichert. Bitte Lecture speichern.")).toBeVisible();
+  await expect(page.getByText("Fragenanker geändert. Bitte Vorlesung speichern.")).toBeVisible();
 
   const saveResponsePromise = page.waitForResponse((response) => (
     response.url().includes("/api/lectures/") &&
@@ -248,12 +232,41 @@ test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tab
   ]));
 
   await page.reload();
-  await page.getByRole("button", { name: "Engine" }).click();
-  await expect(page.getByLabel("Engine Layout")).toHaveValue("technical_two_column");
+  await page.getByRole("button", { name: "Folie direkt bearbeiten" }).click();
+  await page.getByText("Direkt bearbeiten", { exact: true }).click();
+  await expect(page.getByLabel("Layout", { exact: true })).toHaveValue("technical_two_column");
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="figure"]').first());
-  await expect(page.getByLabel("Engine Asset")).toHaveValue(libraryAsset.id);
+  await expect(page.getByLabel("Bild", { exact: true })).toHaveValue(libraryAsset.id);
   await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-formula-test"]'));
-  await expect(page.getByLabel("Engine Formel")).toHaveValue(formulaLatex);
+  await expect(page.getByLabel("Formel", { exact: true })).toHaveValue(formulaLatex);
+  assertClean();
+});
+
+test("AI-first Studio bleibt mobil fokussiert und frei von internen Laufzeitbegriffen", async ({ page }) => {
+  const assertClean = attachDiagnostics(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginLecturer(page);
+
+  const stage = page.getByLabel("Präsentation bearbeiten");
+  const composer = page.locator(".studio-intent-dock");
+  await expect(stage).toBeVisible();
+  await expect(composer).toBeVisible();
+  await expect(composer.getByPlaceholder("Was soll sich ändern?")).toBeVisible();
+
+  const composerBox = await composer.boundingBox();
+  expect(composerBox).not.toBeNull();
+  expect(composerBox!.x).toBeGreaterThanOrEqual(0);
+  expect(composerBox!.x + composerBox!.width).toBeLessThanOrEqual(390);
+  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(844);
+
+  await expect(page.getByText("Engine", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Review-Diff", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Agent Prompt", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Folie direkt bearbeiten" }).click();
+  await expect(page.getByLabel("Folie direkt bearbeiten")).toBeVisible();
+  await expect(page.locator(".studio-direct-controls")).not.toHaveAttribute("open", "");
+  await expect(page.getByLabel(/Änderungswunsch für/)).toBeVisible();
   assertClean();
 });
 

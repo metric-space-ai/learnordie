@@ -22,6 +22,8 @@
     "smoke:live-load": "node scripts/live-load-smoke.mjs",
     "smoke:self-host": "node scripts/self-host-smoke.mjs",
     "smoke:worker": "node scripts/worker-smoke.mjs",
+    "test:agent-runtime": "node --import tsx --test packages/agent-runtime/src/*.test.ts",
+    "test:pi-coding-agent-service": "node --conditions=import --import tsx --test src/server/pi-coding-agent-service.test.ts",
     "typecheck": "tsc --noEmit",
     "vendor:reveal-core": "node scripts/vendor-reveal-core.mjs",
     "db:generate": "drizzle-kit generate",
@@ -54,6 +56,7 @@
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.2.9",
     "playwright": "^1.61.0",
+    "tsx": "4.22.4",
     "typescript": "^5.9.3"
   },
   "overrides": {

@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Lightweight config for the student/lecturer product flows against a LOCAL-store
-// dev server (no Postgres). Assumes a server is already running at LOCAL_E2E_BASE_URL
-// (default http://localhost:3099). Run: npx playwright test --config playwright.local.config.ts
+// Lightweight config for the student/lecturer product flows against an isolated LOCAL-store.
 delete process.env.NO_COLOR;
+
+const baseURL = process.env.LOCAL_E2E_BASE_URL ?? "http://localhost:3099";
+const serverUrl = new URL(baseURL);
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -15,10 +16,23 @@ export default defineConfig({
   retries: 0,
   reporter: "list",
   use: {
-    baseURL: process.env.LOCAL_E2E_BASE_URL ?? "http://localhost:3099",
+    baseURL,
     trace: "off",
     screenshot: "only-on-failure",
     video: "off"
+  },
+  webServer: {
+    command: `npm run dev -- --hostname ${serverUrl.hostname} --port ${serverUrl.port || "3099"}`,
+    url: baseURL,
+    reuseExistingServer: true,
+    timeout: 120_000,
+    env: {
+      LEARNBUDDY_REPOSITORY: "local",
+      LEARNBUDDY_LOCAL_STORE_PATH: `.tmp/learnbuddy-local-e2e-${process.pid}.json`,
+      LEARNBUDDY_AI_PROVIDER: "demo",
+      LEARNBUDDY_QUESTION_GENERATOR: "local",
+      LEARNBUDDY_MAIL_PROVIDER: "console"
+    }
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }]
 });

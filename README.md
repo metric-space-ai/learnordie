@@ -59,7 +59,7 @@ flowchart LR
   AI --> Proxy["llm.learnordie.app Responses Proxy"]
   Proxy --> MiniMax["MiniMax-M3 Upstream"]
   Next --> SlideEngine["@learnordie/slide-engine"]
-  Next --> AgentRuntime["@learnordie/agent-runtime"]
+  Next --> AgentRuntime["@learnordie/agent-runtime / Pi core Vercel port"]
 ```
 
 ### Stack
@@ -72,7 +72,7 @@ flowchart LR
 - Vercel for deployment
 - Resend for lecturer magic links
 - `@learnordie/slide-engine` as a private workspace package
-- `@learnordie/agent-runtime` for the Pi-derived runtime integration
+- `@learnordie/agent-runtime` as a Vercel-safe port of the pinned Pi core and coding-agent runtime (`@earendil-works/pi-agent-core@0.80.2`, `@earendil-works/pi-coding-agent@0.80.2`)
 - Playwright for browser release gates
 
 ## Repository Layout
@@ -152,6 +152,9 @@ Important environment groups:
 - Database: `DATABASE_URL`, `LEARNBUDDY_REPOSITORY`
 - Mail: `LEARNBUDDY_MAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`
 - AI proxy: `LEARNBUDDY_AI_PROVIDER=learnordie-responses`, `LEARNORDIE_LLM_PROXY_API_KEY`
+- Headless Pi Coding Agent service: `POST /api/pi-coding-agent/run`,
+  `LEARNORDIE_PI_CODING_AGENT_API_KEY`, `LEARNORDIE_PI_CODING_AGENT_MODEL`,
+  RAM workspace payload limits
 - MiniMax upstream: `LEARNORDIE_MINIMAX_API_KEY` or `MINIMAX_API_KEY`
 - STT: `LEARNBUDDY_STT_PROVIDER`, `MISTRAL_API_KEY` or `LEARNBUDDY_STT_API_KEY`
 - Storage: `LEARNBUDDY_STORAGE_PROVIDER`, Blob or object storage credentials

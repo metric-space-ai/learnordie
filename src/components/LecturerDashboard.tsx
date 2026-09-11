@@ -2,12 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { defaultEvaluationConfig } from "@/lib/evaluation";
 import {
-  MAX_LEARN_QUESTION_DENSITY,
-  MIN_LEARN_QUESTION_DENSITY,
   normalizeLearnQuestionDensity
 } from "@/lib/learn-settings";
 import {
@@ -18,6 +16,7 @@ import {
 import { seriesIdFromTitle } from "@/lib/series";
 import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
+import { StudioIntentComposer } from "./lecturer/StudioIntentComposer";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
 import { Diagram } from "./Diagram";
 import { Presence } from "./Presence";
@@ -25,8 +24,8 @@ import type { PresenceState } from "./Presence";
 import type {
   Lecture,
   LectureAnalyticsSummary,
+  LectureMaterial,
   LectureStatus,
-  LecturerAssistantToolPlanItem,
   MaterialProcessingRun,
   PresentationAsset,
   QuestionLevel,
@@ -37,8 +36,14 @@ import type {
   StandaloneExportJob,
   StudentChatQuestion
 } from "@/lib/types";
-import type { SlideAssetRef, SlideDocument } from "@learnordie/slide-engine";
-import type { FormEvent, KeyboardEvent } from "react";
+import {
+  DeckRenderer,
+  legacyDiagramAssetId,
+  type SlideAssetRef,
+  type SlideDocument
+} from "@learnordie/slide-engine";
+import type { SlideAsset } from "@learnordie/slide-engine/components";
+import type { FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
   { value: "draft", label: "Entwurf" },
@@ -57,8 +62,7 @@ const variantReviewStatusOptions: Array<{ value: QuestionVariantReviewStatus; la
   { value: "rejected", label: "Verworfen" }
 ];
 
-type WorkspaceTool = "presentation" | "evaluation" | "questions" | "materials" | "analytics" | "assistant";
-type PlanEditor = "status" | "live" | "exam" | "learn" | "budget" | "leaderboard" | null;
+type WorkspaceTool = "presentation" | "evaluation" | "questions" | "materials" | "analytics";
 type SourceComposer = "file" | "url" | "notes" | null;
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
 type SharedStudioTool = Extract<WorkspaceTool, "materials" | "analytics">;
@@ -68,7 +72,6 @@ const workspaceTools: Array<{ value: WorkspaceTool; label: string; shortLabel: s
   { value: "presentation", label: "Folie bearbeiten", shortLabel: "Folie" },
   { value: "questions", label: "Fragen direkt an dieser Folie bearbeiten", shortLabel: "Fragen" },
   { value: "materials", label: "Material zu dieser Folie hinzufügen", shortLabel: "Quellen" },
-  { value: "assistant", label: "Planungsassistent direkt an dieser Folie", shortLabel: "Assistent" },
   { value: "analytics", label: "Lernstand und offene Punkte dieser Folie ansehen", shortLabel: "Auswertung" },
   { value: "evaluation", label: "Evaluation im Learn-Modus bearbeiten", shortLabel: "Evaluation" }
 ];
@@ -89,28 +92,6 @@ function formatEventTime(value?: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
-}
-
-function formatPlanDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "offen";
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
-}
-
-function formatPlanDate(value: string) {
-  if (!value) return "offen";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return "offen";
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit"
-  }).format(date);
 }
 
 function formatExportTime(value: string) {
@@ -149,6 +130,46 @@ function formatRunStatus(status: MaterialProcessingRun["status"]) {
   } as const)[status];
 }
 
+const MAX_SOURCE_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+function formatFileSize(value?: number) {
+  if (!value || value <= 0) return "";
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`;
+  return `${Math.round(value)} B`;
+}
+
+function formatMaterialStatus(material: LectureMaterial, runActive: boolean) {
+  if (material.status === "processing") return runActive ? "Verarbeitung läuft" : "Fehler";
+  if (material.status === "ready") return "Bereit";
+  return "Hochgeladen";
+}
+
+function formatRunStepStatus(status: MaterialProcessingRun["steps"][number]["status"]) {
+  return ({
+    running: "Läuft",
+    done: "Fertig",
+    failed: "Fehler",
+    skipped: "Hinweis"
+  } as const)[status];
+}
+
+type SourceUploadItem = {
+  id: string;
+  file: File;
+  status: "queued" | "uploading" | "done" | "error";
+  error?: string;
+};
+
+function formatSourceUploadStatus(status: SourceUploadItem["status"]) {
+  return ({
+    queued: "Wartet",
+    uploading: "Lädt hoch",
+    done: "Fertig",
+    error: "Fehler"
+  } as const)[status];
+}
+
 function formatPresentationAssetKind(kind: PresentationAsset["kind"]) {
   return ({
     text: "Text",
@@ -181,6 +202,17 @@ function assetPreview(asset: PresentationAsset) {
 function presentationAssetPreviewUrl(asset: PresentationAsset) {
   if (!asset.previewKey) return "";
   return ["figure", "photo", "diagram", "chart"].includes(asset.kind) ? asset.previewKey : "";
+}
+
+function renderLegacyDiagramAsset(asset: SlideAsset): ReactNode {
+  if (asset.id === legacyDiagramAssetId("bearing")) return <Diagram type="bearing" />;
+  if (asset.id === legacyDiagramAssetId("formula")) return <Diagram type="formula" />;
+  if (asset.id === legacyDiagramAssetId("ramp")) return <Diagram type="ramp" />;
+  return null;
+}
+
+function resolveSlideAssetUrl(asset: SlideAsset) {
+  return asset.previewKey || asset.storageKey || asset.url;
 }
 
 function mergeSlideDocumentAssets(base: SlideDocument, previous?: SlideDocument): SlideDocument {
@@ -479,25 +511,24 @@ export function LecturerDashboard({
   const [processingMessage, setProcessingMessage] = useState("");
   const [improvementMessage, setImprovementMessage] = useState("");
   const [workspaceTool, setWorkspaceTool] = useState<WorkspaceTool>(initialTool ?? "presentation");
-  const [assistantDraft, setAssistantDraft] = useState("Welche Fragevarianten passen zu dieser Folie?");
-  const [assistantLoading, setAssistantLoading] = useState(false);
-  const [assistantActionLoading, setAssistantActionLoading] = useState(false);
-  const [assistantSlideActionLoading, setAssistantSlideActionLoading] = useState(false);
-  const [assistantSourceActionLoading, setAssistantSourceActionLoading] = useState(false);
-  const [assistantEvaluationActionLoading, setAssistantEvaluationActionLoading] = useState(false);
-  const [assistantLearnDensityActionLoading, setAssistantLearnDensityActionLoading] = useState(false);
-  const [assistantPlanActionLoading, setAssistantPlanActionLoading] = useState(false);
-  const [assistantError, setAssistantError] = useState("");
-  const [planEditor, setPlanEditor] = useState<PlanEditor>(null);
   const [sourceComposer, setSourceComposer] = useState<SourceComposer>(null);
-  const [sourceFileName, setSourceFileName] = useState("");
-  const [sourceUploadFile, setSourceUploadFile] = useState<File | null>(null);
+  const [sourceUploadQueue, setSourceUploadQueue] = useState<SourceUploadItem[]>([]);
+  const [sourceDragActive, setSourceDragActive] = useState(false);
   const [sourceInputVersion, setSourceInputVersion] = useState(0);
   const [materialUploading, setMaterialUploading] = useState(false);
-  const sourceFileRef = useRef<File | null>(null);
+  const [materialActionId, setMaterialActionId] = useState("");
+  const [materialMessage, setMaterialMessage] = useState("");
+  const [confirmDeleteMaterialId, setConfirmDeleteMaterialId] = useState("");
+  const [inspectMaterialId, setInspectMaterialId] = useState("");
+  const [runLogOpen, setRunLogOpen] = useState(false);
+  const [assetGalleryOpen, setAssetGalleryOpen] = useState(false);
+  const [assetGalleryFilter, setAssetGalleryFilter] = useState<"all" | "review" | PresentationAsset["kind"]>("all");
+  const [assetDetailId, setAssetDetailId] = useState("");
+  const [assetActionId, setAssetActionId] = useState("");
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [engineEditorOpen, setEngineEditorOpen] = useState(false);
+  const [studioPreviewDocument, setStudioPreviewDocument] = useState<SlideDocument | null>(null);
+  const [contextIntent, setContextIntent] = useState<{ x: number; y: number } | null>(null);
   const [reviewFocusId, setReviewFocusId] = useState("");
   const [reviewLevel, setReviewLevel] = useState<QuestionLevel>("2.0");
   const [studioSlideIndex, setStudioSlideIndex] = useState(0);
@@ -567,17 +598,24 @@ export function LecturerDashboard({
   useEffect(() => {
     if (!selectedLectureId) return;
     setStudioSlideIndex(0);
-    setPlanEditor(null);
     setWorkspaceTool(initialTool ?? "presentation");
-    setSourceFileName("");
-    setSourceUploadFile(null);
+    setSourceUploadQueue([]);
+    setSourceDragActive(false);
     setSourceInputVersion((current) => current + 1);
-    sourceFileRef.current = null;
+    setMaterialActionId("");
+    setMaterialMessage("");
+    setConfirmDeleteMaterialId("");
+    setInspectMaterialId("");
+    setRunLogOpen(false);
+    setAssetGalleryOpen(false);
+    setAssetGalleryFilter("all");
+    setAssetDetailId("");
+    setAssetActionId("");
     setCommandMenuOpen(false);
-    setToolMenuOpen(false);
     setEngineEditorOpen(false);
+    setStudioPreviewDocument(null);
+    setContextIntent(null);
     setShowCreateForm(false);
-    setAssistantError("");
   }, [initialTool, selectedLectureId]);
 
   useEffect(() => {
@@ -588,6 +626,30 @@ export function LecturerDashboard({
   useEffect(() => {
     setReviewFocusId("");
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!confirmDeleteMaterialId) return;
+    const timeout = window.setTimeout(() => setConfirmDeleteMaterialId(""), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [confirmDeleteMaterialId]);
+
+  const latestProcessingRunStatus = selected?.materialProcessingRuns?.[0]?.status;
+
+  useEffect(() => {
+    if (latestProcessingRunStatus !== "queued" && latestProcessingRunStatus !== "running") return;
+    const interval = window.setInterval(async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const response = await fetch("/api/lectures");
+        if (!response.ok) return;
+        const payload = (await response.json()) as { lectures?: Lecture[] };
+        if (payload.lectures) setLectures(payload.lectures);
+      } catch {
+        // Polling-Fehler bewusst ignorieren; der nächste Tick versucht es erneut.
+      }
+    }, 2500);
+    return () => window.clearInterval(interval);
+  }, [latestProcessingRunStatus]);
 
   async function loadAnalytics(lectureId: string) {
     setAnalyticsLoading(true);
@@ -604,243 +666,15 @@ export function LecturerDashboard({
     setAnalyticsByLecture((current) => ({ ...current, [lectureId]: payload.summary! }));
   }
 
-  async function sendAssistantMessage(event: FormEvent<HTMLFormElement>) {
+  function openStudioIntent(event: ReactMouseEvent<HTMLElement>) {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, select, button, a, summary")) return;
     event.preventDefault();
-    if (!selected) return;
-    const message = assistantDraft.replace(/\s+/g, " ").trim();
-    if (!message) return;
-
-    setAssistantLoading(true);
-    setAssistantError("");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        message,
-        slideId: studioSlide?.id
-      })
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextIntent({
+      x: Math.min(Math.max(event.clientX - rect.left, 18), Math.max(18, rect.width - 420)),
+      y: Math.min(Math.max(event.clientY - rect.top, 18), Math.max(18, rect.height - 190))
     });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string; queued?: boolean };
-    setAssistantLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Assistent konnte nicht antworten.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    setAssistantDraft("");
-  }
-
-  async function createAssistantReviewDraft() {
-    if (!selected) return;
-
-    setAssistantActionLoading(true);
-    setAssistantError("");
-    const lastAssistantMessage = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant/review-draft`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        slideId: studioSlide?.id,
-        message: lastAssistantMessage?.content ?? assistantDraft
-      })
-    });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string; queued?: boolean };
-    setAssistantActionLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Fragenentwurf konnte nicht angelegt werden.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    const updatedLecture = payload.lectures.find((lecture) => lecture.id === selected.id);
-    const sourceTitle = studioSlide ? `Assistent: ${studioSlide.title}` : undefined;
-    const review = updatedLecture?.questionReviews?.find((item) => item.sourceTitle === sourceTitle) ?? updatedLecture?.questionReviews?.[0];
-    if (review) {
-      setReviewFocusId(review.id);
-      setReviewLevel(review.variants.find((variant) => variant.level === "2.0")?.level ?? review.variants[0]?.level ?? "2.0");
-    }
-    setReviewMessage("Fragenentwurf aus dem Assistenten angelegt.");
-    setWorkspaceTool("questions");
-  }
-
-  async function applyAssistantSlidePoint() {
-    if (!selected) return;
-
-    setAssistantSlideActionLoading(true);
-    setAssistantError("");
-    const lastAssistantMessage = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant/slide-point`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        slideId: studioSlide?.id,
-        message: lastAssistantMessage?.content ?? assistantDraft
-      })
-    });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
-    setAssistantSlideActionLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Folienpunkt konnte nicht übernommen werden.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    const updatedLecture = payload.lectures.find((lecture) => lecture.id === selected.id);
-    if (updatedLecture) {
-      setEdit((current) => ({
-        ...current,
-        slides: updatedLecture.slides,
-        slideDocument: updatedLecture.slideDocument
-      }));
-    }
-  }
-
-  async function createAssistantSourceNote() {
-    if (!selected) return;
-
-    setAssistantSourceActionLoading(true);
-    setAssistantError("");
-    const lastAssistantMessage = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant/source-note`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        slideId: studioSlide?.id,
-        message: lastAssistantMessage?.content ?? assistantDraft
-      })
-    });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
-    setAssistantSourceActionLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Quellen-Notiz konnte nicht angelegt werden.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    setProcessingMessage("Quellen-Notiz aus dem Assistenten angelegt.");
-    setWorkspaceTool("materials");
-  }
-
-  async function applyAssistantEvaluationFocus() {
-    if (!selected) return;
-
-    setAssistantEvaluationActionLoading(true);
-    setAssistantError("");
-    const lastAssistantMessage = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant/evaluation-focus`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        slideId: studioSlide?.id,
-        message: lastAssistantMessage?.content ?? assistantDraft
-      })
-    });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
-    setAssistantEvaluationActionLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Evaluation konnte nicht geschärft werden.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    const updatedLecture = payload.lectures.find((lecture) => lecture.id === selected.id);
-    if (updatedLecture) {
-      setEdit((current) => ({
-        ...current,
-        evaluationConfig: updatedLecture.evaluationConfig
-      }));
-    }
-    setReviewMessage("Ich habe die Evaluation auf diese Folie geschärft.");
-    setWorkspaceTool("evaluation");
-  }
-
-  async function applyAssistantLearnDensity() {
-    if (!selected) return;
-
-    setAssistantLearnDensityActionLoading(true);
-    setAssistantError("");
-    const lastAssistantMessage = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant");
-    const plannedDensity = lastAssistantMessage?.metadata?.toolPlan?.find((tool) => tool.action === "learn_density");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant/learn-density`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        slideId: studioSlide?.id,
-        message: plannedDensity?.reason ?? lastAssistantMessage?.content ?? assistantDraft
-      })
-    });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
-    setAssistantLearnDensityActionLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Learn-Fragedichte konnte nicht gesetzt werden.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    const updatedLecture = payload.lectures.find((lecture) => lecture.id === selected.id);
-    if (updatedLecture) {
-      setEdit((current) => ({
-        ...current,
-        learnQuestionDensity: String(normalizeLearnQuestionDensity(updatedLecture.learnQuestionDensity))
-      }));
-    }
-    setReviewMessage("Learn-Fragedichte aus dem Assistenten gesetzt.");
-    setPlanEditor("learn");
-  }
-
-  async function applyAssistantToolPlan() {
-    if (!selected) return;
-
-    setAssistantPlanActionLoading(true);
-    setAssistantError("");
-    const response = await fetch(`/api/lectures/${selected.id}/assistant/apply-plan`, {
-      method: "POST",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify({
-        slideId: studioSlide?.id
-      })
-    });
-    const payload = (await response.json()) as {
-      lectures?: Lecture[];
-      executed?: Array<{ action: LecturerAssistantToolPlanItem["action"]; label: string }>;
-      error?: string;
-    };
-    setAssistantPlanActionLoading(false);
-
-    if (!response.ok || !payload.lectures) {
-      setAssistantError(payload.error ?? "Toolkette konnte nicht ausgeführt werden.");
-      return;
-    }
-
-    setLectures(payload.lectures);
-    const updatedLecture = payload.lectures.find((lecture) => lecture.id === selected.id);
-    if (updatedLecture) {
-      setEdit((current) => ({
-        ...current,
-        slides: updatedLecture.slides,
-        slideDocument: updatedLecture.slideDocument,
-        learnQuestionDensity: String(normalizeLearnQuestionDensity(updatedLecture.learnQuestionDensity)),
-        evaluationConfig: updatedLecture.evaluationConfig
-      }));
-      const sourceTitle = studioSlide ? `Assistent: ${studioSlide.title}` : undefined;
-      const review = updatedLecture.questionReviews?.find((item) => item.sourceTitle === sourceTitle) ?? updatedLecture.questionReviews?.[0];
-      if (review) {
-        setReviewFocusId(review.id);
-        setReviewLevel(review.variants.find((variant) => variant.level === "2.0")?.level ?? review.variants[0]?.level ?? "2.0");
-      }
-    }
-
-    const labels = payload.executed?.map((item) => item.label).filter(Boolean) ?? [];
-    setReviewMessage(labels.length > 0
-      ? `Toolkette ausgeführt: ${labels.join(", ")}.`
-      : "Toolkette ausgeführt.");
   }
 
   async function createLecture(event: FormEvent<HTMLFormElement>) {
@@ -878,6 +712,7 @@ export function LecturerDashboard({
   function visibleStageEditDraft(current: typeof edit): typeof edit {
     const root = stageFrameRef.current;
     if (!root || !selected || !studioSlide || showCreateForm) return current;
+    if (current.slideDocument?.createdBy.mode === "import") return current;
 
     const readText = (selector: string, fallback: string) => {
       const value = root.querySelector<HTMLElement>(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "";
@@ -951,11 +786,6 @@ export function LecturerDashboard({
         slideDocument: updated.slideDocument
       });
     }
-  }
-
-  async function savePlanEdits() {
-    await persistLectureEdits();
-    setPlanEditor(null);
   }
 
   function updateSlideDraft(slideId: string, updater: (slide: Slide) => Slide) {
@@ -1114,24 +944,104 @@ export function LecturerDashboard({
     setProcessingMessage(payload.queued ? "Materialverarbeitung wurde vorgemerkt." : "Materialverarbeitung abgeschlossen.");
   }
 
+  function updateSourceUploadItem(id: string, patch: Partial<SourceUploadItem>) {
+    setSourceUploadQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function removeSourceUploadItem(id: string) {
+    setSourceUploadQueue((current) => current.filter((item) => item.id !== id));
+  }
+
+  function enqueueSourceFiles(files: File[]) {
+    const incoming = files.filter(Boolean);
+    if (incoming.length === 0) return;
+    setEditError("");
+    setSourceUploadQueue((current) => [
+      ...current,
+      ...incoming.map((file): SourceUploadItem => {
+        const tooLarge = file.size > MAX_SOURCE_UPLOAD_BYTES;
+        return {
+          id: crypto.randomUUID(),
+          file,
+          status: tooLarge ? "error" : "queued",
+          error: tooLarge
+            ? `"${file.name}" ist ${formatFileSize(file.size)} groß. Erlaubt sind maximal ${formatFileSize(MAX_SOURCE_UPLOAD_BYTES)}.`
+            : undefined
+        };
+      })
+    ]);
+  }
+
   async function submitMaterial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
 
     const form = event.currentTarget;
-    const formData = new FormData(form);
     const composerMode = sourceComposer ?? "file";
-    const fileInput = form.querySelector<HTMLInputElement>('input[type="file"][name="file"]');
-    const selectedFile = sourceUploadFile ?? sourceFileRef.current ?? fileInput?.files?.[0] ?? null;
-    const submittedFile = selectedFile;
-    if (composerMode === "file" && selectedFile) {
-      formData.set("file", selectedFile, selectedFile.name);
-    }
     setEditError("");
     setProcessingMessage("Quelle wird hinzugefügt.");
     setMaterialUploading(true);
 
     try {
+      if (composerMode === "file") {
+        const pendingItems = sourceUploadQueue.filter((item) => item.status === "queued");
+        if (pendingItems.length === 0) {
+          setProcessingMessage("");
+          setEditError(
+            sourceUploadQueue.length > 0
+              ? "Keine hochladbare Datei in der Liste. Bitte fehlerhafte Dateien entfernen oder neue auswählen."
+              : "Bitte zuerst eine Datei auswählen oder hier ablegen."
+          );
+          return;
+        }
+
+        let latestLectures: Lecture[] | null = null;
+        let uploadedCount = 0;
+        let failedCount = 0;
+        for (const item of pendingItems) {
+          updateSourceUploadItem(item.id, { status: "uploading", error: undefined });
+          const formData = new FormData();
+          formData.set("file", item.file, item.file.name);
+          try {
+            const response = await fetch(`/api/lectures/${selected.id}/materials`, {
+              method: "POST",
+              headers: csrfHeaders,
+              body: formData
+            });
+            const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
+            if (!response.ok || !payload.lectures) {
+              failedCount += 1;
+              updateSourceUploadItem(item.id, { status: "error", error: payload.error ?? "Upload fehlgeschlagen." });
+              continue;
+            }
+            latestLectures = payload.lectures;
+            uploadedCount += 1;
+            updateSourceUploadItem(item.id, { status: "done" });
+          } catch {
+            failedCount += 1;
+            updateSourceUploadItem(item.id, { status: "error", error: "Verbindung zum Server fehlgeschlagen." });
+          }
+        }
+
+        if (latestLectures) setLectures(latestLectures);
+        if (uploadedCount > 0) {
+          setSourceUploadQueue((current) => current.filter((item) => item.status !== "done"));
+          setSourceInputVersion((current) => current + 1);
+          form.reset();
+        }
+        if (uploadedCount > 0 && failedCount === 0) {
+          setProcessingMessage(uploadedCount === 1 ? "Quelle hinzugefügt." : `${uploadedCount} Quellen hinzugefügt.`);
+        } else if (uploadedCount > 0) {
+          setProcessingMessage(`${uploadedCount} Quellen hinzugefügt, ${failedCount} fehlgeschlagen.`);
+          setEditError("Mindestens eine Datei konnte nicht hochgeladen werden.");
+        } else {
+          setProcessingMessage("");
+          setEditError("Datei konnte nicht hochgeladen werden.");
+        }
+        return;
+      }
+
+      const formData = new FormData(form);
       const response = await fetch(`/api/lectures/${selected.id}/materials`, {
         method: "POST",
         headers: csrfHeaders,
@@ -1140,22 +1050,80 @@ export function LecturerDashboard({
       const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
 
       if (!response.ok || !payload.lectures) {
+        setProcessingMessage("");
         setEditError(payload.error ?? "Material konnte nicht hinzugefügt werden.");
         return;
       }
 
       setLectures(payload.lectures);
-      if (composerMode !== "file" || sourceFileRef.current === submittedFile) {
-        setSourceFileName("");
-        setSourceUploadFile(null);
-        setSourceInputVersion((current) => current + 1);
-        sourceFileRef.current = null;
-        form.reset();
-      }
+      form.reset();
       setProcessingMessage("Quelle hinzugefügt.");
     } finally {
       setMaterialUploading(false);
     }
+  }
+
+  async function deleteMaterial(materialId: string) {
+    if (!selected) return;
+    setMaterialActionId(materialId);
+    setMaterialMessage("");
+    const response = await fetch(`/api/lectures/${selected.id}/materials/${materialId}`, {
+      method: "DELETE",
+      headers: csrfHeaders
+    });
+    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
+    setMaterialActionId("");
+    setConfirmDeleteMaterialId("");
+
+    if (!response.ok || !payload.lectures) {
+      setMaterialMessage(payload.error ?? "Quelle konnte nicht gelöscht werden.");
+      return;
+    }
+
+    setLectures(payload.lectures);
+    if (inspectMaterialId === materialId) setInspectMaterialId("");
+    setMaterialMessage("Quelle gelöscht.");
+  }
+
+  async function reprocessMaterial(materialId: string) {
+    if (!selected) return;
+    setMaterialActionId(materialId);
+    setMaterialMessage("Quelle wird erneut verarbeitet.");
+    const response = await fetch(`/api/lectures/${selected.id}/materials/${materialId}/process`, {
+      method: "POST",
+      headers: csrfHeaders
+    });
+    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
+    setMaterialActionId("");
+
+    if (payload.lectures) setLectures(payload.lectures);
+    if (!response.ok || !payload.lectures) {
+      setMaterialMessage(payload.error ?? "Verarbeitung fehlgeschlagen.");
+      return;
+    }
+    setMaterialMessage("Quelle erneut verarbeitet.");
+  }
+
+  async function reviewAsset(assetId: string, review: "confirmed" | "discarded") {
+    if (!selected) return;
+    setAssetActionId(assetId);
+    setMaterialMessage("");
+    const response = await fetch(`/api/lectures/${selected.id}/assets/${assetId}`, {
+      method: "PATCH",
+      headers: csrfJsonHeaders,
+      body: JSON.stringify({ review })
+    });
+    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
+    setAssetActionId("");
+
+    if (!response.ok || !payload.lectures) {
+      setMaterialMessage(payload.error ?? "Asset konnte nicht aktualisiert werden.");
+      return;
+    }
+
+    setLectures(payload.lectures);
+    if (review === "discarded" && assetDetailId === assetId) setAssetDetailId("");
+    setMaterialMessage(review === "confirmed" ? "Asset bestätigt." : "Asset verworfen.");
   }
 
   async function applyImprovementDraft(draft: ImprovementDraft, source?: HTMLElement | null) {
@@ -1281,10 +1249,7 @@ export function LecturerDashboard({
   const studioSlides = edit.slides.length > 0 ? edit.slides : selected?.slides ?? [];
   const activeStudioSlideIndex = Math.min(studioSlideIndex, Math.max(studioSlides.length - 1, 0));
   const studioSlide = studioSlides[activeStudioSlideIndex];
-  const assistantMessages = selected?.assistantMessages ?? [];
-  const visibleAssistantMessages = studioSlide
-    ? assistantMessages.filter((message) => !message.slideId || message.slideId === studioSlide.id).slice(-6)
-    : assistantMessages.slice(-6);
+  const renderImportedDeckAsStage = edit.slideDocument?.createdBy.mode === "import";
   const latestStandaloneExport = selected?.standaloneExports?.[0];
   const latestStoredArchive = selected?.standaloneExports?.find((exportRecord) => isStoredArchiveUrl(exportRecord.storageUrl));
   const latestExportJob = selected?.standaloneExportJobs?.[0];
@@ -1302,6 +1267,8 @@ export function LecturerDashboard({
       title: targetSlide.title
     });
     setShowCreateForm(false);
+    setStudioPreviewDocument(null);
+    setContextIntent(null);
     setStudioSlideIndex(boundedIndex);
   }
 
@@ -1556,8 +1523,9 @@ export function LecturerDashboard({
 
   function renderSourceComposer(surface: "drawer" | "inline") {
     const composerMode = sourceComposer ?? "file";
+    const queuedFileCount = sourceUploadQueue.filter((item) => item.status === "queued").length;
     const submitLabel = composerMode === "file"
-      ? "Datei hinzufügen"
+      ? queuedFileCount > 1 ? `${queuedFileCount} Dateien hinzufügen` : "Datei hinzufügen"
       : composerMode === "url"
         ? "Link hinzufügen"
         : composerMode === "notes"
@@ -1573,8 +1541,11 @@ export function LecturerDashboard({
       <form
         className={`source-composer ${surface} active ${composerMode}`}
         encType="multipart/form-data"
+        action={selected ? `/lecturer/actions/materials/${selected.id}` : undefined}
+        method="post"
         onSubmit={submitMaterial}
       >
+        <input type="hidden" name="csrfToken" value={csrfToken} />
         <div className="source-composer-anchor">
           <div className="source-composer-anchor-head">
             <div>
@@ -1594,24 +1565,67 @@ export function LecturerDashboard({
             </div>
           </div>
           {composerMode === "file" && (
-            <label className="source-composer-drop">
-              <strong>{sourceFileName || "Datei auswählen"}</strong>
-              <span>PowerPoint, PDF oder Audio</span>
-              <input
-                name="file"
-                key={`file-${sourceInputVersion}`}
-                type="file"
-                accept=".ppt,.pptx,.pdf,.mp3,.wav,.m4a,.aac,.ogg,.oga,.webm,audio/*"
-                aria-label="Datei"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  sourceFileRef.current = file;
-                  setSourceUploadFile(file);
-                  setSourceFileName(file?.name ?? "");
+            <>
+              <label
+                className={`source-composer-drop${sourceDragActive ? " dragover" : ""}`}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setSourceDragActive(true);
                 }}
-                suppressHydrationWarning
-              />
-            </label>
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                  if (!sourceDragActive) setSourceDragActive(true);
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                  setSourceDragActive(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setSourceDragActive(false);
+                  enqueueSourceFiles(Array.from(event.dataTransfer.files));
+                }}
+              >
+                <strong>{sourceDragActive ? "Dateien loslassen" : sourceUploadQueue.length > 0 ? "Weitere Dateien ablegen" : "Dateien hier ablegen"}</strong>
+                <span>PowerPoint, PDF oder Audio · mehrere möglich · max. {formatFileSize(MAX_SOURCE_UPLOAD_BYTES)} pro Datei · oder klicken zum Auswählen</span>
+                <input
+                  name="file"
+                  key={`file-${sourceInputVersion}`}
+                  type="file"
+                  multiple
+                  accept=".ppt,.pptx,.pdf,.mp3,.wav,.m4a,.aac,.ogg,.oga,.webm,audio/*"
+                  aria-label="Dateien"
+                  onChange={(event) => {
+                    enqueueSourceFiles(Array.from(event.target.files ?? []));
+                    setSourceInputVersion((current) => current + 1);
+                  }}
+                  suppressHydrationWarning
+                />
+              </label>
+              {sourceUploadQueue.length > 0 && (
+                <ul className="source-upload-queue" aria-label="Upload-Warteschlange">
+                  {sourceUploadQueue.map((item) => (
+                    <li className="source-upload-item" data-state={item.status} key={item.id}>
+                      <div className="source-upload-item-main">
+                        <strong title={item.file.name}>{item.file.name}</strong>
+                        <span>{formatFileSize(item.file.size)} · {formatSourceUploadStatus(item.status)}</span>
+                      </div>
+                      {item.status !== "uploading" && (
+                        <button
+                          type="button"
+                          aria-label={`${item.file.name} aus der Liste entfernen`}
+                          onClick={() => removeSourceUploadItem(item.id)}
+                        >
+                          ×
+                        </button>
+                      )}
+                      {item.error ? <small role="alert">{item.error}</small> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
           {composerMode === "url" && (
             <label className="source-composer-field">
@@ -1630,100 +1644,6 @@ export function LecturerDashboard({
           </button>
         </div>
       </form>
-    );
-  }
-
-  function renderSlideSourceOverlay(motionState: PresenceState) {
-    const lastRun = selected.materialProcessingRuns?.[0];
-    const materials = selected.materials ?? [];
-    const presentationAssets = selected.presentationAssets ?? [];
-    const visiblePresentationAssets = [...presentationAssets].sort((left, right) => (
-      Number(Boolean(presentationAssetPreviewUrl(right))) - Number(Boolean(presentationAssetPreviewUrl(left)))
-    ));
-    const materialLabel = materials.length === 1 ? "1 Quelle" : `${materials.length} Quellen`;
-    const assetLabel = presentationAssets.length === 1 ? "1 Asset" : `${presentationAssets.length} Assets`;
-    const lastRunCountLabel = lastRun
-      ? lastRun.materialCount > 0
-        ? `${lastRun.materialCount} Materialien · ${lastRun.chunkCount} Chunks · ${lastRun.reviewCount} Reviews`
-        : "Keine neuen Quellen"
-      : "";
-    const extractionWarning = lastRun?.steps.find((step) => step.label.startsWith("Extraktion eingeschränkt"))?.detail;
-
-    return (
-      <aside className="studio-context-drawer materials studio-slide-source-overlay lb-enter-sheet" data-panel-origin="studio-sources" data-state={motionState} aria-label="Quellen direkt an der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Quellen schließen">×</button>
-        <header className="slide-overlay-head">
-          <div>
-            <strong>Quellen</strong>
-            <span>{materialLabel} · {assetLabel}</span>
-          </div>
-          {materials.length > 0 && (
-            <button
-              className="primary-button"
-              disabled={processingLectureId === selected.id || materialUploading}
-              onClick={processMaterials}
-              type="button"
-            >
-              {processingLectureId === selected.id ? "Läuft" : materialUploading ? "Quelle wird gespeichert" : "Fragen aktualisieren"}
-            </button>
-          )}
-        </header>
-        {renderSourceComposer("drawer")}
-        {editError && <p role="alert" className="form-error">{editError}</p>}
-        {processingMessage && <p className="form-note">{processingMessage}</p>}
-        {lastRun && (
-          <div className="slide-overlay-status" aria-label="Letzte Materialverarbeitung">
-            <strong>{formatRunStatus(lastRun.status)}</strong>
-            <span>{lastRunCountLabel}</span>
-            {formatVisibleRunMessage(lastRun) && <small>{formatVisibleRunMessage(lastRun)}</small>}
-            {extractionWarning && <small>{extractionWarning}</small>}
-          </div>
-        )}
-        <section className="studio-asset-library" aria-label="Asset-Bibliothek">
-          <div className="studio-asset-library-head">
-            <strong>Asset-Bibliothek</strong>
-            <span>{assetLabel}</span>
-          </div>
-          {presentationAssets.length === 0 ? (
-            <p className="muted">Noch keine extrahierten Präsentationsassets. Quellen verarbeiten erzeugt Text-, Diagramm-, Formel- und Tabellenkandidaten.</p>
-          ) : (
-            <div className="studio-asset-list compact">
-              {visiblePresentationAssets.slice(0, 6).map((asset) => {
-                const previewUrl = presentationAssetPreviewUrl(asset);
-                return (
-                  <article className={`studio-asset-card${previewUrl ? " has-preview" : ""}`} key={asset.id}>
-                    {previewUrl && (
-                      <span className="studio-asset-thumb" style={{ backgroundImage: `url("${previewUrl}")` }} aria-hidden="true" />
-                    )}
-                    <header>
-                      <span>{formatPresentationAssetKind(asset.kind)}</span>
-                      <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
-                    </header>
-                    <strong>{asset.title}</strong>
-                    <p>{assetPreview(asset)}</p>
-                    <footer>
-                      <span>{asset.source.originalName}</span>
-                      {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
-                    </footer>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-        <div className="studio-source-list compact" aria-label="Hinterlegte Quellen">
-          {materials.length === 0 ? (
-            <p className="muted">Noch keine Quelle an dieser Folie.</p>
-          ) : (
-            materials.slice(0, 4).map((material) => (
-              <span className="studio-source-chip" key={material.id} title={material.originalName}>
-                <strong>{material.originalName}</strong>
-                <small>{material.kind}</small>
-              </span>
-            ))
-          )}
-        </div>
-      </aside>
     );
   }
 
@@ -1928,170 +1848,6 @@ export function LecturerDashboard({
     );
   }
 
-  function renderSlideAssistantOverlay(motionState: PresenceState) {
-    const sourceRefs = visibleAssistantMessages.flatMap((message) => message.sourceRefs ?? []).slice(-4);
-    const latestAgentMetadata = [...visibleAssistantMessages].reverse().find((message) => message.role === "assistant" && message.metadata)?.metadata;
-    const orderedToolPlan = [...(latestAgentMetadata?.toolPlan ?? [])].sort((left, right) => left.order - right.order);
-    const primaryTool = orderedToolPlan.find((tool) => tool.status !== "blocked") ?? orderedToolPlan[0] ?? latestAgentMetadata?.toolSuggestions?.[0];
-    const plannedByAction = new Map(orderedToolPlan.map((tool) => [tool.action, tool]));
-    const executableToolPlan = orderedToolPlan.filter((tool) => tool.status !== "blocked").slice(0, 3);
-    const assistantActionButtons: Array<{
-      action: LecturerAssistantToolPlanItem["action"];
-      label: string;
-      loadingLabel: string;
-      loading: boolean;
-      onClick: () => void;
-    }> = [
-      {
-        action: "source_note" as LecturerAssistantToolPlanItem["action"],
-        label: "Quellen-Notiz",
-        loadingLabel: "Legt an",
-        loading: assistantSourceActionLoading,
-        onClick: () => void createAssistantSourceNote()
-      },
-      {
-        action: "slide_point" as LecturerAssistantToolPlanItem["action"],
-        label: "Folienpunkt übernehmen",
-        loadingLabel: "Übernimmt",
-        loading: assistantSlideActionLoading,
-        onClick: () => void applyAssistantSlidePoint()
-      },
-      {
-        action: "review_draft" as LecturerAssistantToolPlanItem["action"],
-        label: "Fragenentwurf",
-        loadingLabel: "Legt an",
-        loading: assistantActionLoading,
-        onClick: () => void createAssistantReviewDraft()
-      },
-      {
-        action: "evaluation_focus" as LecturerAssistantToolPlanItem["action"],
-        label: "Evaluation schärfen",
-        loadingLabel: "Schärft",
-        loading: assistantEvaluationActionLoading,
-        onClick: () => void applyAssistantEvaluationFocus()
-      },
-      {
-        action: "learn_density" as LecturerAssistantToolPlanItem["action"],
-        label: "Fragedichte setzen",
-        loadingLabel: "Setzt",
-        loading: assistantLearnDensityActionLoading,
-        onClick: () => void applyAssistantLearnDensity()
-      }
-    ].sort((left, right) => {
-      const leftPlan = plannedByAction.get(left.action);
-      const rightPlan = plannedByAction.get(right.action);
-      return (leftPlan?.order ?? 99) - (rightPlan?.order ?? 99);
-    });
-
-    return (
-      <aside className="studio-context-drawer assistant studio-slide-tool-overlay studio-slide-assistant-overlay lb-enter-sheet" data-state={motionState} aria-label="Planungsassistent direkt an der Folie">
-        <button className="studio-panel-close" type="button" onClick={() => openWorkspaceTool("presentation")} aria-label="Assistent schließen">×</button>
-        <header className="slide-overlay-head">
-          <div>
-            <strong>Assistent</strong>
-            <span>{studioSlide?.title ?? selected.title}</span>
-            {primaryTool && <em>Nächster Schritt: {primaryTool.label}</em>}
-          </div>
-          <div className="assistant-actions">
-            {executableToolPlan.length > 1 && (
-              <button
-                className="primary-button compact"
-                type="button"
-                onClick={() => void applyAssistantToolPlan()}
-                disabled={assistantPlanActionLoading || assistantActionLoading || assistantSlideActionLoading || assistantSourceActionLoading || assistantEvaluationActionLoading || assistantLearnDensityActionLoading}
-                title="Führt die vorgeschlagenen Agent-Aktionen in der angegebenen Reihenfolge aus."
-              >
-                {assistantPlanActionLoading ? "Führt aus" : "Toolkette ausführen"}
-              </button>
-            )}
-            {assistantActionButtons.map((button) => {
-              const plan = plannedByAction.get(button.action);
-              const disabledByPlan = plan?.status === "blocked";
-              return (
-                <button
-                  className={`plain-button ${plan ? "planned" : ""}`}
-                  key={button.action}
-                  type="button"
-                  onClick={button.onClick}
-                  disabled={button.loading || disabledByPlan || assistantPlanActionLoading}
-                  title={disabledByPlan ? plan?.prerequisite ?? plan?.reason : plan?.reason}
-                >
-                  {button.loading ? button.loadingLabel : plan ? `${plan.order}. ${button.label}` : button.label}
-                </button>
-              );
-            })}
-          </div>
-        </header>
-
-        <div className="assistant-thread" aria-live="polite">
-          {visibleAssistantMessages.length === 0 ? (
-            <p className="assistant-empty">Noch keine Planung an dieser Folie.</p>
-          ) : (
-            visibleAssistantMessages.map((message) => (
-              <article className={`assistant-message ${message.role}`} key={message.id}>
-                <strong>{message.role === "assistant" ? "Assistent" : "Du"}</strong>
-                {message.content.split("\n").filter(Boolean).map((line, index) => (
-                  <p key={`${message.id}-${index}`}>{line}</p>
-                ))}
-                {message.role === "assistant" && message.metadata?.steps && message.metadata.steps.length > 0 && (
-                  <div className="assistant-agent-steps" aria-label="Agent-Schritte">
-                    {message.metadata.steps.slice(0, 5).map((step) => (
-                      <span className={step.status} key={`${message.id}-${step.title}`}>
-                        <strong>{step.title}</strong>
-                        {step.detail}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {message.role === "assistant" && message.metadata?.sourceWeights && message.metadata.sourceWeights.length > 0 && (
-                  <div className="assistant-source-weights" aria-label="Quellengewichtung">
-                    {message.metadata.sourceWeights.slice(0, 4).map((source) => (
-                      <span key={`${message.id}-${source.label}`}>
-                        <strong>{Math.round(source.weight * 100)}%</strong>
-                        {source.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {message.role === "assistant" && message.metadata?.toolPlan && message.metadata.toolPlan.length > 0 && (
-                  <div className="assistant-tool-plan" aria-label="Nächste Agent-Aktionen">
-                    {message.metadata.toolPlan.slice(0, 3).map((tool) => (
-                      <span className={tool.status} key={`${message.id}-${tool.order}-${tool.action}`}>
-                        <strong>{tool.order}. {tool.label}</strong>
-                        {tool.prerequisite ? `${tool.reason} Voraussetzung: ${tool.prerequisite}` : tool.reason}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </article>
-            ))
-          )}
-        </div>
-
-        {sourceRefs.length > 0 && (
-          <div className="assistant-source-refs" aria-label="Bezugspunkte">
-            {sourceRefs.map((ref, index) => <span key={`${ref}-${index}`}>{ref}</span>)}
-          </div>
-        )}
-
-        {assistantError && <p role="alert" className="form-error">{assistantError}</p>}
-        <form className="assistant-compose" onSubmit={sendAssistantMessage}>
-          <textarea
-            aria-label="Nachricht an den Planungsassistenten"
-            value={assistantDraft}
-            onChange={(event) => setAssistantDraft(event.target.value)}
-            placeholder="z. B. Welche 1.0-Frage passt hier?"
-            rows={3}
-            suppressHydrationWarning
-          />
-          <button className="primary-button" type="submit" disabled={assistantLoading || !assistantDraft.trim()}>
-            {assistantLoading ? "Antwortet" : "Senden"}
-          </button>
-        </form>
-      </aside>
-    );
-  }
-
   function renderCreateLectureForm(context: "empty" | "stage") {
     return (
       <form className={`new-lecture-composer ${context}`} onSubmit={createLecture}>
@@ -2173,9 +1929,7 @@ export function LecturerDashboard({
       };
     }
     setCommandMenuOpen(false);
-    setToolMenuOpen(false);
     setShowCreateForm(false);
-    setPlanEditor(null);
     setWorkspaceTool((current) => {
       const nextTool = current === tool && tool !== "presentation" ? "presentation" : tool;
       if (nextTool === "materials") setSourceComposer(null);
@@ -2190,140 +1944,182 @@ export function LecturerDashboard({
     setReviewFocusId(reviews[nextIndex].id);
   }
 
-  function renderSlideToolMenu() {
-    const questionCount = reviews.length || selected.questions.length;
-    const materialCount = selected.materials?.length ?? 0;
-    const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
-    const assistantCount = selected.assistantMessages?.length ?? 0;
-    const activeTool = workspaceTools.find((tool) => tool.value === workspaceTool);
-    const toolItems: Array<{ tool: WorkspaceTool; detail: string; count?: string }> = [
-      { tool: "assistant", detail: "Assistent", count: assistantCount > 0 ? String(assistantCount) : "KI" },
-      { tool: "questions", detail: "Fragen", count: String(questionCount) },
-      { tool: "materials", detail: "Quellen", count: String(materialCount) },
-      { tool: "analytics", detail: "Auswertung", count: String(analyticsCount) },
-      { tool: "evaluation", detail: "Evaluation", count: edit.evaluationConfig?.enabled === false ? "aus" : "an" }
-    ];
+  function renderStudioAssetRail() {
+    const lastRun = selected.materialProcessingRuns?.[0];
+    const runActive = lastRun?.status === "queued" || lastRun?.status === "running";
+    const materials = selected.materials ?? [];
+    const presentationAssets = selected.presentationAssets ?? [];
+    const visiblePresentationAssets = [...presentationAssets].sort((left, right) => (
+      Number(Boolean(presentationAssetPreviewUrl(right))) - Number(Boolean(presentationAssetPreviewUrl(left)))
+    ));
+    const reviewAssetCount = presentationAssets.filter((asset) => asset.quality.needsReview).length;
+    const materialLabel = materials.length === 1 ? "1 Quelle" : `${materials.length} Quellen`;
+    const assetLabel = presentationAssets.length === 1 ? "1 Asset" : `${presentationAssets.length} Assets`;
 
     return (
-      <div className="studio-tool-menu" data-open={toolMenuOpen ? "true" : "false"}>
-        <button
-          className="studio-tool-trigger"
-          type="button"
-          aria-label="Folienwerkzeuge öffnen"
-          aria-expanded={toolMenuOpen}
-          onClick={() => setToolMenuOpen((current) => !current)}
-        >
-          <span>{workspaceTool === "presentation" ? "Werkzeuge" : activeTool?.shortLabel ?? "Werkzeuge"}</span>
-        </button>
-        <Presence show={toolMenuOpen} exitMs={200}>
-          {(motionState) => (
-            <div className="studio-tool-popover lb-enter-panel" data-state={motionState} aria-label="Folienwerkzeuge">
-              {toolItems.map((item, index) => {
-                const tool = workspaceTools.find((candidate) => candidate.value === item.tool)!;
+      <aside className={`studio-asset-rail ${workspaceTool === "materials" ? "active" : ""}`} aria-label="Quellen und Assets">
+        <header className="studio-asset-rail-head">
+          <div>
+            <span>Quellen</span>
+            <strong>{materialLabel} · {assetLabel}</strong>
+          </div>
+          <button
+            className="plain-button small"
+            disabled={processingLectureId === selected.id || materialUploading || materials.length === 0}
+            onClick={processMaterials}
+            type="button"
+          >
+            {processingLectureId === selected.id ? "Läuft" : "Verarbeiten"}
+          </button>
+        </header>
+
+        {renderSourceComposer("inline")}
+        {editError && workspaceTool === "materials" ? <p role="alert" className="form-error">{editError}</p> : null}
+        {processingMessage ? <p className="form-note">{processingMessage}</p> : null}
+        {materialMessage ? <p className="form-note" aria-live="polite">{materialMessage}</p> : null}
+
+        {lastRun ? (
+          <button
+            className="studio-asset-run-status"
+            type="button"
+            onClick={() => setRunLogOpen(true)}
+            aria-label={`Protokoll der letzten Materialverarbeitung öffnen: ${formatRunStatus(lastRun.status)}`}
+          >
+            <strong>{formatRunStatus(lastRun.status)}</strong>
+            <span>{lastRun.materialCount === 1 ? "1 Material" : `${lastRun.materialCount} Materialien`} · {lastRun.chunkCount === 1 ? "1 Chunk" : `${lastRun.chunkCount} Chunks`} · Protokoll</span>
+            {formatVisibleRunMessage(lastRun) ? <small>{formatVisibleRunMessage(lastRun)}</small> : null}
+          </button>
+        ) : null}
+
+        <section className="studio-asset-library" aria-label="Extrahierte Assets">
+          <div className="studio-asset-library-head">
+            <strong>Assets</strong>
+            <button
+              className="studio-asset-gallery-toggle"
+              type="button"
+              onClick={() => {
+                setAssetDetailId("");
+                setAssetGalleryFilter("all");
+                setAssetGalleryOpen(true);
+              }}
+            >
+              Alle anzeigen ({presentationAssets.length})
+            </button>
+          </div>
+          {reviewAssetCount > 0 ? (
+            <button
+              className="studio-asset-review-hint"
+              type="button"
+              onClick={() => {
+                setAssetDetailId("");
+                setAssetGalleryFilter("review");
+                setAssetGalleryOpen(true);
+              }}
+            >
+              {reviewAssetCount} {reviewAssetCount === 1 ? "Asset braucht" : "Assets brauchen"} Prüfung
+            </button>
+          ) : null}
+          {presentationAssets.length === 0 ? (
+            <p className="muted">PowerPoint, PDF, Audio, URLs oder Notizen hinzufügen. Die KI extrahiert daraus Text, Abbildungen, Tabellen, Formeln und Folienbausteine.</p>
+          ) : (
+            <div className="studio-asset-list compact">
+              {visiblePresentationAssets.slice(0, 8).map((asset) => {
+                const previewUrl = presentationAssetPreviewUrl(asset);
                 return (
-                  <button
-                    aria-label={tool.label}
-                    aria-pressed={workspaceTool === item.tool}
-                    className={`studio-tool-choice lb-enter-row ${workspaceTool === item.tool ? "active" : ""}`}
-                    key={item.tool}
-                    style={{ "--lb-i": index } as MotionStyle}
-                    type="button"
-                    onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
+                  <article
+                    className={`studio-asset-card clickable${previewUrl ? " has-preview" : ""}`}
+                    key={asset.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setAssetDetailId(asset.id);
+                      setAssetGalleryOpen(true);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      setAssetDetailId(asset.id);
+                      setAssetGalleryOpen(true);
+                    }}
                   >
-                    <strong>{item.detail}</strong>
-                    {item.count ? <small>{item.count}</small> : null}
-                  </button>
+                    {previewUrl && (
+                      <span className="studio-asset-thumb" style={{ backgroundImage: `url("${previewUrl}")` }} aria-hidden="true" />
+                    )}
+                    <header>
+                      <span>{formatPresentationAssetKind(asset.kind)}</span>
+                      <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
+                    </header>
+                    <strong>{asset.title}</strong>
+                    <p>{assetPreview(asset)}</p>
+                    <footer>
+                      <span>{asset.source.originalName}</span>
+                      {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
+                    </footer>
+                  </article>
                 );
               })}
             </div>
           )}
-        </Presence>
-      </div>
-    );
-  }
+        </section>
 
-  function renderPlanSummaryButton() {
-    return (
-      <button
-        className={`studio-plan-summary-button ${planEditor ? "active" : ""}`}
-        type="button"
-        onClick={() => setPlanEditor((current) => (current ? null : "status"))}
-      >
-        <span>Planung</span>
-        <strong>{formatLectureStatus(edit.status)}</strong>
-      </button>
-    );
-  }
+        <section className="studio-source-list compact" aria-label="Importierte Quellen">
+          {materials.length === 0 ? (
+            <p className="muted">Noch keine Quelle importiert.</p>
+          ) : (
+            materials.map((material) => {
+              const busy = materialActionId === material.id;
+              return (
+                <div className="studio-source-chip managed" data-status={material.status} key={material.id}>
+                  <button
+                    className="studio-source-chip-main"
+                    type="button"
+                    title={`${material.originalName} im Detail anzeigen`}
+                    aria-label={`Details zu ${material.originalName}`}
+                    onClick={() => setInspectMaterialId(material.id)}
+                  >
+                    <strong>{material.originalName}</strong>
+                    <small>{material.kind} · {formatMaterialStatus(material, runActive)}</small>
+                  </button>
+                  <div className="studio-source-chip-actions">
+                    <button
+                      type="button"
+                      disabled={busy || runActive || material.kind === "audio"}
+                      title="Erneut verarbeiten"
+                      aria-label={`${material.originalName} erneut verarbeiten`}
+                      onClick={() => reprocessMaterial(material.id)}
+                    >
+                      ↻
+                    </button>
+                    {confirmDeleteMaterialId === material.id ? (
+                      <button
+                        className="danger"
+                        type="button"
+                        disabled={busy}
+                        title="Löschen bestätigen"
+                        aria-label={`${material.originalName} wirklich löschen`}
+                        onClick={() => deleteMaterial(material.id)}
+                      >
+                        Sicher?
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        title="Quelle löschen"
+                        aria-label={`${material.originalName} löschen`}
+                        onClick={() => setConfirmDeleteMaterialId(material.id)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </section>
 
-  function renderPlanTabs() {
-    const planItems: Array<{ editor: Exclude<PlanEditor, null>; label: string; value: string }> = [
-      { editor: "status", label: "Status", value: formatLectureStatus(edit.status) },
-      { editor: "live", label: "Live", value: formatPlanDateTime(edit.liveAt) },
-      { editor: "exam", label: "Prüfung", value: formatPlanDate(edit.examDate) },
-      { editor: "learn", label: "Learn", value: `${normalizeLearnQuestionDensity(edit.learnQuestionDensity)} Hotspots` },
-      { editor: "leaderboard", label: "Rangliste", value: edit.leaderboardEnabled ? "an" : "aus" },
-      { editor: "budget", label: "KI", value: `${edit.aiDailyLimit}/${edit.seriesAiDailyLimit}/${edit.tenantAiDailyLimit}` }
-    ];
-
-    return (
-      <div className="studio-plan-tabs" aria-label="Planungsbereich">
-        {planItems.map((item) => (
-          <button
-            aria-pressed={planEditor === item.editor}
-            key={item.editor}
-            type="button"
-            title={`${item.label}: ${item.value}`}
-            onClick={() => setPlanEditor(item.editor)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  function renderStudioHotspots() {
-    const questionCount = reviews.length || selected.questions.length;
-    const materialCount = selected.materials?.length ?? 0;
-    const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
-    const assistantCount = selected.assistantMessages?.length ?? 0;
-    const hotspots: Array<{ tool: WorkspaceTool; icon: string; label: string; count?: string }> = [
-      { tool: "assistant", icon: "assistant", label: "Assistent an dieser Folie", count: assistantCount > 0 ? String(assistantCount) : undefined },
-      { tool: "questions", icon: "question", label: "Fragen auf dieser Folie", count: String(questionCount) },
-      { tool: "materials", icon: "source", label: "Quellen für diese Folie", count: materialCount > 0 ? String(materialCount) : undefined },
-      { tool: "analytics", icon: "analytics", label: "Lernsignale zu dieser Folie", count: analyticsCount > 0 ? String(analyticsCount) : undefined },
-      { tool: "evaluation", icon: "eval", label: "Evaluation im Learn-Modus", count: edit.evaluationConfig?.enabled === false ? "aus" : undefined }
-    ];
-
-    return (
-      <div className="studio-hotspots" aria-label="Direktwerkzeuge auf der Folie">
-        {hotspots.map((item, index) => (
-          <button
-            aria-label={item.label}
-            aria-pressed={workspaceTool === item.tool}
-            className={`studio-hotspot lb-enter-hotspot ${workspaceTool === item.tool ? "active" : ""}`}
-            key={item.tool}
-            style={{ "--lb-i": index } as MotionStyle}
-            title={item.label}
-            type="button"
-            onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
-          >
-            <span className={`lb-icon lb-icon-${item.icon}`} aria-hidden="true" />
-            {item.count ? <small>{item.count}</small> : null}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  function renderFilmstripRail() {
-    return (
-      <aside className="studio-filmstrip-rail" aria-label="Folien">
-        <div className="studio-account-mini">
-          <strong>{edit.title}</strong>
-          <span>{formatLectureStatus(edit.status)}</span>
-        </div>
-        <div className="studio-filmstrip-list" aria-label="Folie auswählen">
+        <section className="studio-filmstrip-list studio-asset-slide-list" aria-label="Folie auswählen">
           {studioSlides.map((slide, index) => (
             <button
               aria-current={index === activeStudioSlideIndex ? "true" : undefined}
@@ -2345,225 +2141,386 @@ export function LecturerDashboard({
               <strong>{slide.title}</strong>
             </button>
           ))}
-        </div>
-        <button
-          className="studio-create-trigger"
-          type="button"
-          onClick={() => {
-            setWorkspaceTool("presentation");
-            setPlanEditor(null);
-            setShowCreateForm(true);
-          }}
-        >
-          Neue Vorlesung
-        </button>
+        </section>
       </aside>
     );
   }
 
-  function renderPlanEditor() {
-    if (!planEditor) return null;
-    const planTitle = {
-      status: "Status",
-      live: "Live-Termin",
-      exam: "Prüfungstag",
-      learn: "Learn-Modus",
-      leaderboard: "Rangliste",
-      budget: "KI-Budget"
-    } satisfies Record<Exclude<PlanEditor, null>, string>;
+  function renderRunLogSheet(motionState: PresenceState) {
+    const run = selected.materialProcessingRuns?.[0];
 
     return (
-      <section className={`studio-plan-popover lb-enter-panel ${planEditor}`} aria-label="Planung bearbeiten">
-        <button
-          className="studio-plan-close"
-          type="button"
-          onClick={() => setPlanEditor(null)}
-          aria-label="Planung schließen"
-        >
-          ×
-        </button>
-        <header className="studio-plan-head">
-          <strong>{planTitle[planEditor]}</strong>
+      <aside className="studio-context-drawer materials studio-slide-tool-overlay studio-sheet-side lb-enter-sheet" data-state={motionState} aria-label="Protokoll der Materialverarbeitung">
+        <button className="studio-panel-close" type="button" onClick={() => setRunLogOpen(false)} aria-label="Protokoll schließen">×</button>
+        <header className="slide-overlay-head">
+          <div>
+            <strong>Verarbeitung</strong>
+            <span>{run ? `${formatRunStatus(run.status)} · ${run.materialCount === 1 ? "1 Material" : `${run.materialCount} Materialien`} · ${run.chunkCount === 1 ? "1 Chunk" : `${run.chunkCount} Chunks`}` : "Noch kein Lauf"}</span>
+          </div>
         </header>
-        {renderPlanTabs()}
 
-        {planEditor === "status" && (
-          <div className="plan-status-grid" aria-label="Status auswählen">
-            {statusOptions.map((option) => (
+        {run ? (
+          <>
+            {formatVisibleRunMessage(run) ? <p className="form-note">{formatVisibleRunMessage(run)}</p> : null}
+            <ol className="studio-run-steps" aria-label="Schritte der Verarbeitung">
+              {run.steps.map((step, index) => (
+                <li
+                  className="studio-run-step lb-enter-row"
+                  data-status={step.status}
+                  key={`${step.at}-${index}`}
+                  style={{ "--lb-i": Math.min(index, 10) } as MotionStyle}
+                >
+                  <span aria-hidden="true">
+                    {step.status === "done" ? "✓" : step.status === "failed" ? "!" : step.status === "skipped" ? "–" : "…"}
+                  </span>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <small>{formatRunStepStatus(step.status)}{step.detail ? ` · ${step.detail}` : ""}</small>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="muted">
+              Gestartet {formatExportTime(run.startedAt)}
+              {run.completedAt ? ` · beendet ${formatExportTime(run.completedAt)}` : ""}
+            </p>
+          </>
+        ) : (
+          <p className="muted">Noch keine Verarbeitung gestartet.</p>
+        )}
+      </aside>
+    );
+  }
+
+  function renderMaterialSheet(motionState: PresenceState) {
+    const lastRun = selected.materialProcessingRuns?.[0];
+    const runActive = lastRun?.status === "queued" || lastRun?.status === "running";
+    const material = (selected.materials ?? []).find((item) => item.id === inspectMaterialId);
+    const materialAssets = material
+      ? (selected.presentationAssets ?? []).filter((asset) => asset.source.materialId === material.id)
+      : [];
+
+    return (
+      <aside className="studio-context-drawer materials studio-slide-tool-overlay studio-sheet-side lb-enter-sheet" data-state={motionState} aria-label="Quelle im Detail">
+        <button className="studio-panel-close" type="button" onClick={() => setInspectMaterialId("")} aria-label="Quellendetails schließen">×</button>
+        <header className="slide-overlay-head">
+          <div>
+            <strong>{material?.originalName ?? "Quelle"}</strong>
+            <span>{material ? `${material.kind} · ${formatMaterialStatus(material, runActive)}` : "Nicht mehr vorhanden"}</span>
+          </div>
+        </header>
+
+        {material ? (
+          <div className="studio-material-detail">
+            <dl>
+              <div><dt>Status</dt><dd>{formatMaterialStatus(material, runActive)}</dd></div>
+              <div><dt>Typ</dt><dd>{material.kind}</dd></div>
+              {material.sizeBytes ? <div><dt>Größe</dt><dd>{formatFileSize(material.sizeBytes)}</dd></div> : null}
+              <div><dt>Chunks</dt><dd>{material.chunkCount ?? 0}</dd></div>
+              <div><dt>Assets</dt><dd>{materialAssets.length}</dd></div>
+              <div><dt>Hinzugefügt</dt><dd>{formatExportTime(material.createdAt)}</dd></div>
+            </dl>
+
+            {material.extractedTextPreview ? (
+              <section>
+                <strong>Textvorschau</strong>
+                <p>{material.extractedTextPreview}</p>
+              </section>
+            ) : (
+              <p className="muted">Noch kein Text extrahiert. Nach der Verarbeitung erscheint hier eine Vorschau.</p>
+            )}
+
+            {materialAssets.length > 0 && (
+              <section>
+                <strong>Erzeugte Assets</strong>
+                <div className="studio-material-assets">
+                  {materialAssets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => {
+                        setAssetDetailId(asset.id);
+                        setAssetGalleryOpen(true);
+                      }}
+                    >
+                      <span>{formatPresentationAssetKind(asset.kind)}</span>
+                      <strong>{asset.title}</strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <div className="studio-overlay-actions" aria-label="Quellenaktionen">
               <button
-                className={edit.status === option.value ? "selected" : ""}
-                key={option.value}
+                className="primary-button"
                 type="button"
-                onClick={() => setEdit((current) => ({ ...current, status: option.value }))}
+                disabled={materialActionId === material.id || runActive || material.kind === "audio"}
+                onClick={() => reprocessMaterial(material.id)}
               >
-                {option.label}
+                {materialActionId === material.id ? "Läuft" : "Erneut verarbeiten"}
               </button>
-            ))}
+              {confirmDeleteMaterialId === material.id ? (
+                <button
+                  className="plain-button danger"
+                  type="button"
+                  disabled={materialActionId === material.id}
+                  onClick={() => deleteMaterial(material.id)}
+                >
+                  Wirklich löschen?
+                </button>
+              ) : (
+                <button
+                  className="plain-button"
+                  type="button"
+                  onClick={() => setConfirmDeleteMaterialId(material.id)}
+                >
+                  Löschen
+                </button>
+              )}
+            </div>
           </div>
+        ) : (
+          <p className="muted">Diese Quelle wurde entfernt.</p>
         )}
+      </aside>
+    );
+  }
 
-        {planEditor === "live" && (
-          <div className="plan-field-card">
-            <label>
-              Live-Termin
-              <input
-                type="datetime-local"
-                value={edit.liveAt}
-                onChange={(event) => setEdit((current) => ({ ...current, liveAt: event.target.value }))}
-                suppressHydrationWarning
-              />
-            </label>
+  function renderAssetGallerySheet(motionState: PresenceState) {
+    const assets = selected.presentationAssets ?? [];
+    const detailAsset = assets.find((asset) => asset.id === assetDetailId);
+    const assetKinds = [...new Set(assets.map((asset) => asset.kind))];
+    const reviewCount = assets.filter((asset) => asset.quality.needsReview).length;
+    const filteredAssets = assets.filter((asset) => {
+      if (assetGalleryFilter === "all") return true;
+      if (assetGalleryFilter === "review") return asset.quality.needsReview;
+      return asset.kind === assetGalleryFilter;
+    });
+
+    if (assetDetailId) {
+      const previewUrl = detailAsset ? presentationAssetPreviewUrl(detailAsset) : "";
+      const sourceLocation = detailAsset?.source.page !== undefined
+        ? `Seite ${detailAsset.source.page}`
+        : detailAsset?.source.slide !== undefined
+          ? `Folie ${detailAsset.source.slide}`
+          : detailAsset?.source.sourceRef ?? "";
+
+      return (
+        <aside className="studio-context-drawer materials studio-slide-tool-overlay studio-sheet-side lb-enter-sheet" data-state={motionState} aria-label="Asset im Detail">
+          <button className="studio-panel-close" type="button" onClick={() => setAssetDetailId("")} aria-label="Zurück zur Galerie">×</button>
+          <header className="slide-overlay-head">
+            <div>
+              <strong>{detailAsset?.title ?? "Asset"}</strong>
+              <span>{detailAsset ? `${formatPresentationAssetKind(detailAsset.kind)} · ${formatPresentationAssetQuality(detailAsset)}` : "Nicht mehr vorhanden"}</span>
+            </div>
+          </header>
+
+          {detailAsset ? (
+            <div className="studio-asset-detail">
+              {previewUrl ? (
+                <span className="studio-asset-detail-preview" style={{ backgroundImage: `url("${previewUrl}")` }} role="img" aria-label={`Vorschau: ${detailAsset.title}`} />
+              ) : null}
+              <dl>
+                <div><dt>Art</dt><dd>{formatPresentationAssetKind(detailAsset.kind)}</dd></div>
+                <div><dt>Quelle</dt><dd>{detailAsset.source.originalName}</dd></div>
+                {sourceLocation ? <div><dt>Fundstelle</dt><dd>{sourceLocation}</dd></div> : null}
+                {typeof detailAsset.quality.extractionConfidence === "number" ? (
+                  <div><dt>Sicherheit</dt><dd>{Math.round(detailAsset.quality.extractionConfidence * 100)}%</dd></div>
+                ) : null}
+                <div><dt>Erstellt</dt><dd>{formatExportTime(detailAsset.createdAt)}</dd></div>
+              </dl>
+
+              {detailAsset.description ? <p className="muted">{detailAsset.description}</p> : null}
+              {detailAsset.quality.reason ? <p className="form-note">Prüfhinweis: {detailAsset.quality.reason}</p> : null}
+
+              {detailAsset.extractedText ? (
+                <section>
+                  <strong>Extrahierter Text</strong>
+                  <p className="studio-asset-detail-text">{detailAsset.extractedText}</p>
+                </section>
+              ) : null}
+
+              {detailAsset.quality.needsReview ? (
+                <div className="studio-overlay-actions" aria-label="Asset prüfen">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={assetActionId === detailAsset.id}
+                    onClick={() => reviewAsset(detailAsset.id, "confirmed")}
+                  >
+                    Bestätigen
+                  </button>
+                  <button
+                    className="plain-button"
+                    type="button"
+                    disabled={assetActionId === detailAsset.id}
+                    onClick={() => reviewAsset(detailAsset.id, "discarded")}
+                  >
+                    Verwerfen
+                  </button>
+                </div>
+              ) : (
+                <p className="muted">Asset ist bestätigt.</p>
+              )}
+            </div>
+          ) : (
+            <p className="muted">Dieses Asset wurde entfernt.</p>
+          )}
+        </aside>
+      );
+    }
+
+    return (
+      <aside className="studio-context-drawer materials studio-slide-tool-overlay studio-sheet-side lb-enter-sheet" data-state={motionState} aria-label="Asset-Galerie">
+        <button className="studio-panel-close" type="button" onClick={() => setAssetGalleryOpen(false)} aria-label="Galerie schließen">×</button>
+        <header className="slide-overlay-head">
+          <div>
+            <strong>Assets</strong>
+            <span>{assets.length} extrahiert · {reviewCount} zur Prüfung</span>
           </div>
-        )}
+        </header>
 
-        {planEditor === "exam" && (
-          <div className="plan-field-card">
-            <label>
-              Prüfungstag
-              <input
-                type="date"
-                value={edit.examDate}
-                onChange={(event) => setEdit((current) => ({ ...current, examDate: event.target.value }))}
-                suppressHydrationWarning
-              />
-            </label>
-          </div>
-        )}
-
-        {planEditor === "learn" && (
-          <div className="plan-field-card learn-density-card">
-            <label>
-              Fragedichte
-              <input
-                aria-label="Learn-Fragedichte"
-                type="range"
-                min={MIN_LEARN_QUESTION_DENSITY}
-                max={MAX_LEARN_QUESTION_DENSITY}
-                value={normalizeLearnQuestionDensity(edit.learnQuestionDensity)}
-                onChange={(event) => setEdit((current) => ({
-                  ...current,
-                  learnQuestionDensity: String(normalizeLearnQuestionDensity(event.target.value))
-                }))}
-                suppressHydrationWarning
-              />
-              <strong>{normalizeLearnQuestionDensity(edit.learnQuestionDensity)}</strong>
-            </label>
-            <p className="form-note">Steuert die Anzahl der Frageanker auf jeder Learn-Folie.</p>
-          </div>
-        )}
-
-        {planEditor === "budget" && (
-          <div className="plan-budget-grid" aria-label="KI-Budget">
-            <label>
-              Vorlesung
-              <input
-                aria-label="Vorlesung: KI-Fragen/Tag"
-                type="number"
-                min={1}
-                max={200}
-                value={edit.aiDailyLimit}
-                onChange={(event) => setEdit((current) => ({ ...current, aiDailyLimit: event.target.value }))}
-                suppressHydrationWarning
-              />
-              <small>Fragen/Tag</small>
-            </label>
-            <label>
-              Reihe
-              <input
-                aria-label="Reihe: KI-Fragen/Tag"
-                type="number"
-                min={1}
-                max={200}
-                value={edit.seriesAiDailyLimit}
-                onChange={(event) => setEdit((current) => ({ ...current, seriesAiDailyLimit: event.target.value }))}
-                suppressHydrationWarning
-              />
-              <small>Fragen/Tag</small>
-            </label>
-            <label>
-              Konto
-              <input
-                aria-label="Konto: KI-Fragen/Tag"
-                type="number"
-                min={1}
-                max={200}
-                value={edit.tenantAiDailyLimit}
-                onChange={(event) => setEdit((current) => ({ ...current, tenantAiDailyLimit: event.target.value }))}
-                suppressHydrationWarning
-              />
-              <small>Fragen/Tag</small>
-            </label>
-            <details className="plan-token-details">
-              <summary>Tokenbudget</summary>
-              <div>
-                <label>
-                  Vorlesung
-                  <input
-                    aria-label="Vorlesung: KI-Tokens/Tag"
-                    type="number"
-                    min={100}
-                    max={200000}
-                    step={100}
-                    value={edit.aiDailyTokenLimit}
-                    onChange={(event) => setEdit((current) => ({ ...current, aiDailyTokenLimit: event.target.value }))}
-                    suppressHydrationWarning
-                  />
-                </label>
-                <label>
-                  Reihe
-                  <input
-                    aria-label="Reihe: KI-Tokens/Tag"
-                    type="number"
-                    min={100}
-                    max={200000}
-                    step={100}
-                    value={edit.seriesAiDailyTokenLimit}
-                    onChange={(event) => setEdit((current) => ({ ...current, seriesAiDailyTokenLimit: event.target.value }))}
-                    suppressHydrationWarning
-                  />
-                </label>
-                <label>
-                  Konto
-                  <input
-                    aria-label="Konto: KI-Tokens/Tag"
-                    type="number"
-                    min={100}
-                    max={200000}
-                    step={100}
-                    value={edit.tenantAiDailyTokenLimit}
-                    onChange={(event) => setEdit((current) => ({ ...current, tenantAiDailyTokenLimit: event.target.value }))}
-                    suppressHydrationWarning
-                  />
-                </label>
-              </div>
-            </details>
-          </div>
-        )}
-
-        {planEditor === "leaderboard" && (
-          <div className="plan-field-card">
-            <label className="toggle-line studio-toggle-line">
-              <input
-                type="checkbox"
-                checked={edit.leaderboardEnabled}
-                onChange={(event) => setEdit((current) => ({ ...current, leaderboardEnabled: event.target.checked }))}
-                suppressHydrationWarning
-              />
-              Leaderboard für Studierende anzeigen
-            </label>
-            <p className="form-note">Nur zur Motivation und Selbsteinschätzung, nicht prüfungsrelevant.</p>
-          </div>
-        )}
-
-        <div className="studio-plan-actions">
-          <button className="primary-button" type="button" onClick={() => void savePlanEdits()}>
-            Speichern
+        <div className="studio-level-rail studio-gallery-filters" aria-label="Assets filtern">
+          <button aria-pressed={assetGalleryFilter === "all"} type="button" onClick={() => setAssetGalleryFilter("all")}>
+            Alle
           </button>
-          <button className="plain-button" type="button" onClick={() => setPlanEditor(null)}>
-            Schließen
+          <button aria-pressed={assetGalleryFilter === "review"} type="button" onClick={() => setAssetGalleryFilter("review")}>
+            Prüfung nötig
+          </button>
+          {assetKinds.map((kind) => (
+            <button
+              aria-pressed={assetGalleryFilter === kind}
+              key={kind}
+              type="button"
+              onClick={() => setAssetGalleryFilter(kind)}
+            >
+              {formatPresentationAssetKind(kind)}
+            </button>
+          ))}
+        </div>
+
+        {filteredAssets.length === 0 ? (
+          <p className="muted">Keine Assets für diesen Filter.</p>
+        ) : (
+          <div className="studio-gallery-grid">
+            {filteredAssets.map((asset, index) => {
+              const previewUrl = presentationAssetPreviewUrl(asset);
+              return (
+                <article
+                  className={`studio-asset-card${previewUrl ? " has-preview" : ""} lb-enter-row`}
+                  key={asset.id}
+                  style={{ "--lb-i": Math.min(index, 8) } as MotionStyle}
+                >
+                  {previewUrl && (
+                    <span className="studio-asset-thumb" style={{ backgroundImage: `url("${previewUrl}")` }} aria-hidden="true" />
+                  )}
+                  <header>
+                    <span>{formatPresentationAssetKind(asset.kind)}</span>
+                    <small data-review={asset.quality.needsReview ? "true" : "false"}>{formatPresentationAssetQuality(asset)}</small>
+                  </header>
+                  <button className="studio-asset-open" type="button" onClick={() => setAssetDetailId(asset.id)}>
+                    <strong>{asset.title}</strong>
+                    <span>{assetPreview(asset)}</span>
+                  </button>
+                  <footer>
+                    <span>{asset.source.originalName}</span>
+                    {asset.source.sourceRef && <span>{asset.source.sourceRef}</span>}
+                  </footer>
+                  {asset.quality.needsReview && (
+                    <div className="studio-asset-review-actions" aria-label={`${asset.title} prüfen`}>
+                      <button
+                        className="primary-button small"
+                        type="button"
+                        disabled={assetActionId === asset.id}
+                        onClick={() => reviewAsset(asset.id, "confirmed")}
+                      >
+                        Bestätigen
+                      </button>
+                      <button
+                        className="plain-button small"
+                        type="button"
+                        disabled={assetActionId === asset.id}
+                        onClick={() => reviewAsset(asset.id, "discarded")}
+                      >
+                        Verwerfen
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </aside>
+    );
+  }
+
+  function renderStudioManualToolbar() {
+    return (
+      <div className="studio-manual-toolbar lb-enter-control" aria-label="Manuelle Folienwerkzeuge">
+        <div className="studio-stepper">
+          <button
+            type="button"
+            onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)}
+            disabled={activeStudioSlideIndex === 0}
+            aria-label="Vorherige Folie"
+          >
+            ‹
+          </button>
+          <span>{activeStudioSlideIndex + 1} / {studioSlides.length || 1}</span>
+          <button
+            type="button"
+            onClick={() => moveToStudioSlide(activeStudioSlideIndex + 1)}
+            disabled={activeStudioSlideIndex >= studioSlides.length - 1}
+            aria-label="Nächste Folie"
+          >
+            ›
           </button>
         </div>
-      </section>
+        <button
+          aria-label={engineEditorOpen ? "Direktbearbeitung schließen" : "Folie direkt bearbeiten"}
+          aria-pressed={engineEditorOpen}
+          className="plain-button studio-engine-toggle"
+          title={engineEditorOpen ? "Direktbearbeitung schließen" : "Folie direkt bearbeiten"}
+          type="button"
+          onClick={() => setEngineEditorOpen((open) => !open)}
+        >
+          ✎
+        </button>
+        <button className="primary-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
+        {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
+      </div>
+    );
+  }
+
+  function renderStudioLearningRail() {
+    const questionCount = reviews.length || selected.questions.length;
+    const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
+    const items: Array<{ tool: WorkspaceTool; icon: string; label: string; count?: string }> = [
+      { tool: "questions", icon: "question", label: "Lernfragen", count: String(questionCount) },
+      { tool: "analytics", icon: "analytics", label: "Lernsignale", count: analyticsCount > 0 ? String(analyticsCount) : undefined },
+      { tool: "evaluation", icon: "eval", label: "Evaluation", count: edit.evaluationConfig?.enabled === false ? "aus" : undefined }
+    ];
+
+    return (
+      <aside className="studio-learning-rail" aria-label="Lernwerkzeuge">
+        {items.map((item, index) => (
+          <button
+            aria-label={item.label}
+            aria-pressed={workspaceTool === item.tool}
+            className={`studio-hotspot lb-enter-hotspot ${workspaceTool === item.tool ? "active" : ""}`}
+            key={item.tool}
+            style={{ "--lb-i": index } as MotionStyle}
+            title={item.label}
+            type="button"
+            onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
+          >
+            <span className={`lb-icon lb-icon-${item.icon}`} aria-hidden="true" />
+            {item.count ? <small>{item.count}</small> : null}
+          </button>
+        ))}
+      </aside>
     );
   }
 
@@ -2689,9 +2646,15 @@ export function LecturerDashboard({
               <a className="studio-command-link" href="/api/auth/logout">Logout</a>
             </div>
           </details>
-          {renderFilmstripRail()}
+          {renderStudioAssetRail()}
+          {!showCreateForm && renderStudioLearningRail()}
 
-          <section className={`studio-slide-stage ${workspaceTool === "questions" ? "question-active" : ""}`} aria-label="Präsentation bearbeiten">
+          <section
+            className={`studio-slide-stage ${workspaceTool === "questions" ? "question-active" : ""}`}
+            aria-label="Präsentation bearbeiten"
+            onContextMenu={openStudioIntent}
+          >
+            {!showCreateForm && renderStudioManualToolbar()}
             <div className="studio-slide-shell">
               {showCreateForm ? (
                 <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-create-stage" role="dialog" aria-label="Neue Vorlesung als Folie anlegen">
@@ -2699,7 +2662,19 @@ export function LecturerDashboard({
                 </div>
               ) : studioSlide ? (
                 <>
-                  <div className="slide-preview-frame editable-slide-frame studio-editor-frame" ref={stageFrameRef}>
+                  {renderImportedDeckAsStage && edit.slideDocument ? (
+                    <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-engine-primary-frame" ref={stageFrameRef}>
+                      <DeckRenderer
+                        className="studio-engine-primary-deck"
+                        currentSlideId={studioSlide.id}
+                        document={studioPreviewDocument ?? edit.slideDocument}
+                        renderAsset={renderLegacyDiagramAsset}
+                        renderMode="current"
+                        resolveAssetUrl={resolveSlideAssetUrl}
+                      />
+                    </div>
+                  ) : (
+                    <div className="slide-preview-frame editable-slide-frame studio-editor-frame" ref={stageFrameRef}>
                     <article className="dashboard-slide-preview editable-slide studio-editor-slide lb-enter-stage" data-slide-id={studioSlide.id} key={studioSlide.id}>
                     <div className="slide-meta editable-meta lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
                       <span
@@ -2844,13 +2819,8 @@ export function LecturerDashboard({
                       <span>{activeStudioSlideIndex + 1} / {studioSlides.length}</span>
                     </footer>
                     </article>
-                  </div>
-                  <Presence show={workspaceTool === "materials"}>
-                    {(motionState) => renderSlideSourceOverlay(motionState)}
-                  </Presence>
-                  <Presence show={workspaceTool === "assistant"}>
-                    {(motionState) => renderSlideAssistantOverlay(motionState)}
-                  </Presence>
+                    </div>
+                  )}
                   <Presence show={workspaceTool === "questions"}>
                     {(motionState) => renderSlideQuestionOverlay(motionState)}
                   </Presence>
@@ -2873,49 +2843,53 @@ export function LecturerDashboard({
                       onSlideDocumentChange={updateSlideDocumentFromEngine}
                     />
                   )}
-                  {renderStudioHotspots()}
                 </>
               ) : (
                 <div className="workspace-empty-inline">Noch keine Folien vorhanden.</div>
               )}
             </div>
+            <Presence show={runLogOpen}>
+              {(motionState) => renderRunLogSheet(motionState)}
+            </Presence>
+            <Presence show={Boolean(inspectMaterialId)}>
+              {(motionState) => renderMaterialSheet(motionState)}
+            </Presence>
+            <Presence show={assetGalleryOpen}>
+              {(motionState) => renderAssetGallerySheet(motionState)}
+            </Presence>
+            {!showCreateForm && studioSlide && selected && !engineEditorOpen ? (
+              <StudioIntentComposer
+                className="studio-intent-dock"
+                contextLabel={`Folie ${activeStudioSlideIndex + 1}`}
+                csrfToken={csrfToken}
+                lectureId={selected.id}
+                onDocumentAccepted={(document, lecture) => updateSlideDocumentFromEngine(document, lecture.slides)}
+                onLecturesChange={applyAgentLecturesChange}
+                onPreviewDocumentChange={setStudioPreviewDocument}
+                slideId={studioSlide.id}
+              />
+            ) : null}
 
-            {!showCreateForm && (
-              <div className="studio-bottom-bar lb-enter-control" aria-label="Foliensteuerung">
-                <div className="studio-stepper">
-                  <button
-                    type="button"
-                    onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)}
-                    disabled={activeStudioSlideIndex === 0}
-                    aria-label="Vorherige Folie"
-                  >
-                    ‹
-                  </button>
-                  <span>{activeStudioSlideIndex + 1} / {studioSlides.length || 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => moveToStudioSlide(activeStudioSlideIndex + 1)}
-                    disabled={activeStudioSlideIndex >= studioSlides.length - 1}
-                    aria-label="Nächste Folie"
-                  >
-                    ›
-                  </button>
-                </div>
-                {renderPlanSummaryButton()}
-                {renderPlanEditor()}
-                {renderSlideToolMenu()}
-                <button
-                  aria-pressed={engineEditorOpen}
-                  className="plain-button studio-engine-toggle"
-                  type="button"
-                  onClick={() => setEngineEditorOpen((open) => !open)}
-                >
-                  Engine
-                </button>
-                <button className="primary-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
-                {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
+            {contextIntent && studioSlide && selected ? (
+              <div
+                aria-label={`Folie ${activeStudioSlideIndex + 1} ändern`}
+                className="studio-intent-popover lb-enter-panel"
+                role="dialog"
+                style={{ left: contextIntent.x, top: contextIntent.y }}
+              >
+                <StudioIntentComposer
+                  autoFocus
+                  contextLabel={`Folie ${activeStudioSlideIndex + 1}`}
+                  csrfToken={csrfToken}
+                  lectureId={selected.id}
+                  onDismiss={() => setContextIntent(null)}
+                  onDocumentAccepted={(document, lecture) => updateSlideDocumentFromEngine(document, lecture.slides)}
+                  onLecturesChange={applyAgentLecturesChange}
+                  onPreviewDocumentChange={setStudioPreviewDocument}
+                  slideId={studioSlide.id}
+                />
               </div>
-            )}
+            ) : null}
 
           </section>
         </section>

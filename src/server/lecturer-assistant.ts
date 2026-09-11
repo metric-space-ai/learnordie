@@ -491,7 +491,7 @@ function generateLocalLecturerAssistantReply(input: { lecture: Lecture; message:
     steps: [
       {
         title: "Kontext gelesen",
-        detail: slide ? `Folie ${slide.eyebrow}: ${slide.title}` : input.lecture.title,
+        detail: slide ? `${slide.eyebrow}: ${slide.title}` : input.lecture.title,
         status: "done"
       },
       {

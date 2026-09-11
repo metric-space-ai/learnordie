@@ -4,6 +4,45 @@ import {
   type SlideDocument,
   type SlideDocumentEditOperation
 } from "@learnordie/slide-engine";
+import {
+  runPiVercelTurn,
+  type PiVercelToolRun
+} from "./pi-vercel-adapter";
+import {
+  buildPresentationSkillBrief,
+  presentationSkillIds,
+  selectPresentationSkills
+} from "./presentation-skills";
+
+export {
+  buildPresentationSkillBrief,
+  presentationSkillIds,
+  presentationSkills,
+  selectPresentationSkills,
+  type PresentationSkill,
+  type PresentationSkillId
+} from "./presentation-skills";
+
+export {
+  VercelVirtualExecutionEnv,
+  createVercelVirtualExecutionEnv,
+  type VercelVirtualExecutionEnvOptions,
+  type VirtualFileSnapshotEntry
+} from "./vercel-execution-env";
+export {
+  createVercelPiCodingOperations,
+  createVercelPiCodingSystemPrompt,
+  createVercelPiCodingTextMessage,
+  createVercelPiCodingToolCallMessage,
+  createVercelPiCodingTools,
+  runVercelPiCodingAgentTurn,
+  vercelPiCodingToolNames,
+  type CreateVercelPiCodingToolsOptions,
+  type RunVercelPiCodingAgentTurnInput,
+  type VercelPiCodingAgentTurnResult,
+  type VercelPiCodingToolName,
+  type VercelPiCodingToolsMode
+} from "./pi-coding-agent-vercel";
 
 export const LEARNORDIE_PI_UPSTREAM = {
   repository: "https://github.com/earendil-works/pi",
@@ -17,7 +56,8 @@ export const agentSkillIds = [
   "quiz-author",
   "asset-curator",
   "lecture-planner",
-  "qa-repair"
+  "qa-repair",
+  ...presentationSkillIds
 ] as const;
 
 export type AgentSkillId = typeof agentSkillIds[number];
@@ -160,17 +200,17 @@ export type LearnordieAgentTool = {
 };
 
 export const learnordieAgentTools: LearnordieAgentTool[] = [
-  { name: "getSlideContext", skillId: "slide-editor", description: "Reads the scoped slide without mutation." },
-  { name: "getLectureContext", skillId: "lecture-planner", description: "Reads lecture metadata and available source pools." },
-  { name: "getSelectedBlock", skillId: "slide-editor", description: "Reads the selected block without mutation." },
-  { name: "queryPresentationAssets", skillId: "asset-curator", description: "Reads curated presentation assets." },
+  { name: "getSlideContext", skillId: "slide-composer", description: "Reads the scoped slide without mutation." },
+  { name: "getLectureContext", skillId: "deck-strategist", description: "Reads lecture metadata and available source pools." },
+  { name: "getSelectedBlock", skillId: "slide-composer", description: "Reads the selected block without mutation." },
+  { name: "queryPresentationAssets", skillId: "visual-director", description: "Reads curated presentation assets." },
   { name: "getTranscriptWindow", skillId: "lecture-planner", description: "Reads recent accepted transcript segments." },
   { name: "getAcceptedChatQuestions", skillId: "lecture-planner", description: "Reads accepted student questions." },
-  { name: "proposeSlideEditBatch", skillId: "slide-editor", description: "Creates SlideDocumentEditOperation proposals only." },
-  { name: "validateSlideDocumentEdits", skillId: "slide-editor", description: "Validates proposed edit operations." },
-  { name: "renderSlidePreview", skillId: "qa-repair", description: "Creates a server-side preview document artifact." },
-  { name: "runSlideRenderQA", skillId: "qa-repair", description: "Runs structural render checks for the preview." },
-  { name: "repairSlideEditBatch", skillId: "qa-repair", description: "Repairs invalid edit batches." },
+  { name: "proposeSlideEditBatch", skillId: "slide-composer", description: "Creates SlideDocumentEditOperation proposals only." },
+  { name: "validateSlideDocumentEdits", skillId: "deck-critic", description: "Validates proposed edit operations." },
+  { name: "renderSlidePreview", skillId: "deck-critic", description: "Creates a server-side preview document artifact." },
+  { name: "runSlideRenderQA", skillId: "deck-critic", description: "Runs structural render checks for the preview." },
+  { name: "repairSlideEditBatch", skillId: "deck-critic", description: "Repairs invalid edit batches." },
   { name: "createQuestionFamily", skillId: "quiz-author", description: "Drafts a 4.0 to 1.0 question family." },
   { name: "createLearnHotspots", skillId: "slide-editor", description: "Drafts learn-mode hotspots." },
   { name: "createSpeakerNotes", skillId: "lecture-planner", description: "Drafts speaker notes." },
@@ -187,6 +227,12 @@ export async function runLearnordieAgentRuntime(input: AgentRuntimeInput): Promi
   const toolCalls: AgentToolCall[] = [];
   const messages: AgentMessage[] = [];
   const prompt = normalizePrompt(input.prompt);
+  const activePresentationSkills = selectPresentationSkills({
+    prompt,
+    hasSelectedBlock: Boolean(input.blockId),
+    hasPresentationAssets: (input.lecture.presentationAssets?.length ?? input.document.assets.length) > 0
+  });
+  const presentationSkillBrief = buildPresentationSkillBrief(activePresentationSkills);
 
   if (!prompt) {
     return {
@@ -259,8 +305,8 @@ export async function runLearnordieAgentRuntime(input: AgentRuntimeInput): Promi
 
   emit({
     type: "agent_start",
-    label: "Pi Runtime gestartet",
-    detail: `${LEARNORDIE_PI_UPSTREAM.tag} / allowlisted Learnordie tools`,
+    label: "Pi-Core Vercel-Port gestartet",
+    detail: `${LEARNORDIE_PI_UPSTREAM.tag} / @earendil-works/pi-agent-core / allowlisted Learnordie tools`,
     status: "running"
   });
 
@@ -272,88 +318,142 @@ export async function runLearnordieAgentRuntime(input: AgentRuntimeInput): Promi
   });
 
   try {
-    const lectureContext = await runTool("getLectureContext", { lectureId: input.lecture.id }, () => ({
-      title: input.lecture.title,
-      seriesTitle: input.lecture.seriesTitle,
-      slideCount: input.document.slides.length,
-      materialCount: input.lecture.materials?.length ?? 0,
-      assetCount: input.lecture.presentationAssets?.length ?? input.document.assets.length,
-      transcriptCount: input.lecture.transcriptSegments?.filter((segment) => segment.status === "accepted").length ?? 0,
-      acceptedQuestionCount: input.lecture.studentChatQuestions?.filter((question) => question.status === "accepted").length ?? 0
-    }));
-    const slide = await runTool("getSlideContext", { slideId: input.slideId }, () => (
-      resolveSlide(input.document, input.slideId)
-    ));
-    const selectedBlock = await runTool("getSelectedBlock", { slideId: slide.id, blockId: input.blockId }, () => (
-      resolveBlock(slide.blocks, input.blockId)
-    ));
-    await runTool("queryPresentationAssets", { assetId: input.assetId }, () => (
-      (input.lecture.presentationAssets ?? [])
-        .filter((asset) => !input.assetId || asset.id === input.assetId)
-        .slice(0, 12)
-        .map((asset) => ({
-          id: asset.id,
-          title: asset.title,
-          kind: asset.kind,
-          tags: asset.tags ?? [],
-          preview: truncate(asset.extractedText, 180)
-        }))
-    ));
-    await runTool("getTranscriptWindow", { limit: 6 }, () => (
-      (input.lecture.transcriptSegments ?? [])
-        .filter((segment) => segment.status === "accepted")
-        .slice(0, 6)
-        .map((segment) => ({
-          id: segment.id,
-          text: truncate(segment.text, 220),
-          sourceTopic: segment.sourceTopic
-        }))
-    ));
-    await runTool("getAcceptedChatQuestions", { limit: 6 }, () => (
-      (input.lecture.studentChatQuestions ?? [])
-        .filter((question) => question.status === "accepted")
-        .slice(0, 6)
-        .map((question) => ({
-          id: question.id,
-          text: truncate(question.text, 220),
-          sourceTopic: question.sourceTopic
-        }))
-    ));
-
-    let provider: string | undefined;
-    let model: string | undefined;
-    let usage: AgentUsage | undefined;
-    let assistantRationale = "";
-    if (input.complete) {
-      const completion = await input.complete({
+    const complete = input.complete;
+    const planningTurn = await runPiVercelTurn<LearnordieAgentToolName>({
+      prompt,
+      systemPrompt: [
+        "Du bist die Pi-Core Runtime innerhalb von Learnordie.",
+        "Du laeufst als Vercel-kompatibler Port von @earendil-works/pi-agent-core.",
+        "Du darfst keine Aktionen direkt ausfuehren.",
+        "Antworte als JSON mit den Feldern summary und replacementText.",
+        "Nutze Deutsch und bleibe im Kontext der Vorlesung.",
+        "Wende diese internen Praesentations-Skills an, ohne ihre Namen im Ergebnis zu erwaehnen:",
+        presentationSkillBrief
+      ].join(" "),
+      maxOutputTokens: 700,
+      temperature: 0.2,
+      tools: [
+        {
+          name: "getLectureContext",
+          label: "Lecture context",
+          description: "Reads lecture metadata and available source pools.",
+          input: { lectureId: input.lecture.id },
+          execute: () => ({
+            title: input.lecture.title,
+            seriesTitle: input.lecture.seriesTitle,
+            slideCount: input.document.slides.length,
+            materialCount: input.lecture.materials?.length ?? 0,
+            assetCount: input.lecture.presentationAssets?.length ?? input.document.assets.length,
+            transcriptCount: input.lecture.transcriptSegments?.filter((segment) => segment.status === "accepted").length ?? 0,
+            acceptedQuestionCount: input.lecture.studentChatQuestions?.filter((question) => question.status === "accepted").length ?? 0
+          })
+        },
+        {
+          name: "getSlideContext",
+          label: "Slide context",
+          description: "Reads the scoped slide without mutation.",
+          input: { slideId: input.slideId },
+          execute: () => resolveSlide(input.document, input.slideId)
+        },
+        {
+          name: "getSelectedBlock",
+          label: "Selected block",
+          description: "Reads the selected block without mutation.",
+          input: { slideId: input.slideId, blockId: input.blockId },
+          execute: () => {
+            const scopedSlide = resolveSlide(input.document, input.slideId);
+            return resolveBlock(scopedSlide.blocks, input.blockId);
+          }
+        },
+        {
+          name: "queryPresentationAssets",
+          label: "Presentation assets",
+          description: "Reads curated presentation assets.",
+          input: { assetId: input.assetId },
+          execute: () => (
+            (input.lecture.presentationAssets ?? [])
+              .filter((asset) => !input.assetId || asset.id === input.assetId)
+              .slice(0, 12)
+              .map((asset) => ({
+                id: asset.id,
+                title: asset.title,
+                kind: asset.kind,
+                tags: asset.tags ?? [],
+                preview: truncate(asset.extractedText, 180)
+              }))
+          )
+        },
+        {
+          name: "getTranscriptWindow",
+          label: "Transcript window",
+          description: "Reads recent accepted transcript segments.",
+          input: { limit: 6 },
+          execute: () => (
+            (input.lecture.transcriptSegments ?? [])
+              .filter((segment) => segment.status === "accepted")
+              .slice(0, 6)
+              .map((segment) => ({
+                id: segment.id,
+                text: truncate(segment.text, 220),
+                sourceTopic: segment.sourceTopic
+              }))
+          )
+        },
+        {
+          name: "getAcceptedChatQuestions",
+          label: "Accepted chat questions",
+          description: "Reads accepted student questions.",
+          input: { limit: 6 },
+          execute: () => (
+            (input.lecture.studentChatQuestions ?? [])
+              .filter((question) => question.status === "accepted")
+              .slice(0, 6)
+              .map((question) => ({
+                id: question.id,
+                text: truncate(question.text, 220),
+                sourceTopic: question.sourceTopic
+              }))
+          )
+        }
+      ],
+      complete: complete
+        ? async ({ toolOutputs }) => complete({
         system: [
-          "Du bist die Pi Runtime innerhalb von Learnordie.",
+          "Du bist die Pi-Core Runtime innerhalb von Learnordie.",
+          "Du laeufst als Vercel-kompatibler Port von @earendil-works/pi-agent-core.",
           "Du darfst keine Aktionen direkt ausfuehren.",
           "Antworte als JSON mit den Feldern summary und replacementText.",
-          "Nutze Deutsch und bleibe im Kontext der Vorlesung."
+          "Nutze Deutsch und bleibe im Kontext der Vorlesung.",
+          "Wende diese internen Praesentations-Skills an, ohne ihre Namen im Ergebnis zu erwaehnen:",
+          presentationSkillBrief
         ].join(" "),
         user: JSON.stringify({
           task: prompt,
-          lecture: lectureContext,
-          slideTitle: slide.title,
-          selectedBlock: summarizeBlock(selectedBlock),
+          lecture: toolOutputs.getLectureContext,
+          slideTitle: (toolOutputs.getSlideContext as { title?: string } | undefined)?.title,
+          selectedBlock: summarizeBlock(toolOutputs.getSelectedBlock as SlideBlock | undefined),
+          activePresentationSkills: activePresentationSkills.map((skill) => skill.id),
           allowedOutput: "review_patch_only"
         }),
         responseFormat: "json_object",
         maxOutputTokens: 700,
         temperature: 0.2
-      });
-      provider = completion.provider;
-      model = completion.model;
-      usage = completion.usage;
-      assistantRationale = extractReplacementText(completion.answer);
-      const providerCall = toolCalls[toolCalls.length - 1];
-      if (providerCall) {
-        providerCall.provider = provider;
-        providerCall.model = model;
-        providerCall.usage = usage;
-      }
+      })
+        : undefined
+    });
+    for (const piEvent of planningTurn.piEvents) {
+      const mapped = mapPiEvent(piEvent);
+      if (mapped) emit(mapped);
     }
+    toolCalls.push(...planningTurn.toolRuns.map(toAgentToolCall));
+
+    requireToolOutput(planningTurn.toolOutputs, "getLectureContext");
+    const slide = requireToolOutput<SlideDocument["slides"][number]>(planningTurn.toolOutputs, "getSlideContext");
+    const selectedBlock = planningTurn.toolOutputs.getSelectedBlock as SlideBlock | undefined;
+    const provider = planningTurn.provider;
+    const model = planningTurn.model;
+    const usage = planningTurn.usage;
+    const assistantRationale = extractReplacementText(planningTurn.assistantText);
 
     if (input.mode === "lecturer_assistant") {
       const note = await runTool("createSpeakerNotes", {
@@ -374,7 +474,7 @@ export async function runLearnordieAgentRuntime(input: AgentRuntimeInput): Promi
       });
       emit({
         type: "agent_end",
-        label: "Pi Runtime abgeschlossen",
+        label: "Pi-Core Vercel-Port abgeschlossen",
         detail: `Lecturer-Assistant-Thread in ${Date.now() - startedAt} ms dokumentiert.`,
         status: "done"
       });
@@ -529,7 +629,7 @@ function proposeSlideEditBatch(input: {
           id: id("agent-callout"),
           type: "callout",
           tone: "info",
-          title: "KI-Vorschlag",
+          title: "Merksatz",
           text
         },
         context
@@ -617,7 +717,7 @@ function proposeSlideEditBatch(input: {
             id: id("agent-callout"),
             type: "callout",
             tone: "info",
-            title: "KI-Vorschlag",
+            title: "Merksatz",
             text
           },
           afterBlockId: input.selectedBlock.id,
@@ -642,13 +742,96 @@ function createReviewPatch(input: {
 
   return {
     schemaVersion: "learnordie.agent-review-patch.v1",
-    summary: `Vorschlag aus Pi Runtime: ${truncate(input.prompt, 180)}`,
+    summary: `Vorgeschlagene Änderung: ${truncate(input.prompt, 180)}`,
     operations: input.operations,
     affectedSlideIds,
     affectedBlockIds,
     qa: input.qa,
     previewDocument: input.previewDocument
   };
+}
+
+function requireToolOutput<T = unknown>(
+  outputs: Partial<Record<LearnordieAgentToolName, unknown>>,
+  toolName: LearnordieAgentToolName
+): T {
+  const output = outputs[toolName];
+  if (output === undefined) throw new Error(`Pi-Core Tool ${toolName} returned no output.`);
+  return output as T;
+}
+
+function toAgentToolCall(run: PiVercelToolRun<LearnordieAgentToolName>): AgentToolCall {
+  const tool = learnordieAgentTools.find((item) => item.name === run.toolName);
+  return {
+    id: run.id,
+    toolName: run.toolName,
+    skillId: tool?.skillId ?? "lecture-planner",
+    input: run.input,
+    output: run.output,
+    status: run.status,
+    durationMs: run.durationMs,
+    error: run.error,
+    createdAt: run.createdAt
+  };
+}
+
+function mapPiEvent(event: { type: string; message?: unknown; toolName?: string; args?: unknown; result?: unknown; isError?: boolean }): Omit<AgentRunEvent, "id" | "at"> | undefined {
+  switch (event.type) {
+    case "agent_start":
+      return {
+        type: "agent_start",
+        label: "Pi-Core Loop gestartet",
+        detail: "@earendil-works/pi-agent-core@0.80.2",
+        status: "running"
+      };
+    case "message_start":
+      return {
+        type: "message_start",
+        label: "Pi-Core Message gestartet",
+        status: "running",
+        payload: event.message
+      };
+    case "message_end":
+      return {
+        type: "message_end",
+        label: "Pi-Core Message abgeschlossen",
+        status: "done",
+        payload: event.message
+      };
+    case "tool_execution_start":
+      return {
+        type: "tool_execution_start",
+        label: event.toolName ?? "Pi-Core Tool",
+        detail: "Pi-Core Toolausfuehrung gestartet.",
+        status: "running",
+        toolName: normalizeToolName(event.toolName),
+        payload: event.args
+      };
+    case "tool_execution_end":
+      return {
+        type: "tool_execution_end",
+        label: event.toolName ?? "Pi-Core Tool",
+        detail: event.isError ? "Pi-Core Tool fehlgeschlagen." : "Pi-Core Tool abgeschlossen.",
+        status: event.isError ? "failed" : "done",
+        toolName: normalizeToolName(event.toolName),
+        payload: event.result
+      };
+    case "agent_end":
+      return {
+        type: "agent_end",
+        label: "Pi-Core Loop abgeschlossen",
+        status: "done",
+        payload: event.message
+      };
+    default:
+      return undefined;
+  }
+}
+
+function normalizeToolName(value: string | undefined): LearnordieAgentToolName | undefined {
+  return learnordieAgentTools.some((tool) => tool.name === value)
+    ? value as LearnordieAgentToolName
+    : undefined;
 }
 
 function runStaticRenderQa(document: SlideDocument, slideId: string): AgentReviewPatch["qa"] {
@@ -683,11 +866,10 @@ function resolveBlock(blocks: SlideBlock[], blockId?: string) {
 }
 
 function buildReplacementText(prompt: string, block?: SlideBlock, assistantRationale?: string) {
-  const current = block ? blockText(block) : "";
   const llmText = assistantRationale?.trim();
-  if (llmText) return truncate(`${llmText}\n\nKI-Auftrag: ${prompt}`, 1200) ?? llmText;
-  const base = current || "Dieser Abschnitt bekommt einen fokussierten KI-Vorschlag.";
-  return truncate(`${base}\n\nKI-Vorschlag: ${prompt}`, 1200) ?? base;
+  if (llmText) return truncate(llmText, 1200) ?? llmText;
+  const fallback = prompt.trim() || (block ? blockText(block) : "Neuer Inhalt");
+  return truncate(fallback, 1200) ?? fallback;
 }
 
 function blockText(block: SlideBlock): string {
@@ -730,17 +912,30 @@ function splitListText(text: string) {
     .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
     .filter(Boolean)
     .slice(0, 8);
-  return lines.length > 0 ? lines : [truncate(text, 220) ?? "KI-Vorschlag"];
+  return lines.length > 0 ? lines : [truncate(text, 220) ?? "Neuer Punkt"];
 }
 
-function extractReplacementText(answer: string) {
+export function extractReplacementText(answer: string) {
+  const withoutThinking = answer
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  if (!withoutThinking) return "";
   try {
-    const parsed = JSON.parse(answer) as Record<string, unknown>;
+    const jsonStart = withoutThinking.indexOf("{");
+    const jsonEnd = withoutThinking.lastIndexOf("}");
+    const candidate = jsonStart >= 0 && jsonEnd > jsonStart
+      ? withoutThinking.slice(jsonStart, jsonEnd + 1)
+      : withoutThinking;
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
     const replacement = typeof parsed.replacementText === "string" ? parsed.replacementText : undefined;
     const summary = typeof parsed.summary === "string" ? parsed.summary : undefined;
-    return replacement?.trim() || summary?.trim() || "";
+    const result = replacement?.trim() || summary?.trim() || "";
+    return /<think>|<\/think>/i.test(result) ? "" : result;
   } catch {
-    return answer.trim();
+    return "";
   }
 }
 

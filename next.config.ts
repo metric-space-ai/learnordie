@@ -37,6 +37,13 @@ const noStoreHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   devIndicators: false,
+  serverExternalPackages: [
+    "@earendil-works/pi-agent-core",
+    "@earendil-works/pi-ai",
+    "@earendil-works/pi-coding-agent",
+    "@earendil-works/pi-tui",
+    "virtualfs"
+  ],
   transpilePackages: ["@learnordie/slide-engine"],
   async headers() {
     return [

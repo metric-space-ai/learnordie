@@ -48,6 +48,7 @@ import {
   slugify
 } from "./lecture-factory";
 import { createPresentationAssetDrafts, processMaterialContent } from "./material-pipeline";
+import { createPptxImportSlideDocument } from "./pptx-slide-document";
 import { generateQuestionVariantsForMaterial } from "./question-generation";
 import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
@@ -55,7 +56,9 @@ import { applyQualityDecision, recordReviewEdits } from "./question-review-metad
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
 import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
 
-const STORE_PATH = path.join(process.cwd(), ".data", "learnbuddy-local.json");
+const STORE_PATH = process.env.LEARNBUDDY_LOCAL_STORE_PATH?.trim()
+  ? path.resolve(process.env.LEARNBUDDY_LOCAL_STORE_PATH)
+  : path.join(process.cwd(), ".data", "learnbuddy-local.json");
 
 type LocalStoreData = {
   lectures: Lecture[];
@@ -462,6 +465,48 @@ export class LocalLectureStore {
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {
+    return this.runMaterialProcessing(lectureId, ownerEmail);
+  }
+
+  async processMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    if (!(lecture.materials ?? []).some((item) => item.id === materialId)) return null;
+    return this.runMaterialProcessing(lectureId, ownerEmail, materialId);
+  }
+
+  async deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    if (!(lecture.materials ?? []).some((item) => item.id === materialId)) return null;
+
+    lecture.materials = (lecture.materials ?? []).filter((item) => item.id !== materialId);
+    lecture.presentationAssets = (lecture.presentationAssets ?? []).filter((asset) => asset.source.materialId !== materialId);
+    lecture.questionReviews = (lecture.questionReviews ?? []).filter((review) => review.sourceMaterialId !== materialId);
+    await writeStore(store);
+    return lecture;
+  }
+
+  async reviewPresentationAsset(lectureId: string, assetId: string, decision: "confirmed" | "discarded", ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    const assets = lecture.presentationAssets ?? [];
+    const asset = assets.find((item) => item.id === assetId);
+    if (!asset) return null;
+
+    if (decision === "discarded") {
+      lecture.presentationAssets = assets.filter((item) => item.id !== assetId);
+    } else {
+      asset.quality = { ...asset.quality, needsReview: false };
+    }
+    await writeStore(store);
+    return lecture;
+  }
+
+  private async runMaterialProcessing(lectureId: string, ownerEmail: string | undefined, onlyMaterialId?: string) {
     const store = await readStore();
     const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
     if (!lecture) return null;
@@ -469,9 +514,11 @@ export class LocalLectureStore {
     const materials = lecture.materials ?? [];
     const existingMaterialIds = new Set((lecture.questionReviews ?? []).map((review) => review.sourceMaterialId));
     const reviewsToAdd: QuestionReviewItem[] = [];
-    const materialsToProcess = materials.filter((item) =>
-      item.kind !== "audio" && (item.status !== "ready" || !existingMaterialIds.has(item.id))
-    );
+    const materialsToProcess = onlyMaterialId
+      ? materials.filter((item) => item.id === onlyMaterialId && item.kind !== "audio")
+      : materials.filter((item) =>
+        item.kind !== "audio" && (item.status !== "ready" || !existingMaterialIds.has(item.id))
+      );
     const startedAt = new Date();
     const steps: MaterialProcessingStep[] = [{
       label: "Materialverarbeitung gestartet",
@@ -525,6 +572,17 @@ export class LocalLectureStore {
             })),
             ...(lecture.presentationAssets ?? []).filter((asset) => asset.source.materialId !== material.id)
           ];
+          const importedDeck = createPptxImportSlideDocument({ lecture, material, processed });
+          if (importedDeck) {
+            lecture.slideDocument = importedDeck;
+            lecture.slides = legacySlidesFromSlideDocument(importedDeck, []);
+            steps.push({
+              label: `HTML-Folien repliziert: ${material.originalName}`,
+              status: "done",
+              detail: `${importedDeck.slides.length} ${importedDeck.slides.length === 1 ? "Folie" : "Folien"} aus PPTX-Struktur erzeugt.`,
+              at: new Date().toISOString()
+            });
+          }
           chunkCount += processed.chunks.length;
           steps.push({
             label: `Assets gespeichert: ${material.originalName}`,

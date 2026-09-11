@@ -46,7 +46,9 @@ function stringField(value: unknown, fieldName: string) {
 }
 
 function extractJsonObject(value: string) {
-  const trimmed = value.trim();
+  // Reasoning-Modelle (z. B. MiniMax-M3) liefern einen <think>-Block vor dem JSON.
+  const withoutThinking = value.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+  const trimmed = withoutThinking || value.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
 
   const first = trimmed.indexOf("{");
@@ -197,7 +199,7 @@ export async function generateQuestionVariantsForMaterial(input: {
     result = await provider.complete({
       system: questionSystemPrompt(),
       user: questionUserPrompt(input),
-      maxOutputTokens: 2600,
+      maxOutputTokens: 8000,
       temperature: 0.25,
       responseFormat: "json_object"
     });

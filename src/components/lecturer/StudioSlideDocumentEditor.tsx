@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { AgentThread, Lecture, PresentationAsset, Slide } from "@/lib/types";
+import type { Lecture, PresentationAsset, Slide } from "@/lib/types";
 import {
   DeckRenderer,
   applySlideDocumentEdits,
@@ -23,6 +23,7 @@ import {
 } from "@learnordie/slide-engine";
 import type { SlideAsset } from "@learnordie/slide-engine/components";
 import { Diagram } from "../Diagram";
+import { StudioIntentComposer } from "./StudioIntentComposer";
 
 type StudioSlideDocumentEditorProps = {
   lectureId: string;
@@ -77,13 +78,9 @@ export function StudioSlideDocumentEditor({
   const [tableColumnIndex, setTableColumnIndex] = useState(0);
   const [tableCellValue, setTableCellValue] = useState("");
   const [quizLevel, setQuizLevel] = useState<QuestionLevel>(selectedQuizAnchor?.level ?? "2.0");
-  const [status, setStatus] = useState("SlideDocument bereit.");
+  const [status, setStatus] = useState("");
   const [issue, setIssue] = useState("");
-  const [agentPopover, setAgentPopover] = useState<{ x: number; y: number } | null>(null);
-  const [agentPrompt, setAgentPrompt] = useState("");
-  const [agentThread, setAgentThread] = useState<AgentThread | null>(null);
-  const [agentBusy, setAgentBusy] = useState(false);
-  const [agentError, setAgentError] = useState("");
+  const [previewDocument, setPreviewDocument] = useState<SlideDocument | null>(null);
 
   useEffect(() => {
     const nextBlock = currentSlide?.blocks.find((block) => block.id === selectedBlockId)
@@ -115,111 +112,8 @@ export function StudioSlideDocumentEditor({
 
   function selectBlock(selection: SlideBlockSelection) {
     setSelectedBlockId(selection.blockId);
-    setStatus(`Block ${selection.blockId} ausgewählt.`);
+    setStatus("");
     setIssue("");
-  }
-
-  function openAgentPopover(event: MouseEvent<HTMLElement>) {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.min(Math.max(event.clientX - rect.left, 16), Math.max(16, rect.width - 420));
-    const y = Math.min(Math.max(event.clientY - rect.top, 16), Math.max(16, rect.height - 320));
-    setAgentPopover({ x, y });
-    setAgentError("");
-    setAgentPrompt("");
-    setAgentThread(null);
-  }
-
-  async function startAgentThread() {
-    if (!agentPrompt.trim() || !currentSlide) return;
-    setAgentBusy(true);
-    setAgentError("");
-    setAgentThread(null);
-    try {
-      const response = await fetch(`/api/lectures/${lectureId}/agent-threads`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-learnbuddy-csrf": csrfToken
-        },
-        body: JSON.stringify({
-          mode: "studio_slide_edit",
-          prompt: agentPrompt,
-          slideId: currentSlide.id,
-          blockId: selectedBlock?.id
-        })
-      });
-      const payload = await response.json() as { error?: string; thread?: AgentThread; lectures?: Lecture[] };
-      if (!response.ok || !payload.thread) {
-        throw new Error(payload.error ?? "Agent-Thread konnte nicht erstellt werden.");
-      }
-      setAgentThread(payload.thread);
-      if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setStatus("Agent-Review-Diff bereit.");
-    } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "Agent-Thread konnte nicht erstellt werden.");
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  async function acceptAgentPatch() {
-    if (!agentThread) return;
-    setAgentBusy(true);
-    setAgentError("");
-    try {
-      const response = await fetch(`/api/lectures/${lectureId}/agent-threads/${agentThread.id}/accept`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-learnbuddy-csrf": csrfToken
-        },
-        body: JSON.stringify({})
-      });
-      const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
-      if (!response.ok || !payload.lecture) {
-        throw new Error(payload.error ?? "Agent-Patch konnte nicht übernommen werden.");
-      }
-      if (payload.lecture.slideDocument) {
-        onSlideDocumentChange(payload.lecture.slideDocument, payload.lecture.slides);
-      }
-      if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setAgentThread((thread) => thread ? { ...thread, status: "accepted" } : thread);
-      setStatus("Agent-Patch übernommen.");
-    } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "Agent-Patch konnte nicht übernommen werden.");
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  async function rejectAgentPatch() {
-    if (!agentThread) {
-      setAgentPopover(null);
-      return;
-    }
-    setAgentBusy(true);
-    setAgentError("");
-    try {
-      const response = await fetch(`/api/lectures/${lectureId}/agent-threads/${agentThread.id}/reject`, {
-        method: "POST",
-        headers: {
-          "x-learnbuddy-csrf": csrfToken
-        }
-      });
-      const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
-      if (!response.ok || !payload.lecture) {
-        throw new Error(payload.error ?? "Agent-Patch konnte nicht verworfen werden.");
-      }
-      if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setAgentThread((thread) => thread ? { ...thread, status: "rejected" } : thread);
-      setAgentPopover(null);
-      setStatus("Agent-Patch verworfen.");
-    } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "Agent-Patch konnte nicht verworfen werden.");
-    } finally {
-      setAgentBusy(false);
-    }
   }
 
   function applyOperations(operations: SlideDocumentEditOperation[], message: string) {
@@ -246,12 +140,12 @@ export function StudioSlideDocumentEditor({
         slideId: currentSlide.id,
         patch: { layout }
       }
-    ], "Engine-Layout gespeichert. Bitte Lecture speichern.");
+    ], "Layout geändert. Bitte Vorlesung speichern.");
   }
 
   function saveSelectedBlock() {
     if (!currentSlide || !selectedBlock || !selectedField) return;
-    applyOperations(selectedField.operations(editorValue), "Engine-Block gespeichert. Bitte Lecture speichern.");
+    applyOperations(selectedField.operations(editorValue), "Inhalt geändert. Bitte Vorlesung speichern.");
   }
 
   function updateFigureAsset(assetId: string) {
@@ -278,7 +172,7 @@ export function StudioSlideDocumentEditor({
         }
       }
     );
-    applyOperations(operations, "Engine-Asset gespeichert. Bitte Lecture speichern.");
+    applyOperations(operations, "Bild geändert. Bitte Vorlesung speichern.");
   }
 
   function saveTableCell() {
@@ -297,7 +191,7 @@ export function StudioSlideDocumentEditor({
         blockId: selectedTable.id,
         patch: { rows }
       }
-    ], "Engine-Tabellenzelle gespeichert. Bitte Lecture speichern.");
+    ], "Tabellenzelle geändert. Bitte Vorlesung speichern.");
   }
 
   function addTableRow() {
@@ -312,7 +206,7 @@ export function StudioSlideDocumentEditor({
         blockId: selectedTable.id,
         patch: { rows: [...selectedTable.rows, nextRow] }
       }
-    ], "Engine-Tabellenzeile ergänzt. Bitte Lecture speichern.");
+    ], "Tabellenzeile ergänzt. Bitte Vorlesung speichern.");
     if (saved) {
       setTableRowIndex(nextRowIndex);
       setTableColumnIndex(0);
@@ -332,7 +226,7 @@ export function StudioSlideDocumentEditor({
         blockId: selectedTable.id,
         patch: { columns, rows }
       }
-    ], "Engine-Tabellenspalte ergänzt. Bitte Lecture speichern.");
+    ], "Tabellenspalte ergänzt. Bitte Vorlesung speichern.");
     if (saved) setTableColumnIndex(nextColumnIndex);
   }
 
@@ -350,7 +244,7 @@ export function StudioSlideDocumentEditor({
           label: quizAnchorLabel(selectedBlock)
         }
       }
-    ], "Engine-Quizanker gespeichert. Bitte Lecture speichern.");
+    ], "Fragenanker geändert. Bitte Vorlesung speichern.");
   }
 
   if (!currentSlide) {
@@ -359,87 +253,47 @@ export function StudioSlideDocumentEditor({
 
   return (
     <aside
-      aria-label="SlideDocument Studio Editor"
+      aria-label="Folie direkt bearbeiten"
       className="studio-engine-editor"
       data-selected-block-id={selectedBlock?.id ?? ""}
       data-studio-engine-editor="true"
     >
-      <div className="studio-engine-editor-preview" onContextMenu={openAgentPopover}>
+      <div className="studio-engine-editor-preview">
         <DeckRenderer
           currentSlideId={currentSlide.id}
-          document={document}
+          document={previewDocument ?? document}
           renderAsset={renderLegacyDiagramAsset}
+          resolveAssetUrl={resolveSlideAssetUrl}
           renderMode="current"
           selectedBlockId={selectedBlock?.id}
           onBlockSelect={selectBlock}
         />
-        {agentPopover ? (
-          <div
-            aria-label="KI Agent Thread"
-            className="studio-agent-popover"
-            role="dialog"
-            style={{ left: agentPopover.x, top: agentPopover.y }}
-          >
-            <div className="studio-agent-popover-head">
-              <strong>Mit KI bearbeiten</strong>
-              <button type="button" aria-label="KI Agent schließen" onClick={() => setAgentPopover(null)}>×</button>
-            </div>
-            <p>Scope: {currentSlide.title}{selectedBlock ? ` / ${selectedBlock.type}` : ""}</p>
-            <label>
-              <span>Agent Prompt</span>
-              <textarea
-                aria-label="Agent Prompt"
-                rows={3}
-                value={agentPrompt}
-                onChange={(event) => setAgentPrompt(event.currentTarget.value)}
-                placeholder="z.B. Kernaussage zur Mischreibung präziser formulieren"
-              />
-            </label>
-            <div className="studio-agent-actions">
-              <button type="button" disabled={agentBusy || !agentPrompt.trim()} onClick={startAgentThread}>
-                {agentBusy && !agentThread ? "Agent läuft" : "Agent starten"}
-              </button>
-              <button type="button" onClick={rejectAgentPatch}>Verwerfen</button>
-            </div>
-            {agentThread ? (
-              <div className="studio-agent-result">
-                <strong>Review-Diff</strong>
-                <span>{agentThread.reviewPatch?.operations.length ?? 0} Operation(en)</span>
-                <ol>
-                  {(agentThread.events ?? []).slice(-6).map((event) => (
-                    <li key={event.id}>
-                      <span>{event.label}</span>
-                      <small>{event.status}</small>
-                    </li>
-                  ))}
-                </ol>
-                {agentThread.reviewPatch?.qa.warnings.length ? (
-                  <p className="studio-agent-warning">{agentThread.reviewPatch.qa.warnings.join(" ")}</p>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={agentBusy || agentThread.status === "accepted"}
-                  onClick={acceptAgentPatch}
-                >
-                  Änderung übernehmen
-                </button>
-              </div>
-            ) : null}
-            {agentError ? <p role="alert" className="form-error">{agentError}</p> : null}
-          </div>
-        ) : null}
       </div>
       <div className="studio-engine-editor-panel">
         <div className="studio-engine-editor-heading">
-          <span>SlideDocument</span>
-          <strong>{selectedBlock?.id ?? "Kein Block"}</strong>
-          <small>{selectedBlock?.type ?? "n/a"} · native Engine</small>
+          <strong>{selectedBlock ? formatBlockLabel(selectedBlock) : "Folie"}</strong>
+          <small>{currentSlide.title}</small>
         </div>
 
+        <StudioIntentComposer
+          blockId={selectedBlock?.id}
+          contextLabel={selectedBlock ? formatBlockLabel(selectedBlock) : "Folie"}
+          csrfToken={csrfToken}
+          lectureId={lectureId}
+          onDocumentAccepted={(nextDocument, lecture) => onSlideDocumentChange(nextDocument, lecture.slides)}
+          onLecturesChange={onLecturesChange}
+          onPreviewDocumentChange={setPreviewDocument}
+          slideId={currentSlide.id}
+        />
+
+        <details className="studio-direct-controls">
+          <summary>Direkt bearbeiten</summary>
+          <div className="studio-direct-controls-body">
+
         <label>
-          <span>Engine Layout</span>
+          <span>Layout</span>
           <select
-            aria-label="Engine Layout"
+            aria-label="Layout"
             value={currentSlide.layout}
             onChange={(event) => updateLayout(event.currentTarget.value as SlideLayoutId)}
           >
@@ -463,9 +317,9 @@ export function StudioSlideDocumentEditor({
 
         {selectedBlock?.type === "figure" ? (
           <label>
-            <span>Engine Asset</span>
+            <span>Bild</span>
             <select
-              aria-label="Engine Asset"
+              aria-label="Bild"
               value={selectedBlock.assetId}
               onChange={(event) => updateFigureAsset(event.currentTarget.value)}
             >
@@ -477,11 +331,11 @@ export function StudioSlideDocumentEditor({
         ) : null}
 
         {selectedTable ? (
-          <div className="studio-engine-editor-group" aria-label="Engine Tabelleneditor">
+          <div className="studio-engine-editor-group" aria-label="Tabelle bearbeiten">
             <label>
               <span>Zeile</span>
               <select
-                aria-label="Engine Tabellenzeile"
+                aria-label="Tabellenzeile"
                 value={tableRowIndex}
                 onChange={(event) => setTableRowIndex(Number(event.currentTarget.value))}
               >
@@ -493,7 +347,7 @@ export function StudioSlideDocumentEditor({
             <label>
               <span>Spalte</span>
               <select
-                aria-label="Engine Tabellenspalte"
+                aria-label="Tabellenspalte"
                 value={tableColumnIndex}
                 onChange={(event) => setTableColumnIndex(Number(event.currentTarget.value))}
               >
@@ -505,7 +359,7 @@ export function StudioSlideDocumentEditor({
             <label>
               <span>Zelle</span>
               <input
-                aria-label="Engine Tabellenzelle"
+                aria-label="Tabellenzelle"
                 value={tableCellValue}
                 onChange={(event) => setTableCellValue(event.currentTarget.value)}
               />
@@ -521,11 +375,11 @@ export function StudioSlideDocumentEditor({
         ) : null}
 
         {selectedBlock ? (
-          <div className="studio-engine-editor-group" aria-label="Engine Quizanker Editor">
+          <div className="studio-engine-editor-group" aria-label="Fragenanker bearbeiten">
             <label>
               <span>Quizanker Niveau</span>
               <select
-                aria-label="Engine Quizanker Niveau"
+                aria-label="Fragenanker Niveau"
                 value={quizLevel}
                 onChange={(event) => setQuizLevel(event.currentTarget.value as QuestionLevel)}
               >
@@ -542,12 +396,11 @@ export function StudioSlideDocumentEditor({
 
         <div className="studio-engine-editor-actions">
           <button type="button" disabled={!selectedField} onClick={saveSelectedBlock}>
-            Engine-Block speichern
-          </button>
-          <button type="button" onClick={() => setAgentPopover({ x: 24, y: 24 })}>
-            Mit KI bearbeiten
+            Änderung speichern
           </button>
         </div>
+          </div>
+        </details>
         <p aria-live="polite">{status}</p>
         {issue ? <p role="alert" className="form-error">{issue}</p> : null}
       </div>
@@ -565,7 +418,7 @@ function editableField(block: SlideBlock, slideId: string): {
     case "heading":
       return {
         key: "heading",
-        label: "Engine Folientitel",
+        label: "Folientitel",
         value: block.text,
         operations: (text) => [
           {
@@ -586,55 +439,77 @@ function editableField(block: SlideBlock, slideId: string): {
     case "paragraph":
       return {
         key: "text",
-        label: "Engine Folientext",
+        label: "Folientext",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "figure":
       return {
         key: "caption",
-        label: "Engine Folienthema",
+        label: "Bildunterschrift",
         value: block.caption ?? "",
         operations: (caption) => [patchBlockOperation(slideId, block.id, { caption })]
       };
     case "formula":
       return {
         key: "latex",
-        label: "Engine Formel",
+        label: "Formel",
         value: block.latex ?? block.mathMl ?? "",
         operations: (latex) => [patchBlockOperation(slideId, block.id, { latex, mathMl: undefined })]
       };
     case "callout":
       return {
         key: "callout",
-        label: "Engine Hinweistext",
+        label: "Hinweistext",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "definition":
       return {
         key: "definition",
-        label: "Engine Definition",
+        label: "Definition",
         value: block.definition,
         operations: (definition) => [patchBlockOperation(slideId, block.id, { definition })]
       };
     case "quote":
       return {
         key: "quote",
-        label: "Engine Zitat",
+        label: "Zitat",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "code":
       return {
         key: "code",
-        label: "Engine Code",
+        label: "Code",
         value: block.code,
         operations: (code) => [patchBlockOperation(slideId, block.id, { code })]
       };
     default:
       return null;
   }
+}
+
+function formatBlockLabel(block: SlideBlock) {
+  const labels: Partial<Record<SlideBlock["type"], string>> = {
+    heading: "Titel",
+    paragraph: "Text",
+    bulletList: "Stichpunkte",
+    numberedList: "Liste",
+    comparison: "Vergleich",
+    figure: "Bild",
+    formula: "Formel",
+    table: "Tabelle",
+    chart: "Diagramm",
+    process: "Ablauf",
+    callout: "Hinweis",
+    definition: "Definition",
+    quote: "Zitat",
+    code: "Code",
+    quizAnchor: "Fragenanker",
+    spacer: "Abstand"
+  };
+  return labels[block.type] ?? "Element";
 }
 
 function patchBlockOperation(slideId: string, blockId: string, patch: SlideBlockPatch): SlideDocumentEditOperation {
@@ -723,4 +598,8 @@ function renderLegacyDiagramAsset(asset: SlideAsset): ReactNode {
   if (asset.id === legacyDiagramAssetId("formula")) return <Diagram type="formula" />;
   if (asset.id === legacyDiagramAssetId("ramp")) return <Diagram type="ramp" />;
   return null;
+}
+
+function resolveSlideAssetUrl(asset: SlideAsset) {
+  return asset.previewKey || asset.storageKey || asset.url;
 }

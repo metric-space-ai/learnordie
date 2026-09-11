@@ -71,6 +71,7 @@ export function SlideEngineCanvas({
           currentSlideId={currentSlide.id}
           document={activeSlideDocument}
           renderAsset={renderLegacyDiagramAsset}
+          resolveAssetUrl={resolveSlideAssetUrl}
           renderMode="current"
         />
       </article>
@@ -88,4 +89,8 @@ function renderLegacyDiagramAsset(asset: SlideAsset): ReactNode {
   if (asset.id === legacyDiagramAssetId("formula")) return <Diagram type="formula" />;
   if (asset.id === legacyDiagramAssetId("ramp")) return <Diagram type="ramp" />;
   return null;
+}
+
+function resolveSlideAssetUrl(asset: SlideAsset) {
+  return asset.previewKey || asset.storageKey || asset.url;
 }

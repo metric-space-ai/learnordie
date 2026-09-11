@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     ".data/**",
     ".playwright-cli/**",
+    ".tmp/**",
     ".vercel/**",
     "build/**",
     "next-env.d.ts",

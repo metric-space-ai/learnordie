@@ -102,6 +102,7 @@ import {
 } from "./lecture-factory";
 import { applyQualityDecision, recordReviewEdits } from "./question-review-metadata";
 import { createPresentationAssetDrafts, processMaterialContent } from "./material-pipeline";
+import { createPptxImportSlideDocument } from "./pptx-slide-document";
 import { generateQuestionVariantsForMaterial } from "./question-generation";
 import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
@@ -942,13 +943,66 @@ export class PostgresLectureRepository implements LectureRepository {
     await this.ensureSeeded();
     const lecture = await this.getLectureById(lectureId, ownerEmail);
     if (!lecture) return null;
+    return this.runMaterialProcessingInline(lecture, ownerEmail);
+  }
 
-    const run = await this.createMaterialProcessingRun(lecture, "running");
+  async processMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    if (!(lecture.materials ?? []).some((material) => material.id === materialId)) return null;
+    return this.runMaterialProcessingInline(lecture, ownerEmail, [materialId]);
+  }
+
+  async deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    const [material] = await this.db
+      .select({ id: lectureAssets.id })
+      .from(lectureAssets)
+      .where(and(eq(lectureAssets.id, materialId), eq(lectureAssets.lectureId, lectureId)))
+      .limit(1);
+    if (!material) return null;
+
+    await this.db.delete(assetChunks).where(eq(assetChunks.assetId, materialId));
+    await this.db.delete(presentationAssets).where(eq(presentationAssets.materialId, materialId));
+    await this.db.delete(questionReviewItems).where(eq(questionReviewItems.sourceMaterialId, materialId));
+    await this.db.delete(lectureAssets).where(eq(lectureAssets.id, materialId));
+
+    return this.getLectureById(lectureId, ownerEmail);
+  }
+
+  async reviewPresentationAsset(lectureId: string, assetId: string, decision: "confirmed" | "discarded", ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    const [asset] = await this.db
+      .select({ id: presentationAssets.id, qualityJson: presentationAssets.qualityJson })
+      .from(presentationAssets)
+      .where(and(eq(presentationAssets.id, assetId), eq(presentationAssets.lectureId, lectureId)))
+      .limit(1);
+    if (!asset) return null;
+
+    if (decision === "discarded") {
+      await this.db.delete(presentationAssets).where(eq(presentationAssets.id, assetId));
+    } else {
+      await this.db
+        .update(presentationAssets)
+        .set({ qualityJson: { ...coercePresentationAssetQuality(asset.qualityJson), needsReview: false } })
+        .where(eq(presentationAssets.id, assetId));
+    }
+
+    return this.getLectureById(lectureId, ownerEmail);
+  }
+
+  private async runMaterialProcessingInline(lecture: Lecture, ownerEmail?: string, onlyMaterialIds?: string[]) {
+    const run = await this.createMaterialProcessingRun(lecture, "running", onlyMaterialIds);
     try {
       const jobProvider = getJobProvider();
       await this.db.update(materialProcessingRuns).set({ provider: jobProvider.name }).where(eq(materialProcessingRuns.id, run.id));
       const jobResult = await jobProvider.run({ jobId: run.id, kind: "material_processing" }, async () =>
-        this.performMaterialProcessingWork(run.id, lecture, new Date(run.startedAt), coerceProcessingSteps(run.stepsJson))
+        this.performMaterialProcessingWork(run.id, lecture, new Date(run.startedAt), coerceProcessingSteps(run.stepsJson), onlyMaterialIds)
       );
       await this.db.update(materialProcessingRuns).set({
         provider: jobResult.provider,
@@ -977,7 +1031,7 @@ export class PostgresLectureRepository implements LectureRepository {
       throw error;
     }
 
-    return this.getLectureById(lectureId, ownerEmail);
+    return this.getLectureById(lecture.id, ownerEmail);
   }
 
   async enqueueMaterialProcessingRun(lectureId: string, ownerEmail?: string) {
@@ -1014,15 +1068,21 @@ export class PostgresLectureRepository implements LectureRepository {
     return this.getLectureById(run.lectureId);
   }
 
-  private materialsToReviewForLecture(lecture: Lecture) {
+  private materialsToReviewForLecture(lecture: Lecture, onlyMaterialIds?: string[]) {
+    if (onlyMaterialIds) {
+      const allowed = new Set(onlyMaterialIds);
+      return (lecture.materials ?? []).filter(
+        (material) => material.kind !== "audio" && allowed.has(material.id)
+      );
+    }
     const existingMaterialIds = new Set((lecture.questionReviews ?? []).map((review) => review.sourceMaterialId));
     return (lecture.materials ?? []).filter(
       (material) => material.kind !== "audio" && (material.status !== "ready" || !existingMaterialIds.has(material.id))
     );
   }
 
-  private async createMaterialProcessingRun(lecture: Lecture, status: "queued" | "running") {
-    const materialsToReview = this.materialsToReviewForLecture(lecture);
+  private async createMaterialProcessingRun(lecture: Lecture, status: "queued" | "running", onlyMaterialIds?: string[]) {
+    const materialsToReview = this.materialsToReviewForLecture(lecture, onlyMaterialIds);
     const startedAt = new Date();
     const steps: MaterialProcessingStep[] = [{
       label: status === "queued" ? "Materialverarbeitung vorgemerkt" : "Materialverarbeitung gestartet",
@@ -1050,11 +1110,12 @@ export class PostgresLectureRepository implements LectureRepository {
     runId: string,
     lecture: Lecture,
     startedAt: Date,
-    steps: MaterialProcessingStep[]
+    steps: MaterialProcessingStep[],
+    onlyMaterialIds?: string[]
   ) {
     const storage = getStorageProvider();
     const existingMaterialIds = new Set((lecture.questionReviews ?? []).map((review) => review.sourceMaterialId));
-    const materialsToReview = this.materialsToReviewForLecture(lecture);
+    const materialsToReview = this.materialsToReviewForLecture(lecture, onlyMaterialIds);
     let chunkCount = 0;
     let reviewCount = 0;
     const runStartedAt = new Date();
@@ -1119,6 +1180,24 @@ export class PostgresLectureRepository implements LectureRepository {
               qualityJson: asset.quality
             }))
           );
+        }
+        const importedDeck = createPptxImportSlideDocument({ lecture, material, processed });
+        if (importedDeck) {
+          const importedSlides = legacySlidesFromSlideDocument(importedDeck, []);
+          const persistedSlides = await this.replaceSlides(lecture.id, importedSlides);
+          const alignedDeck = alignSlideDocumentToPersistedSlides(importedDeck, persistedSlides);
+          await this.db
+            .update(lectures)
+            .set({ slideDocumentJson: alignedDeck })
+            .where(eq(lectures.id, lecture.id));
+          lecture.slides = persistedSlides;
+          lecture.slideDocument = alignedDeck;
+          steps.push({
+            label: `HTML-Folien repliziert: ${material.originalName}`,
+            status: "done",
+            detail: `${alignedDeck.slides.length} ${alignedDeck.slides.length === 1 ? "Folie" : "Folien"} aus PPTX-Struktur erzeugt.`,
+            at: new Date().toISOString()
+          });
         }
         chunkCount += processed.chunks.length;
         steps.push({
@@ -2162,6 +2241,35 @@ export class PostgresLectureRepository implements LectureRepository {
           .set(normalizeSlidePatch(slide))
           .where(and(eq(slides.id, slide.id), eq(slides.lectureId, lectureId)));
       }
+    });
+  }
+
+  private async replaceSlides(lectureId: string, slideItems: Slide[]) {
+    if (slideItems.length === 0) return [];
+
+    return this.db.transaction(async (tx) => {
+      await tx.update(questions).set({ slideId: null }).where(eq(questions.lectureId, lectureId));
+      await tx.update(agentThreads).set({ slideId: null, blockId: null }).where(eq(agentThreads.lectureId, lectureId));
+      await tx.delete(slides).where(eq(slides.lectureId, lectureId));
+
+      const insertedSlides = await tx.insert(slides).values(
+        slideItems.map((slide, index) => ({
+          ...(isPostgresUuid(slide.id) ? { id: slide.id } : {}),
+          lectureId,
+          position: index + 1,
+          title: slide.title,
+          contentJson: {
+            eyebrow: slide.eyebrow,
+            topic: slide.topic,
+            copy: slide.copy,
+            diagram: slide.diagram
+          }
+        }))
+      ).returning();
+
+      return insertedSlides
+        .sort((left, right) => left.position - right.position)
+        .map((slide) => this.slideFromRow(slide));
     });
   }
 

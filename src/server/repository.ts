@@ -168,7 +168,10 @@ export interface LectureRepository {
   createLecture(input: CreateLectureInput, ownerEmail?: string): Promise<Lecture>;
   updateLecture(id: string, input: UpdateLectureInput, ownerEmail?: string): Promise<Lecture | null>;
   addMaterial(lectureId: string, input: AddMaterialInput, ownerEmail?: string): Promise<LectureMaterial | null>;
+  deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string): Promise<Lecture | null>;
+  processMaterial(lectureId: string, materialId: string, ownerEmail?: string): Promise<Lecture | null>;
   processMaterials(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
+  reviewPresentationAsset(lectureId: string, assetId: string, decision: "confirmed" | "discarded", ownerEmail?: string): Promise<Lecture | null>;
   enqueueMaterialProcessingRun?(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
   countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput): Promise<number | null>;
   submitStudentChatQuestion(input: SubmitChatQuestionInput): Promise<StudentChatQuestion | null>;
@@ -214,8 +217,20 @@ class LocalJsonLectureRepository implements LectureRepository {
     return this.store.addMaterial(lectureId, input, ownerEmail);
   }
 
+  async deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
+    return this.store.deleteMaterial(lectureId, materialId, ownerEmail);
+  }
+
+  async processMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
+    return this.store.processMaterial(lectureId, materialId, ownerEmail);
+  }
+
   async processMaterials(lectureId: string, ownerEmail?: string) {
     return this.store.processMaterials(lectureId, ownerEmail);
+  }
+
+  async reviewPresentationAsset(lectureId: string, assetId: string, decision: "confirmed" | "discarded", ownerEmail?: string) {
+    return this.store.reviewPresentationAsset(lectureId, assetId, decision, ownerEmail);
   }
 
   async countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput) {
