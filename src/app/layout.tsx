@@ -5,6 +5,10 @@ import "@learnordie/slide-engine/styles/themes/learnordie-north.css";
 import "@learnordie/slide-engine/styles/themes/learnordie-technical.css";
 import "@learnordie/slide-engine/styles/themes/learnordie-dark-room.css";
 import "./globals.css";
+import "./ui-entry.css";
+import "./ui-student.css";
+import "./ui-studio.css";
+import "./ui-present.css";
 
 export const metadata: Metadata = {
   title: "learnordie.app",
