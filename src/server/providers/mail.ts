@@ -153,8 +153,13 @@ export function getMailProvider(): MailProvider {
       ? productionEmailFrom()
       : process.env.EMAIL_FROM?.trim() || "learnordie.app <noreply@example.com>";
 
+    // Beim Einfuegen in die Umgebung rutschen leicht Leerzeichen oder Zeilenumbrueche mit.
+    const apiKey = process.env.RESEND_API_KEY.trim();
+    if (!/^re_[A-Za-z0-9_]+$/.test(apiKey)) {
+      console.error("RESEND_API_KEY has an unexpected format", { length: apiKey.length, startsWithRe: apiKey.startsWith("re_") });
+    }
     return new ResendMailProvider(
-      process.env.RESEND_API_KEY,
+      apiKey,
       from,
       normalizeResendBaseUrl(process.env.LEARNBUDDY_RESEND_BASE_URL ?? process.env.RESEND_BASE_URL)
     );
