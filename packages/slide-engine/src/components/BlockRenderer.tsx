@@ -48,6 +48,17 @@ const headingStyle: CSSProperties = {
   lineHeight: 1.04
 };
 
+// Ebene 3 ist die Kicker-/Eyebrow-Zeile ueber dem Folieninhalt.
+const kickerHeadingStyle: CSSProperties = {
+  margin: 0,
+  color: "var(--accent)",
+  fontSize: "clamp(13px, 1.15vw, 17px)",
+  fontWeight: 760,
+  letterSpacing: "0.11em",
+  lineHeight: 1.3,
+  textTransform: "uppercase"
+};
+
 const paragraphStyle: CSSProperties = {
   margin: 0,
   color: "var(--ink)",
@@ -461,7 +472,7 @@ function HeadingBlockRenderer({ block }: { block: HeadingBlock }) {
 
   return (
     <div data-block-id={block.id} data-block-type={block.type} style={blockSpacingStyle}>
-      <Tag style={headingStyle}>{block.text}</Tag>
+      <Tag style={block.level === 3 ? kickerHeadingStyle : headingStyle}>{block.text}</Tag>
     </div>
   );
 }

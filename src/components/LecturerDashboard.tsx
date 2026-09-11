@@ -183,6 +183,12 @@ function presentationAssetPreviewUrl(asset: PresentationAsset) {
   return ["figure", "photo", "diagram", "chart"].includes(asset.kind) ? asset.previewKey : "";
 }
 
+// Decks mit Bloecken ohne Legacy-Entsprechung (interaktive 3D-Szenen) duerfen beim
+// Speichern nicht aus den Legacy-Folien neu aufgebaut werden, sonst gehen sie verloren.
+function hasEngineOnlyBlocks(document: SlideDocument) {
+  return document.slides.some((slide) => slide.blocks.some((block) => block.type === "scene3d"));
+}
+
 function mergeSlideDocumentAssets(base: SlideDocument, previous?: SlideDocument): SlideDocument {
   if (!previous || previous.assets.length === 0) return base;
   const assets = new Map<string, SlideAssetRef>();
@@ -907,7 +913,7 @@ export function LecturerDashboard({
       ...current,
       seriesTitle: readText('[data-lecture-field="seriesTitle"]', current.seriesTitle),
       slides,
-      slideDocument: engineEditorOpen && current.slideDocument
+      slideDocument: current.slideDocument && (engineEditorOpen || hasEngineOnlyBlocks(current.slideDocument))
         ? current.slideDocument
         : mergeSlideDocumentAssets(rebuiltSlideDocument, current.slideDocument)
     };

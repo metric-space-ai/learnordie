@@ -476,12 +476,12 @@ export const slideLayoutBudgets: Record<SlideLayoutId, LayoutBudget> = {
   technical_figure_right: {
     maxBlocks: 8,
     maxTextChars: 900,
-    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "quizAnchor", "spacer"]
+    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "scene3d", "quizAnchor", "spacer"]
   },
   technical_figure_left: {
     maxBlocks: 8,
     maxTextChars: 900,
-    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "quizAnchor", "spacer"]
+    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "scene3d", "quizAnchor", "spacer"]
   },
   definition_with_example: {
     maxBlocks: 8,

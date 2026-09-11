@@ -847,9 +847,10 @@ export class PostgresLectureRepository implements LectureRepository {
     const effectiveSeriesTitle = input.seriesTitle?.trim() || existingScopedLecture.seriesTitle;
     let nextSlides: Slide[] | undefined;
     if (input.slideDocument !== undefined) {
-      const alignedSlideDocument = alignSlideDocumentToPersistedSlides(input.slideDocument, existingScopedLecture.slides);
+      const persistedSlides = await this.appendSlideRowsForDocument(id, input.slideDocument, existingScopedLecture.slides);
+      const alignedSlideDocument = alignSlideDocumentToPersistedSlides(input.slideDocument, persistedSlides);
       patch.slideDocumentJson = alignedSlideDocument;
-      nextSlides = legacySlidesFromSlideDocument(alignedSlideDocument, existingScopedLecture.slides);
+      nextSlides = legacySlidesFromSlideDocument(alignedSlideDocument, persistedSlides);
     } else if (input.slides !== undefined) {
       const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
       nextSlides = existingScopedLecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
@@ -2150,6 +2151,38 @@ export class PostgresLectureRepository implements LectureRepository {
     return insertedSlides
       .sort((left, right) => left.position - right.position)
       .map((slide) => this.slideFromRow(slide));
+  }
+
+  // Navigation, Fragen und Antwortereignisse haengen an Folienzeilen. Waechst ein
+  // SlideDocument ueber die gespeicherten Zeilen hinaus, bekommen die neuen Folien
+  // eigene Zeilen, damit sie in Live, Learn und Studio erreichbar sind.
+  private async appendSlideRowsForDocument(lectureId: string, document: SlideDocument, persistedSlides: Slide[]) {
+    if (document.slides.length <= persistedSlides.length) return persistedSlides;
+
+    const extraSlides = legacySlidesFromSlideDocument(
+      { ...document, slides: document.slides.slice(persistedSlides.length) },
+      []
+    );
+    const insertedRows = await this.db.insert(slides).values(
+      extraSlides.map((slide, index) => ({
+        lectureId,
+        position: persistedSlides.length + index + 1,
+        title: slide.title,
+        contentJson: {
+          eyebrow: slide.eyebrow,
+          topic: slide.topic,
+          copy: slide.copy,
+          diagram: slide.diagram
+        }
+      }))
+    ).returning();
+
+    return [
+      ...persistedSlides,
+      ...insertedRows
+        .sort((left, right) => left.position - right.position)
+        .map((row) => this.slideFromRow(row))
+    ];
   }
 
   private async updateSlides(lectureId: string, slideItems: Slide[]) {
