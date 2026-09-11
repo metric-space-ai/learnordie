@@ -332,27 +332,31 @@ export async function generateLiveQuestionFamily(input: {
     throw new Error("Question generator is not configured: LEARNBUDDY_AI_PROVIDER is required for live questions.");
   }
 
-  let result;
-  try {
-    result = await provider.complete({
-      system: liveQuestionSystemPrompt(),
-      user: liveQuestionUserPrompt(input),
-      maxOutputTokens: 2600,
-      temperature: 0.3,
-      responseFormat: "json_object",
-      timeoutMs: 45_000
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message.toLowerCase().includes("timed out") || message.toLowerCase().includes("abort")
-      ? "Question generator request timed out."
-      : `Question generator request failed: ${message}`);
-  }
-
-  const variants = distributeAnswerKeys(parseGeneratedVariants(result.answer).map(clampLiveVariant));
+  // Ein zweiter Versuch, falls die KI eine schon gestellte Frage wiederholt.
   const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
-  if (variants.some((variant) => existing.has(questionFingerprint(variant.text)))) {
-    throw new Error("Question generator returned a duplicate of an existing question.");
+  let variants: QuestionVariant[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let result;
+    try {
+      result = await provider.complete({
+        system: liveQuestionSystemPrompt(),
+        user: attempt === 0
+          ? liveQuestionUserPrompt(input)
+          : `${liveQuestionUserPrompt(input)}\nWICHTIG: Der vorige Vorschlag wiederholte eine bereits gestellte Frage. Wähle einen anderen Aspekt aus dem Transkript.`,
+        maxOutputTokens: 2600,
+        temperature: attempt === 0 ? 0.3 : 0.6,
+        responseFormat: "json_object",
+        timeoutMs: 25_000
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(message.toLowerCase().includes("timed out") || message.toLowerCase().includes("abort")
+        ? "Question generator request timed out."
+        : `Question generator request failed: ${message}`);
+    }
+    variants = distributeAnswerKeys(parseGeneratedVariants(result.answer).map(clampLiveVariant));
+    if (!variants.some((variant) => existing.has(questionFingerprint(variant.text)))) break;
+    if (attempt === 1) throw new Error("Question generator returned a duplicate of an existing question.");
   }
   const model = `${provider.info.provider}:${provider.info.model}`;
   return variants.map((variant) => ({ ...variant, ...liveMetadata, promptVersion: `live-transcript-v1:${model}` }));
