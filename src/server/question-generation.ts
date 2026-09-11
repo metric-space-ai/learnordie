@@ -87,6 +87,32 @@ function normalizeAnswers(rawAnswers: unknown): AnswerOption[] {
   return answers;
 }
 
+function shuffled<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index--) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swap]] = [copy[swap], copy[index]];
+  }
+  return copy;
+}
+
+// Sprachmodelle setzen die richtige Antwort meist an die erste Stelle. Innerhalb einer
+// Familie steht sie deshalb je Niveau an einer anderen, zufaelligen Position A-D.
+function distributeAnswerKeys(variants: QuestionVariant[]): QuestionVariant[] {
+  const correctPositions = shuffled([0, 1, 2, 3]);
+  return variants.map((variant, variantIndex) => {
+    const correct = variant.answers.find((answer) => answer.correct);
+    const distractors = shuffled(variant.answers.filter((answer) => !answer.correct));
+    if (!correct || distractors.length !== 3) return variant;
+    const ordered = [...distractors];
+    ordered.splice(correctPositions[variantIndex % 4], 0, correct);
+    return {
+      ...variant,
+      answers: ordered.map((answer, index) => ({ ...answer, key: ANSWER_KEYS[index] }))
+    };
+  });
+}
+
 function questionFingerprint(value: string) {
   return value.toLocaleLowerCase("de-DE").replace(/\s+/g, " ").trim();
 }
@@ -210,7 +236,7 @@ export async function generateQuestionVariantsForMaterial(input: {
   }
 
   const model = `${provider.info.provider}:${provider.info.model}`;
-  const variants = parseGeneratedVariants(result.answer);
+  const variants = distributeAnswerKeys(parseGeneratedVariants(result.answer));
   return variants.map((variant) => withVariantMetadata(variant, input.material, {
     promptVersion: "llm-material-v1",
     model
@@ -255,7 +281,10 @@ function liveQuestionUserPrompt(input: {
     "1.0 Übertragen oder Bewerten: neue technische Situation oder Fehlvorstellung beurteilen.",
     "Anforderung:",
     "Genau vier Varianten, je eine pro Niveau 4.0, 3.0, 2.0, 1.0, alle zum selben Thema aus dem Transkript.",
-    "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier Antworten, genau eine korrekt, drei plausible Ablenker ähnlicher Länge, Erklärung höchstens 480 Zeichen.",
+    "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier Antworten, genau eine korrekt, Erklärung höchstens 480 Zeichen.",
+    "Ablenker sind typische Fehlvorstellungen zum selben Thema: fachlich plausibel für Studierende, die das Thema nicht sicher beherrschen, in gleicher Form und ähnlicher Länge wie die richtige Antwort. Keine offensichtlich absurden Aussagen.",
+    "Jede Antwort ist ein vollständiger, grammatisch korrekter Ausdruck oder Satz. Die richtige Antwort ist nicht auffällig länger oder genauer formuliert als die Ablenker.",
+    "Die Erklärung sagt, warum die richtige Antwort stimmt, und benennt die Fehlvorstellung des stärksten Ablenkers.",
     "Keine Antworten wie „alle/keine der genannten“, keine verneinten Fragestellungen.",
     "Zusätzlich ein Feld \"topic\" mit 2 bis 5 Wörtern.",
     "JSON-Schema:",
@@ -320,7 +349,7 @@ export async function generateLiveQuestionFamily(input: {
       : `Question generator request failed: ${message}`);
   }
 
-  const variants = parseGeneratedVariants(result.answer).map(clampLiveVariant);
+  const variants = distributeAnswerKeys(parseGeneratedVariants(result.answer).map(clampLiveVariant));
   const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
   if (variants.some((variant) => existing.has(questionFingerprint(variant.text)))) {
     throw new Error("Question generator returned a duplicate of an existing question.");
