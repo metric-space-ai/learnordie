@@ -16,7 +16,7 @@ import {
   animateStudioToolSharedElement
 } from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
-import { buildLegacyLectureSlideDocument } from "@/lib/slide-documents";
+import { buildLegacyLectureSlideDocument, hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
 import { Diagram } from "./Diagram";
@@ -181,12 +181,6 @@ function assetPreview(asset: PresentationAsset) {
 function presentationAssetPreviewUrl(asset: PresentationAsset) {
   if (!asset.previewKey) return "";
   return ["figure", "photo", "diagram", "chart"].includes(asset.kind) ? asset.previewKey : "";
-}
-
-// Decks mit Bloecken ohne Legacy-Entsprechung (interaktive 3D-Szenen) duerfen beim
-// Speichern nicht aus den Legacy-Folien neu aufgebaut werden, sonst gehen sie verloren.
-function hasEngineOnlyBlocks(document: SlideDocument) {
-  return document.slides.some((slide) => slide.blocks.some((block) => block.type === "scene3d"));
 }
 
 function mergeSlideDocumentAssets(base: SlideDocument, previous?: SlideDocument): SlideDocument {
@@ -913,9 +907,11 @@ export function LecturerDashboard({
       ...current,
       seriesTitle: readText('[data-lecture-field="seriesTitle"]', current.seriesTitle),
       slides,
-      slideDocument: current.slideDocument && (engineEditorOpen || hasEngineOnlyBlocks(current.slideDocument))
+      slideDocument: engineEditorOpen && current.slideDocument
         ? current.slideDocument
-        : mergeSlideDocumentAssets(rebuiltSlideDocument, current.slideDocument)
+        : hasEngineOnlyBlocks(current.slideDocument)
+          ? mergeLegacySlideEditsIntoDocument(current.slideDocument, slides)
+          : mergeSlideDocumentAssets(rebuiltSlideDocument, current.slideDocument)
     };
   }
 
@@ -1177,6 +1173,7 @@ export function LecturerDashboard({
 
     let requestBody: {
       slides?: Slide[];
+      slideDocument?: SlideDocument;
       questions?: QuestionVariant[];
       improvementDraftEvent: {
         kind: ImprovementDraft["kind"];
@@ -1195,6 +1192,9 @@ export function LecturerDashboard({
       );
       requestBody = {
         slides: updatedSlides,
+        ...(hasEngineOnlyBlocks(selected.slideDocument)
+          ? { slideDocument: mergeLegacySlideEditsIntoDocument(selected.slideDocument, updatedSlides) }
+          : {}),
         improvementDraftEvent: {
           kind: draft.kind,
           targetLabel: draft.targetLabel,

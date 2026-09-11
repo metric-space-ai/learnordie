@@ -7,7 +7,9 @@ import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
 import {
   buildLegacyLectureSlideDocument,
+  hasEngineOnlyBlocks,
   legacySlidesFromSlideDocument,
+  mergeLegacySlideEditsIntoDocument,
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
 import {
@@ -854,13 +856,15 @@ export class PostgresLectureRepository implements LectureRepository {
     } else if (input.slides !== undefined) {
       const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
       nextSlides = existingScopedLecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
-      patch.slideDocumentJson = buildLegacyLectureSlideDocument({
-        id,
-        title: effectiveTitle,
-        seriesTitle: effectiveSeriesTitle,
-        language: existingScopedLecture.language,
-        slides: nextSlides
-      });
+      patch.slideDocumentJson = hasEngineOnlyBlocks(existingScopedLecture.slideDocument)
+        ? mergeLegacySlideEditsIntoDocument(existingScopedLecture.slideDocument, nextSlides)
+        : buildLegacyLectureSlideDocument({
+            id,
+            title: effectiveTitle,
+            seriesTitle: effectiveSeriesTitle,
+            language: existingScopedLecture.language,
+            slides: nextSlides
+          });
     }
 
     if (Object.keys(patch).length > 0) {
@@ -2159,30 +2163,36 @@ export class PostgresLectureRepository implements LectureRepository {
   private async appendSlideRowsForDocument(lectureId: string, document: SlideDocument, persistedSlides: Slide[]) {
     if (document.slides.length <= persistedSlides.length) return persistedSlides;
 
-    const extraSlides = legacySlidesFromSlideDocument(
-      { ...document, slides: document.slides.slice(persistedSlides.length) },
-      []
-    );
-    const insertedRows = await this.db.insert(slides).values(
-      extraSlides.map((slide, index) => ({
-        lectureId,
-        position: persistedSlides.length + index + 1,
-        title: slide.title,
-        contentJson: {
-          eyebrow: slide.eyebrow,
-          topic: slide.topic,
-          copy: slide.copy,
-          diagram: slide.diagram
-        }
-      }))
-    ).returning();
+    // Sperre auf der Vorlesung: gleichzeitige Speichervorgaenge duerfen keine
+    // doppelten Zeilen an denselben Positionen anlegen.
+    const rows = await this.db.transaction(async (tx) => {
+      await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lectureId)).for("update");
+      const existingRows = await tx.select().from(slides).where(eq(slides.lectureId, lectureId));
+      if (existingRows.length >= document.slides.length) return existingRows;
 
-    return [
-      ...persistedSlides,
-      ...insertedRows
-        .sort((left, right) => left.position - right.position)
-        .map((row) => this.slideFromRow(row))
-    ];
+      const extraSlides = legacySlidesFromSlideDocument(
+        { ...document, slides: document.slides.slice(existingRows.length) },
+        []
+      );
+      const insertedRows = await tx.insert(slides).values(
+        extraSlides.map((slide, index) => ({
+          lectureId,
+          position: existingRows.length + index + 1,
+          title: slide.title,
+          contentJson: {
+            eyebrow: slide.eyebrow,
+            topic: slide.topic,
+            copy: slide.copy,
+            diagram: slide.diagram
+          }
+        }))
+      ).returning();
+      return [...existingRows, ...insertedRows];
+    });
+
+    return rows
+      .sort((left, right) => left.position - right.position)
+      .map((row) => this.slideFromRow(row));
   }
 
   private async updateSlides(lectureId: string, slideItems: Slide[]) {

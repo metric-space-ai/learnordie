@@ -7,7 +7,9 @@ import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
 import {
   buildLegacyLectureSlideDocument,
+  hasEngineOnlyBlocks,
   legacySlidesFromSlideDocument,
+  mergeLegacySlideEditsIntoDocument,
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
 import type {
@@ -412,7 +414,9 @@ export class LocalLectureStore {
     if (input.slides !== undefined) {
       const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
       lecture.slides = lecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
-      if (input.slideDocument === undefined) {
+      if (input.slideDocument === undefined && hasEngineOnlyBlocks(lecture.slideDocument)) {
+        lecture.slideDocument = mergeLegacySlideEditsIntoDocument(lecture.slideDocument, lecture.slides);
+      } else if (input.slideDocument === undefined) {
         lecture.slideDocument = buildLegacyLectureSlideDocument({
           id: lecture.id,
           title: lecture.title,
