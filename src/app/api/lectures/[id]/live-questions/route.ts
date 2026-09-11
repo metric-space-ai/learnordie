@@ -94,6 +94,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     return NextResponse.json({ error: clientSafeError(error) }, { status: 502 });
   }
 
+  const knownFamilyIds = new Set(lecture.questions.map((question) => question.familyId));
   const updated = await repository.appendQuestionFamily(
     id,
     { slideId: parsed.data.slideId, source: "live_transcript", variants },
@@ -103,6 +104,6 @@ export async function POST(request: Request, context: { params: Promise<unknown>
 
   return NextResponse.json({
     questions: updated.questions,
-    family: updated.questions.filter((question) => question.familySource === "live_transcript").slice(-4)
+    family: updated.questions.filter((question) => question.familyId && !knownFamilyIds.has(question.familyId))
   });
 }
