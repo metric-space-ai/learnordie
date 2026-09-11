@@ -17,7 +17,7 @@ export default async function LecturerLoginPage({
       : errorCode === "rate-limited"
         ? "Zu viele Anfragen. Bitte später erneut versuchen."
       : errorCode === "send-failed"
-        ? "Anmeldelink konnte nicht versendet werden."
+        ? "Code konnte nicht gesendet werden. Versuche es gleich noch einmal."
         : "";
 
   return (

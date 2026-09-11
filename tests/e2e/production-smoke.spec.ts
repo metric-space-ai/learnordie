@@ -1082,7 +1082,7 @@ test("Production-Mailprovider blockiert reservierte Absenderdomain zur Laufzeit"
     });
     expect(response.status()).toBe(502);
     const payload = await response.json() as { error?: string; magicLink?: string };
-    expect(payload.error).toBe("Anmeldelink konnte nicht versendet werden.");
+    expect(payload.error).toBe("Code konnte nicht gesendet werden. Versuche es gleich noch einmal.");
     expect(payload.magicLink).toBeUndefined();
   } finally {
     await app.close();

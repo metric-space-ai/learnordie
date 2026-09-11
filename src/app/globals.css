@@ -947,38 +947,6 @@ button {
   background-size: 36px 36px, 36px 36px, 100% 100%, auto;
 }
 
-.mode-screen::before,
-.mode-screen::after {
-  content: "";
-  position: fixed;
-  pointer-events: none;
-}
-
-.mode-screen::before {
-  left: 24px;
-  right: 24px;
-  bottom: 34px;
-  height: 1px;
-  border-radius: var(--lb-radius-pill);
-  background:
-    linear-gradient(90deg, transparent, oklch(98% 0.006 230 / 0.26) 12%, transparent 30%),
-    linear-gradient(90deg, transparent 60%, oklch(67% 0.11 74 / 0.48), transparent 78%),
-    repeating-linear-gradient(90deg, transparent 0 28px, oklch(98% 0.006 230 / 0.15) 28px 29px);
-  animation: lb-stage-axis-in var(--lb-dur-panel) var(--lb-ease-mask) 420ms backwards;
-}
-
-.mode-screen::after {
-  top: 24px;
-  right: 24px;
-  width: 130px;
-  height: 130px;
-  border-top: 1px solid oklch(98% 0.006 230 / 0.2);
-  border-right: 1px solid oklch(98% 0.006 230 / 0.2);
-  border-radius: 0 var(--lb-radius-cover) 0 0;
-  opacity: 0.8;
-  animation: lb-register-corner-in var(--lb-dur-panel) var(--lb-ease-mask) 220ms backwards;
-}
-
 .mode-card {
   position: relative;
   overflow: hidden;
@@ -1001,23 +969,6 @@ button {
     oklch(62% 0.085 208),
     oklch(60% 0.11 150)
   );
-}
-
-.mode-card::after {
-  content: "";
-  position: absolute;
-  right: 18px;
-  bottom: 16px;
-  width: min(220px, 32%);
-  height: 42px;
-  border-right: 1px solid var(--lb-blueprint-line);
-  border-bottom: 1px solid var(--lb-blueprint-line);
-  border-radius: 0 0 var(--lb-radius-panel) 0;
-  background:
-    linear-gradient(90deg, transparent, var(--lb-blueprint-line-soft), transparent) 0 18px / 100% 1px no-repeat;
-  pointer-events: none;
-  animation: lb-register-scan-in var(--lb-dur-panel) var(--lb-ease-mask) 360ms backwards;
-  transform-origin: right center;
 }
 
 .eyebrow {
@@ -1173,37 +1124,6 @@ button {
     var(--slide);
   box-shadow: 0 24px 90px oklch(5% 0.02 236 / 0.25);
   overflow: hidden;
-}
-
-.home-app-stage::before,
-.home-app-stage::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.home-app-stage::before {
-  inset: 18px;
-  border-radius: calc(var(--lb-radius-stage) - 4px);
-  background:
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left top / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right top / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left bottom / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right bottom / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left top / 1px 72px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right top / 1px 72px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left bottom / 1px 72px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right bottom / 1px 72px no-repeat;
-}
-
-.home-app-stage::after {
-  left: 50%;
-  bottom: 28px;
-  width: min(420px, calc(100% - 72px));
-  height: 1px;
-  border-radius: var(--lb-radius-pill);
-  background: linear-gradient(90deg, transparent, oklch(52% 0.07 208 / 0.28), transparent);
-  transform: translateX(-50%);
 }
 
 .home-route-cover {
@@ -5244,6 +5164,15 @@ textarea.review-live-explanation {
 .primary-button:disabled {
   cursor: wait;
   opacity: 0.62;
+}
+
+a.primary-button,
+a.plain-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  text-decoration: none;
 }
 
 .lb-icon {
