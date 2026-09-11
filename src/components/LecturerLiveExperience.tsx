@@ -1,5 +1,6 @@
 "use client";
 
+import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -345,7 +346,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           <div className="drawer-main">
             <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>Live-Fragen für diese Folie</p>
             <div className="answers">
-              {lecture.questions.map((question, index) => (
+              {questionsForSlide(lecture.questions, lecture.slides[slide]?.id).map((question, index) => (
                 <div
                   className="lecturer-question lb-enter-row"
                   key={question.level}

@@ -2228,19 +2228,34 @@ export class PostgresLectureRepository implements LectureRepository {
       await tx.delete(questions).where(eq(questions.lectureId, lectureId));
     }
 
-    const [question] = await tx.insert(questions).values({ lectureId, source }).returning({ id: questions.id });
-    await tx.insert(questionVariants).values(
-      variants.map((variant) => ({
-        questionId: question.id,
-        level: variant.level,
-        points: variant.points,
-        text: variant.text,
-        answersJson: clone(variant.answers),
-        correctAnswerKey: variant.answers.find((answer) => answer.correct)?.key ?? "A",
-        explanation: variant.explanation,
-        promptVersion: variant.promptVersion ?? "unknown"
-      }))
+    // Eine Fragenzeile je Folie (slide_id) bzw. eine folienunabhaengige Zeile.
+    const lectureSlideIds = new Set(
+      (await tx.select({ id: slides.id }).from(slides).where(eq(slides.lectureId, lectureId))).map((row) => row.id)
     );
+    const groups = new Map<string, QuestionVariant[]>();
+    for (const variant of variants) {
+      const slideKey = variant.slideId && lectureSlideIds.has(variant.slideId) ? variant.slideId : "";
+      groups.set(slideKey, [...(groups.get(slideKey) ?? []), variant]);
+    }
+
+    for (const [slideKey, groupVariants] of groups) {
+      const [question] = await tx
+        .insert(questions)
+        .values({ lectureId, source, slideId: slideKey || null })
+        .returning({ id: questions.id });
+      await tx.insert(questionVariants).values(
+        groupVariants.map((variant) => ({
+          questionId: question.id,
+          level: variant.level,
+          points: variant.points,
+          text: variant.text,
+          answersJson: clone(variant.answers),
+          correctAnswerKey: variant.answers.find((answer) => answer.correct)?.key ?? "A",
+          explanation: variant.explanation,
+          promptVersion: variant.promptVersion ?? "unknown"
+        }))
+      );
+    }
   }
 
   private async hydrateLectures(rows: LectureJoinRow[]) {
@@ -2342,10 +2357,13 @@ export class PostgresLectureRepository implements LectureRepository {
     questionRows: QuestionRow[],
     variantRows: VariantRow[]
   ): Lecture {
-    const questionIds = new Set(questionRows.map((question) => question.id));
+    const questionSlideIds = new Map(questionRows.map((question) => [question.id, question.slideId ?? undefined]));
     const questionsForLecture = variantRows
-      .filter((variant) => questionIds.has(variant.questionId))
-      .map((variant) => this.variantFromRow(variant))
+      .filter((variant) => questionSlideIds.has(variant.questionId))
+      .map((variant) => {
+        const slideId = questionSlideIds.get(variant.questionId);
+        return slideId ? { ...this.variantFromRow(variant), slideId } : this.variantFromRow(variant);
+      })
       .sort((left, right) => questionLevelOrder[left.level] - questionLevelOrder[right.level]);
     const slideItems = slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide));
     const slideDocument = alignSlideDocumentToPersistedSlides(normalizeLectureSlideDocument(row.lecture.slideDocumentJson, {

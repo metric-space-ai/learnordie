@@ -108,6 +108,8 @@ export type QuestionQualityDecision = {
 
 export type QuestionVariant = {
   level: QuestionLevel;
+  /** Folie, zu der die Variante gehoert; ohne Angabe gilt sie fuer die ganze Vorlesung. */
+  slideId?: string;
   points: number;
   text: string;
   answers: AnswerOption[];

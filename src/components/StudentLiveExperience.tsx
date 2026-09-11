@@ -1,5 +1,6 @@
 "use client";
 
+import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -292,7 +293,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       <Presence show={questionOpen}>
         {(motionState) => (
           <QuizDrawer
-            questions={lecture.questions}
+            key={lecture.slides[slide]?.id}
+            questions={questionsForSlide(lecture.questions, lecture.slides[slide]?.id)}
             origin={questionOrigin}
             motionState={motionState}
             onAnswered={({ question, correct, selected }) => {

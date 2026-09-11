@@ -16,6 +16,7 @@ import {
   animateStudioToolSharedElement
 } from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
+import { questionsForSlide } from "@/lib/questions";
 import { buildLegacyLectureSlideDocument, hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
@@ -1207,8 +1208,9 @@ export function LecturerDashboard({
         }
       };
     } else {
+      const targetQuestion = slideQuestions.find((question) => question.level === draft.questionLevel);
       const updatedQuestions = selected.questions.map((question) =>
-        question.level === draft.questionLevel ? improveQuestionVariant(question) : question
+        question === targetQuestion ? improveQuestionVariant(question) : question
       );
       requestBody = {
         questions: updatedQuestions,
@@ -1287,6 +1289,7 @@ export function LecturerDashboard({
   const studioSlides = edit.slides.length > 0 ? edit.slides : selected?.slides ?? [];
   const activeStudioSlideIndex = Math.min(studioSlideIndex, Math.max(studioSlides.length - 1, 0));
   const studioSlide = studioSlides[activeStudioSlideIndex];
+  const slideQuestions = selected ? questionsForSlide(selected.questions, studioSlide?.id) : [];
   const assistantMessages = selected?.assistantMessages ?? [];
   const visibleAssistantMessages = studioSlide
     ? assistantMessages.filter((message) => !message.slideId || message.slideId === studioSlide.id).slice(-6)
@@ -1427,7 +1430,7 @@ export function LecturerDashboard({
 
   function renderQuestionStage() {
     if (reviews.length === 0) {
-      const activeQuestion = selected.questions.find((question) => question.level === reviewLevel) ?? selected.questions[0];
+      const activeQuestion = slideQuestions.find((question) => question.level === reviewLevel) ?? slideQuestions[0];
       if (!activeQuestion) {
         return <p className="tool-empty-note">Noch keine Frage im Deck.</p>;
       }
@@ -1735,10 +1738,10 @@ export function LecturerDashboard({
 
   function renderSlideQuestionOverlay(motionState: PresenceState) {
     const focusedReviewIndex = focusedReview ? reviews.findIndex((review) => review.id === focusedReview.id) : -1;
-    const visibleVariants = focusedVariants.length > 0 ? focusedVariants : selected.questions;
+    const visibleVariants = focusedVariants.length > 0 ? focusedVariants : slideQuestions;
     const sourceLabel = reviews.length > 0 && focusedReview
       ? `Vorschlag ${focusedReviewIndex + 1} / ${reviews.length}`
-      : `${selected.questions.length} aktive Varianten`;
+      : `${slideQuestions.length} aktive Varianten`;
 
     return (
       <aside className="studio-context-drawer questions studio-slide-tool-overlay studio-slide-question-overlay lb-enter-sheet" data-state={motionState} aria-label="Fragen direkt auf der Folie">
@@ -1778,7 +1781,7 @@ export function LecturerDashboard({
             <div className="studio-review-stepper" aria-label="Aktive Fragen">
               <div>
                 <span>Aktive Live-Fragen</span>
-                <strong>{selected.questions.length} Varianten</strong>
+                <strong>{slideQuestions.length} Varianten</strong>
               </div>
             </div>
           )}
@@ -2197,7 +2200,7 @@ export function LecturerDashboard({
   }
 
   function renderSlideToolMenu() {
-    const questionCount = reviews.length || selected.questions.length;
+    const questionCount = reviews.length || slideQuestions.length;
     const materialCount = selected.materials?.length ?? 0;
     const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
     const assistantCount = selected.assistantMessages?.length ?? 0;
@@ -2289,7 +2292,7 @@ export function LecturerDashboard({
   }
 
   function renderStudioHotspots() {
-    const questionCount = reviews.length || selected.questions.length;
+    const questionCount = reviews.length || slideQuestions.length;
     const materialCount = selected.materials?.length ?? 0;
     const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
     const assistantCount = selected.assistantMessages?.length ?? 0;

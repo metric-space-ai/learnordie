@@ -1,5 +1,6 @@
 "use client";
 
+import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -154,9 +155,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   }, [activeHotspotIndex, questionOpen, questionOrigin]);
 
   const questions = useMemo(() => {
-    if (!forcedLevel) return lecture.questions;
-    return [...lecture.questions].sort((a, b) => (a.level === forcedLevel ? -1 : b.level === forcedLevel ? 1 : 0));
-  }, [forcedLevel, lecture.questions]);
+    const slideQuestions = questionsForSlide(lecture.questions, lecture.slides[slide]?.id);
+    if (!forcedLevel) return slideQuestions;
+    return [...slideQuestions].sort((a, b) => (a.level === forcedLevel ? -1 : b.level === forcedLevel ? 1 : 0));
+  }, [forcedLevel, lecture.questions, lecture.slides, slide]);
   const activeQuestion = questions[0];
   const chatStarterPrompts = useMemo(() => {
     const questionText = activeQuestion?.text ?? "die aktuelle Frage";
@@ -500,6 +502,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       <Presence show={questionOpen}>
         {(motionState) => (
           <QuizDrawer
+            key={lecture.slides[slide]?.id}
             questions={questions}
             initialLevel={forcedLevel ?? "2.0"}
             origin={questionOrigin}
