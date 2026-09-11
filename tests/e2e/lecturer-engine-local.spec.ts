@@ -18,7 +18,7 @@ async function loginLecturer(page: Page) {
   const email = `engine-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   await page.goto("/lecturer/login");
   await page.getByLabel("E-Mail").fill(email);
-  await page.getByRole("button", { name: "Einloggen oder Konto erstellen" }).click();
+  await page.getByRole("button", { name: "Code senden" }).click();
   const link = page.getByRole("link", { name: "Direkt zum Dozentenbereich" });
   await expect(link).toBeVisible();
   const href = await link.getAttribute("href");

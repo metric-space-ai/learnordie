@@ -6,10 +6,12 @@ import { isProductionDeployment } from "@/server/runtime-config";
 export type SendMagicLinkInput = {
   email: string;
   magicLink: string;
+  /** 6-stelliger Anmeldecode, alternativ zum Link. */
+  code?: string;
 };
 
 export type SendMagicLinkResult =
-  | { delivery: "local"; magicLink: string }
+  | { delivery: "local"; magicLink: string; code?: string }
   | { delivery: "external" };
 
 export interface MailProvider {
@@ -18,8 +20,8 @@ export interface MailProvider {
 
 class ConsoleMailProvider implements MailProvider {
   async sendMagicLink(input: SendMagicLinkInput) {
-    console.info(`[mail:dev] Magic link for ${input.email}: ${input.magicLink}`);
-    return { delivery: "local" as const, magicLink: input.magicLink };
+    console.info(`[mail:dev] Login for ${input.email}: code ${input.code ?? "-"} · ${input.magicLink}`);
+    return { delivery: "local" as const, magicLink: input.magicLink, code: input.code };
   }
 }
 
@@ -40,17 +42,29 @@ class ResendMailProvider implements MailProvider {
   }
 
   async sendMagicLink(input: SendMagicLinkInput) {
-    await this.resend.emails.send({
+    // Das Resend-SDK wirft bei API-Fehlern nicht, sondern liefert { error }.
+    const result = await this.resend.emails.send({
       from: this.from,
       to: input.email,
-      subject: "Dein learnordie.app Login-Link",
+      subject: input.code ? `Dein Anmeldecode für learnordie.app: ${input.code}` : "Dein learnordie.app Login-Link",
       html: [
-        "<p>Lernen im Norden: Hier ist dein Login-Link.</p>",
-        `<p><a href="${escapeHtml(input.magicLink)}">${escapeHtml(input.magicLink)}</a></p>`,
-        "<p>Der Link ist 15 Minuten gültig.</p>"
+        input.code
+          ? `<p>Dein Anmeldecode:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px;font-family:monospace">${escapeHtml(input.code)}</p>`
+          : "",
+        `<p>Oder direkt anmelden: <a href="${escapeHtml(input.magicLink)}">Anmelden</a></p>`,
+        "<p>Gültig für 15 Minuten.</p>"
       ].join(""),
-      text: `Lernen im Norden: Hier ist dein learnordie.app Login-Link: ${input.magicLink}\n\nDer Link ist 15 Minuten gültig.`
+      text: [
+        input.code ? `Dein Anmeldecode: ${input.code}` : "",
+        `Oder direkt anmelden: ${input.magicLink}`,
+        "Gültig für 15 Minuten."
+      ].filter(Boolean).join("\n\n")
     });
+    if (result.error) {
+      console.error("Resend rejected login mail", { name: result.error.name, message: result.error.message, from: this.from });
+      throw new Error(`Resend rejected login mail: ${result.error.name}: ${result.error.message}`);
+    }
+    console.info("Resend accepted login mail", { id: result.data?.id });
     return { delivery: "external" as const };
   }
 }

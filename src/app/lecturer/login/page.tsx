@@ -13,7 +13,7 @@ export default async function LecturerLoginPage({
     errorCode === "invalid-email"
       ? "Bitte eine gültige E-Mail eingeben."
       : errorCode === "invalid-token"
-        ? "Dieser Anmeldelink ist abgelaufen oder wurde bereits verwendet."
+        ? "Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an."
       : errorCode === "rate-limited"
         ? "Zu viele Anfragen. Bitte später erneut versuchen."
       : errorCode === "send-failed"
@@ -24,11 +24,7 @@ export default async function LecturerLoginPage({
     <main className="mode-screen lb-motion-root">
       <section className="mode-card lb-enter-sheet">
         <p className="eyebrow">Dozentenbereich</p>
-        <h1>Einloggen oder Konto erstellen</h1>
-        <p>
-          Eine dienstliche E-Mail reicht. Ist die Adresse neu, wird dein Dozentenkonto
-          nach der Link-Bestätigung erstellt; ist sie bekannt, wirst du direkt angemeldet.
-        </p>
+        <h1>Anmelden</h1>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
       </section>
     </main>
