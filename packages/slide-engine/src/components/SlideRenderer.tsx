@@ -358,7 +358,7 @@ function getLayoutMode(layout: string): SlideLayoutMode {
 }
 
 function isVisualBlock(block: SlideBlock) {
-  return block.type === "figure" || block.type === "formula" || block.type === "table" || block.type === "chart";
+  return block.type === "figure" || block.type === "formula" || block.type === "table" || block.type === "chart" || block.type === "scene3d";
 }
 
 function sourceSummary(count: number) {

@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import type { CSSProperties } from "react";
 
+import { Scene3DBlockRenderer } from "./Scene3DBlockRenderer";
+
 import type {
   BulletListBlock,
   CalloutBlock,
@@ -447,6 +449,8 @@ export function BlockRenderer({ block, assets, renderAsset, resolveAssetUrl }: B
       return <QuizAnchorBlockRenderer block={block} />;
     case "spacer":
       return <SpacerBlockRenderer block={block} />;
+    case "scene3d":
+      return <Scene3DBlockRenderer block={block} />;
     default:
       return <UnsupportedBlockRenderer block={block} />;
   }

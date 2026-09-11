@@ -47,7 +47,8 @@ const qaTargets: QaTarget[] = configuredSlideEngineQaUrl
       { name: "legacy-demo", url: "/slide-engine/qa" },
       { name: "blocks-text", url: "/slide-engine/qa/blocks?slide=blocks-text" },
       { name: "blocks-media", url: "/slide-engine/qa/blocks?slide=blocks-media" },
-      { name: "blocks-reasoning", url: "/slide-engine/qa/blocks?slide=blocks-reasoning" }
+      { name: "blocks-reasoning", url: "/slide-engine/qa/blocks?slide=blocks-reasoning" },
+      { name: "blocks-interactive", url: "/slide-engine/qa/blocks?slide=blocks-interactive" }
     ];
 const slideSelector = process.env.SLIDE_ENGINE_QA_SLIDE_SELECTOR?.trim()
   || "[data-slide-id], [data-slide-node-id], .slide, section";
@@ -69,7 +70,8 @@ const expectedSlideDocumentBlockTypes = [
   "code",
   "quote",
   "quizAnchor",
-  "spacer"
+  "spacer",
+  "scene3d"
 ];
 
 const viewportMatrix: ViewportCase[] = [

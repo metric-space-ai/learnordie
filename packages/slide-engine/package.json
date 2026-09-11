@@ -45,6 +45,7 @@
     "./styles/**/*.css"
   ],
   "dependencies": {
+    "three": "0.140.0",
     "zod": "^4.2.1"
   },
   "peerDependencies": {
