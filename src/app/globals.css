@@ -11464,3 +11464,46 @@ textarea.review-live-explanation {
     max-height: 190px;
   }
 }
+
+/* Mehrere Fragen je Folie: Blaettern zwischen Fragenfamilien. */
+.question-family-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.question-family-stepper button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.question-family-stepper button:hover,
+.question-family-stepper button:focus-visible {
+  border-color: color-mix(in oklch, var(--question-accent) 72%, var(--line));
+}
+
+.question-next-family {
+  justify-self: start;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in oklch, var(--question-accent) 72%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--question-accent) 18%, var(--panel));
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+}

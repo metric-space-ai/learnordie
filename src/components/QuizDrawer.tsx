@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
+import { groupQuestionFamilies } from "@/lib/questions";
 import type { QuestionLevel, QuestionVariant } from "@/lib/types";
 import type { PresenceState } from "./Presence";
 
@@ -27,15 +28,26 @@ export function QuizDrawer({
   onExpired?: () => void;
 }) {
   const [level, setLevel] = useState<QuestionLevel>(initialLevel);
+  const [familyIndex, setFamilyIndex] = useState(0);
   const [seconds, setSeconds] = useState(60);
   const [selected, setSelected] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const expiredRef = useRef(false);
 
-  const question = useMemo(
-    () => questions.find((item) => item.level === level) ?? questions[0],
-    [level, questions]
-  );
+  // Jede Frage ist eine Familie in allen Niveaus; der Niveau-Umschalter bleibt in der Familie.
+  const families = useMemo(() => groupQuestionFamilies(questions), [questions]);
+  const activeFamilyIndex = Math.min(familyIndex, Math.max(families.length - 1, 0));
+  const family = families[activeFamilyIndex] ?? [];
+  const question = family.find((item) => item.level === level) ?? family[0];
+
+  function showFamily(nextIndex: number) {
+    if (families.length === 0) return;
+    setFamilyIndex((nextIndex + families.length) % families.length);
+    setSelected(null);
+    setRevealed(false);
+    setSeconds(60);
+    expiredRef.current = false;
+  }
   useEffect(() => {
     if (revealed) return;
     const timer = window.setInterval(() => {
@@ -62,12 +74,14 @@ export function QuizDrawer({
   }, [initialLevel]);
 
   function choose(answerKey: string) {
-    if (revealed) return;
+    if (revealed || !question) return;
     const option = question.answers.find((answer) => answer.key === answerKey);
     setSelected(answerKey);
     setRevealed(true);
     onAnswered?.({ level, correct: Boolean(option?.correct), question, selected: answerKey });
   }
+
+  if (!question) return null;
 
   return (
     <section
@@ -78,7 +92,7 @@ export function QuizDrawer({
       data-state={motionState}
       aria-label="Quizfrage"
     >
-      <div className="drawer-main" key={question.level}>
+      <div className="drawer-main" key={`${activeFamilyIndex}-${question.level}`}>
         <div className="question-head">
           <div className="levels lb-enter-control" aria-label="Niveau">
             {levels.map((item) => (
@@ -96,6 +110,13 @@ export function QuizDrawer({
               </button>
             ))}
           </div>
+          {families.length > 1 ? (
+            <div className="question-family-stepper lb-enter-control" aria-label="Fragen dieser Folie">
+              <button type="button" onClick={() => showFamily(activeFamilyIndex - 1)} aria-label="Vorherige Frage">‹</button>
+              <span aria-live="polite">Frage {activeFamilyIndex + 1}/{families.length}</span>
+              <button type="button" onClick={() => showFamily(activeFamilyIndex + 1)} aria-label="Nächste Frage">›</button>
+            </div>
+          ) : null}
           {headerAction}
         </div>
         <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>{question.text}</p>
@@ -119,6 +140,11 @@ export function QuizDrawer({
           })}
         </div>
       </div>
+      {revealed && families.length > 1 ? (
+        <button className="question-next-family" type="button" onClick={() => showFamily(activeFamilyIndex + 1)}>
+          Nächste Frage
+        </button>
+      ) : null}
       <aside className="timer lb-enter-control" aria-label="Timer">
         <strong>{String(seconds).padStart(2, "0")}</strong>
         <span>{revealed ? (question.answers.find((answer) => answer.key === selected)?.correct ? `+${question.points} Punkte` : "0 Punkte") : "schließt"}</span>

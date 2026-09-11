@@ -50,7 +50,9 @@ const questionSchema = z.object({
   learningObjective: z.string().min(1).optional(),
   reviewStatus: z.enum(["draft", "reviewed", "approved", "rejected"]).optional(),
   reviewerComment: z.string().optional(),
-  slideId: z.string().min(1).max(120).optional()
+  slideId: z.string().min(1).max(120).optional(),
+  familyId: z.string().min(1).max(120).optional(),
+  familySource: z.string().min(1).max(60).optional()
 });
 
 const improvementDraftEventSchema = z.object({
@@ -89,8 +91,8 @@ const updateLectureSchema = z.object({
   questions: z
     .array(questionSchema)
     .min(4)
-    .max(64)
-    .refine(hasCompleteQuestionFamilies, "Je Folie genau eine Frage pro Niveau (4.0, 3.0, 2.0, 1.0).")
+    .max(800)
+    .refine(hasCompleteQuestionFamilies, "Jede Frage braucht genau eine Variante pro Niveau (4.0, 3.0, 2.0, 1.0).")
     .optional(),
   improvementDraftEvent: improvementDraftEventSchema.optional(),
   status: z

@@ -16,7 +16,7 @@ import {
   animateStudioToolSharedElement
 } from "@/lib/motion";
 import { seriesIdFromTitle } from "@/lib/series";
-import { questionsForSlide } from "@/lib/questions";
+import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { buildLegacyLectureSlideDocument, hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
@@ -502,6 +502,7 @@ export function LecturerDashboard({
   const [reviewFocusId, setReviewFocusId] = useState("");
   const [reviewLevel, setReviewLevel] = useState<QuestionLevel>("2.0");
   const [studioSlideIndex, setStudioSlideIndex] = useState(0);
+  const [studioFamilyIndex, setStudioFamilyIndex] = useState(0);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [chatModerationId, setChatModerationId] = useState("");
   const [chatModerationMessage, setChatModerationMessage] = useState("");
@@ -1208,7 +1209,7 @@ export function LecturerDashboard({
         }
       };
     } else {
-      const targetQuestion = slideQuestions.find((question) => question.level === draft.questionLevel);
+      const targetQuestion = studioFamily.find((question) => question.level === draft.questionLevel);
       const updatedQuestions = selected.questions.map((question) =>
         question === targetQuestion ? improveQuestionVariant(question) : question
       );
@@ -1290,6 +1291,9 @@ export function LecturerDashboard({
   const activeStudioSlideIndex = Math.min(studioSlideIndex, Math.max(studioSlides.length - 1, 0));
   const studioSlide = studioSlides[activeStudioSlideIndex];
   const slideQuestions = selected ? questionsForSlide(selected.questions, studioSlide?.id) : [];
+  const slideFamilies = groupQuestionFamilies(slideQuestions);
+  const activeStudioFamilyIndex = Math.min(studioFamilyIndex, Math.max(slideFamilies.length - 1, 0));
+  const studioFamily = slideFamilies[activeStudioFamilyIndex] ?? [];
   const assistantMessages = selected?.assistantMessages ?? [];
   const visibleAssistantMessages = studioSlide
     ? assistantMessages.filter((message) => !message.slideId || message.slideId === studioSlide.id).slice(-6)
@@ -1430,7 +1434,7 @@ export function LecturerDashboard({
 
   function renderQuestionStage() {
     if (reviews.length === 0) {
-      const activeQuestion = slideQuestions.find((question) => question.level === reviewLevel) ?? slideQuestions[0];
+      const activeQuestion = studioFamily.find((question) => question.level === reviewLevel) ?? studioFamily[0];
       if (!activeQuestion) {
         return <p className="tool-empty-note">Noch keine Frage im Deck.</p>;
       }
@@ -1738,10 +1742,10 @@ export function LecturerDashboard({
 
   function renderSlideQuestionOverlay(motionState: PresenceState) {
     const focusedReviewIndex = focusedReview ? reviews.findIndex((review) => review.id === focusedReview.id) : -1;
-    const visibleVariants = focusedVariants.length > 0 ? focusedVariants : slideQuestions;
+    const visibleVariants = focusedVariants.length > 0 ? focusedVariants : studioFamily;
     const sourceLabel = reviews.length > 0 && focusedReview
       ? `Vorschlag ${focusedReviewIndex + 1} / ${reviews.length}`
-      : `${slideQuestions.length} aktive Varianten`;
+      : `${slideFamilies.length} ${slideFamilies.length === 1 ? "Frage" : "Fragen"} · ${slideQuestions.length} Varianten`;
 
     return (
       <aside className="studio-context-drawer questions studio-slide-tool-overlay studio-slide-question-overlay lb-enter-sheet" data-state={motionState} aria-label="Fragen direkt auf der Folie">
@@ -1779,10 +1783,26 @@ export function LecturerDashboard({
             </div>
           ) : (
             <div className="studio-review-stepper" aria-label="Aktive Fragen">
+              <button
+                type="button"
+                onClick={() => setStudioFamilyIndex((activeStudioFamilyIndex + slideFamilies.length - 1) % Math.max(slideFamilies.length, 1))}
+                disabled={slideFamilies.length < 2}
+                aria-label="Vorherige Frage"
+              >
+                ‹
+              </button>
               <div>
-                <span>Aktive Live-Fragen</span>
-                <strong>{slideQuestions.length} Varianten</strong>
+                <span>Aktive Fragen dieser Folie</span>
+                <strong>Frage {slideFamilies.length > 0 ? activeStudioFamilyIndex + 1 : 0} / {slideFamilies.length}</strong>
               </div>
+              <button
+                type="button"
+                onClick={() => setStudioFamilyIndex((activeStudioFamilyIndex + 1) % Math.max(slideFamilies.length, 1))}
+                disabled={slideFamilies.length < 2}
+                aria-label="Nächste Frage"
+              >
+                ›
+              </button>
             </div>
           )}
           <div className="studio-level-rail" aria-label="Niveau auswählen">

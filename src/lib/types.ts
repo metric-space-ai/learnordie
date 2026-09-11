@@ -110,6 +110,10 @@ export type QuestionVariant = {
   level: QuestionLevel;
   /** Folie, zu der die Variante gehoert; ohne Angabe gilt sie fuer die ganze Vorlesung. */
   slideId?: string;
+  /** Fragenfamilie: dieselbe Frage in allen vier Niveaus. */
+  familyId?: string;
+  /** Herkunft der Familie, z. B. "prepared" oder "live_transcript". */
+  familySource?: string;
   points: number;
   text: string;
   answers: AnswerOption[];

@@ -59,7 +59,15 @@ function sanitizeAnswerSelectedPayload(lecture: Lecture, payload: Record<string,
   const selectedLevel = level(payload.level);
   if (!selectedLevel) return { error: "Ungültiges Frageniveau." };
 
-  const question = lecture.questions.find((candidate) => candidate.level === selectedLevel);
+  // Mehrere Fragen je Folie: zuerst ueber Familie, dann ueber den Fragetext, zuletzt
+  // (alte Vorlesungen mit einer Familie) nur ueber das Niveau zuordnen.
+  const familyId = text(payload.familyId, 120);
+  const questionText = text(payload.questionText, 400);
+  const sameLevel = lecture.questions.filter((candidate) => candidate.level === selectedLevel);
+  const question =
+    (familyId ? sameLevel.find((candidate) => candidate.familyId === familyId) : undefined) ??
+    (questionText ? sameLevel.find((candidate) => candidate.text === questionText) : undefined) ??
+    (sameLevel.length === 1 ? sameLevel[0] : undefined);
   if (!question) return { error: "Frage nicht gefunden." };
 
   const selectedKey = answerKey(payload.selectedAnswerKey) || answerKey(payload.selected);
@@ -74,6 +82,8 @@ function sanitizeAnswerSelectedPayload(lecture: Lecture, payload: Record<string,
     payload: {
       mode: mode(payload.mode),
       level: question.level,
+      ...(question.slideId ? { slideId: question.slideId } : {}),
+      ...(question.familyId ? { familyId: question.familyId } : {}),
       points: question.points,
       earnedPoints: correct ? question.points : 0,
       questionText: question.text,

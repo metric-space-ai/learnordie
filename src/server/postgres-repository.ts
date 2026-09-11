@@ -1908,7 +1908,7 @@ export class PostgresLectureRepository implements LectureRepository {
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
       if (decision === "approved") {
-        await this.replaceActiveQuestionsInTransaction(tx, lectureId, decidedVariants, review.sourceTitle);
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, decidedVariants, review.sourceTitle);
         await tx.update(lectures).set({ status: "ready_for_live" }).where(eq(lectures.id, lectureId));
         return;
       }
@@ -1948,7 +1948,7 @@ export class PostgresLectureRepository implements LectureRepository {
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
       if (review.status === "approved") {
-        await this.replaceActiveQuestionsInTransaction(tx, lectureId, nextVariants, review.sourceTitle);
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, nextVariants, review.sourceTitle);
       }
     });
 
@@ -2214,6 +2214,26 @@ export class PostgresLectureRepository implements LectureRepository {
     });
   }
 
+  // Eine freigegebene Fragenfamilie ergaenzt die Vorlesung, statt alle anderen Fragen
+  // zu ersetzen. Ersetzt werden nur dieselbe Quelle und der Demo-Startbestand.
+  private async upsertQuestionFamilyInTransaction(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    lectureId: string,
+    variants: QuestionVariant[],
+    source: string
+  ) {
+    const replaced = await tx
+      .select({ id: questions.id })
+      .from(questions)
+      .where(and(eq(questions.lectureId, lectureId), inArray(questions.source, [source, "initial_seed"])));
+    const replacedIds = replaced.map((row) => row.id);
+    if (replacedIds.length > 0) {
+      await tx.delete(questionVariants).where(inArray(questionVariants.questionId, replacedIds));
+      await tx.delete(questions).where(inArray(questions.id, replacedIds));
+    }
+    await this.insertQuestionFamiliesInTransaction(tx, lectureId, variants.map((variant) => ({ ...variant, familyId: undefined, familySource: source })), source);
+  }
+
   private async replaceActiveQuestionsInTransaction(
     tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
     lectureId: string,
@@ -2228,20 +2248,32 @@ export class PostgresLectureRepository implements LectureRepository {
       await tx.delete(questions).where(eq(questions.lectureId, lectureId));
     }
 
-    // Eine Fragenzeile je Folie (slide_id) bzw. eine folienunabhaengige Zeile.
+    await this.insertQuestionFamiliesInTransaction(tx, lectureId, variants, source);
+  }
+
+  private async insertQuestionFamiliesInTransaction(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    lectureId: string,
+    variants: QuestionVariant[],
+    source: string
+  ) {
+    // Eine Fragenzeile je Fragenfamilie (alle vier Niveaus), optional an eine Folie gebunden.
     const lectureSlideIds = new Set(
       (await tx.select({ id: slides.id }).from(slides).where(eq(slides.lectureId, lectureId))).map((row) => row.id)
     );
-    const groups = new Map<string, QuestionVariant[]>();
+    const groups = new Map<string, { slideId: string | null; familySource?: string; variants: QuestionVariant[] }>();
     for (const variant of variants) {
-      const slideKey = variant.slideId && lectureSlideIds.has(variant.slideId) ? variant.slideId : "";
-      groups.set(slideKey, [...(groups.get(slideKey) ?? []), variant]);
+      const slideId = variant.slideId && lectureSlideIds.has(variant.slideId) ? variant.slideId : null;
+      const key = `${slideId ?? ""}|${variant.familyId ?? ""}`;
+      const group = groups.get(key) ?? { slideId, familySource: variant.familySource, variants: [] };
+      group.variants.push(variant);
+      groups.set(key, group);
     }
 
-    for (const [slideKey, groupVariants] of groups) {
+    for (const { slideId, familySource, variants: groupVariants } of groups.values()) {
       const [question] = await tx
         .insert(questions)
-        .values({ lectureId, source, slideId: slideKey || null })
+        .values({ lectureId, source: familySource ?? source, slideId })
         .returning({ id: questions.id });
       await tx.insert(questionVariants).values(
         groupVariants.map((variant) => ({
@@ -2357,12 +2389,17 @@ export class PostgresLectureRepository implements LectureRepository {
     questionRows: QuestionRow[],
     variantRows: VariantRow[]
   ): Lecture {
-    const questionSlideIds = new Map(questionRows.map((question) => [question.id, question.slideId ?? undefined]));
+    const questionById = new Map(questionRows.map((question) => [question.id, question]));
     const questionsForLecture = variantRows
-      .filter((variant) => questionSlideIds.has(variant.questionId))
+      .filter((variant) => questionById.has(variant.questionId))
       .map((variant) => {
-        const slideId = questionSlideIds.get(variant.questionId);
-        return slideId ? { ...this.variantFromRow(variant), slideId } : this.variantFromRow(variant);
+        const family = questionById.get(variant.questionId)!;
+        return {
+          ...this.variantFromRow(variant),
+          ...(family.slideId ? { slideId: family.slideId } : {}),
+          familyId: family.id,
+          familySource: family.source
+        };
       })
       .sort((left, right) => questionLevelOrder[left.level] - questionLevelOrder[right.level]);
     const slideItems = slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide));

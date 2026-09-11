@@ -306,6 +306,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
                 await recordEvent("answer_selected", {
                   mode: "live",
                   level: question.level,
+                  familyId: question.familyId,
+                  slideId: question.slideId,
                   points: question.points,
                   questionText: question.text,
                   selected,

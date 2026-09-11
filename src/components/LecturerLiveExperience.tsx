@@ -1,6 +1,6 @@
 "use client";
 
-import { questionsForSlide } from "@/lib/questions";
+import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -44,6 +44,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const autoLoopRunningRef = useRef(false);
   const slideRef = useRef(slide);
 
+  const slideFamilies = groupQuestionFamilies(questionsForSlide(lecture.questions, lecture.slides[slide]?.id));
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
   const latestTranscript = transcriptDrafts[0]?.text ?? transcriptSegments[0]?.text ?? "Noch keine Passage übernommen.";
@@ -344,18 +345,26 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           aria-label="Live-Fragen"
         >
           <div className="drawer-main">
-            <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>Live-Fragen für diese Folie</p>
+            <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
+              Fragen für diese Folie · {slideFamilies.length}
+            </p>
             <div className="answers">
-              {questionsForSlide(lecture.questions, lecture.slides[slide]?.id).map((question, index) => (
-                <div
-                  className="lecturer-question lb-enter-row"
-                  key={question.level}
-                  style={{ "--lb-i": index + 1 } as MotionStyle}
-                >
-                  <strong>Niveau {question.level}</strong>
-                  <span>{question.text}</span>
-                </div>
-              ))}
+              {slideFamilies.map((family, index) => {
+                const preview = family.find((question) => question.level === "2.0") ?? family[0];
+                return (
+                  <div
+                    className="lecturer-question lb-enter-row"
+                    key={preview.familyId ?? `${preview.level}-${index}`}
+                    style={{ "--lb-i": Math.min(index + 1, 8) } as MotionStyle}
+                  >
+                    <strong>
+                      Frage {index + 1}
+                      {preview.familySource === "live_transcript" ? " · live" : ""} · {family.map((question) => question.level).join(" / ")}
+                    </strong>
+                    <span>{preview.text}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>

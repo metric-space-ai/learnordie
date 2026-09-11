@@ -519,6 +519,8 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 await recordLearnEvent("answer_selected", {
                   mode: "learn",
                   level: question.level,
+                  familyId: question.familyId,
+                  slideId: question.slideId,
                   points: question.points,
                   questionText: question.text,
                   selected,

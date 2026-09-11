@@ -57,6 +57,14 @@ import { applyQualityDecision, recordReviewEdits } from "./question-review-metad
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
 import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
 
+// Freigegebene Familie ergaenzt die Fragen; ersetzt werden nur dieselbe Review-Familie
+// und die folienlose Startfamilie ohne familyId (Demo-Bestand).
+function withReviewFamily(current: QuestionVariant[], reviewId: string, sourceTitle: string, variants: QuestionVariant[]) {
+  const familyId = `review:${reviewId}`;
+  const kept = current.filter((question) => question.familyId && question.familyId !== familyId);
+  return [...kept, ...clone(variants).map((variant) => ({ ...variant, familyId, familySource: sourceTitle }))];
+}
+
 const STORE_PATH = path.join(process.cwd(), ".data", "learnbuddy-local.json");
 
 type LocalStoreData = {
@@ -1133,7 +1141,7 @@ export class LocalLectureStore {
       actor
     });
     if (decision === "approved") {
-      lecture.questions = clone(review.variants);
+      lecture.questions = withReviewFamily(lecture.questions, review.id, review.sourceTitle, review.variants);
       lecture.status = "ready_for_live";
     } else {
       const reviews = lecture.questionReviews ?? [];
@@ -1162,7 +1170,7 @@ export class LocalLectureStore {
       actor
     });
     if (review.status === "approved") {
-      lecture.questions = clone(review.variants);
+      lecture.questions = withReviewFamily(lecture.questions, review.id, review.sourceTitle, review.variants);
     }
 
     await writeStore(store);
