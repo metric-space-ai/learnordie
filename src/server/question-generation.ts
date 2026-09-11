@@ -251,9 +251,10 @@ export type LiveQuestionSlideContext = {
 function liveQuestionSystemPrompt() {
   return [
     "Du bist ein deutschsprachiger Aufgabenautor und begleitest eine laufende technische Universitätsvorlesung.",
-    "Du erzeugst genau EINE Frage als Fragenfamilie: dieselbe Frage zum selben Thema in vier Schwierigkeitsstufen.",
-    "Grundlage ist, was die Lehrperson gerade gesagt hat (Transkript), eingeordnet durch den Folieninhalt.",
-    "Erfinde keine Fakten, die weder im Transkript noch auf der Folie stehen. Rechne Zahlen selbst nach.",
+    "Du erzeugst genau EINE Frage als Fragenfamilie: dieselbe Kernaussage, geprüft in vier Schwierigkeitsstufen.",
+    "Das Thema kommt ausschließlich aus dem Transkript, also aus dem, was die Lehrperson gerade gesagt hat.",
+    "Der Folieninhalt dient nur zur Einordnung und nur, soweit er zum Transkript passt; Folienthemen, die im Transkript nicht vorkommen, sind tabu.",
+    "Erfinde keine Fakten. Rechne Zahlen selbst nach.",
     "Verwende korrektes Deutsch mit Umlauten und Unicode-Formelzeichen, kein LaTeX.",
     "Gib ausschließlich valides JSON zurück. Keine Markdown-Umrandung, keine Erklärung außerhalb des JSON."
   ].join(" ");
@@ -267,28 +268,26 @@ function liveQuestionUserPrompt(input: {
 }) {
   return [
     `Vorlesung: ${input.lecture.seriesTitle} / ${input.lecture.title}`,
-    `Aktuelle Folie: ${input.slide.title}`,
-    "Folieninhalt:",
-    ...input.slide.lines.map((line) => `- ${compact(line, 400)}`),
-    "Transkript der letzten Minuten (wörtlich, automatisch erkannt, kann Hör- und Erkennungsfehler enthalten):",
+    "GRUNDLAGE – Transkript der letzten Minuten (automatisch erkannt, kann Erkennungsfehler enthalten):",
     compact(input.transcript, 3200),
-    input.existingQuestionTexts.length > 0 ? "Bereits gestellte Fragen zu dieser Folie (nicht wiederholen, anderes Thema oder anderer Aspekt):" : "",
+    `KONTEXT – aktuelle Folie „${input.slide.title}“ (nur verwenden, soweit sie zum Transkript passt):`,
+    ...input.slide.lines.map((line) => `- ${compact(line, 300)}`),
+    input.existingQuestionTexts.length > 0 ? "Bereits gestellte Fragen zu dieser Folie (nicht wiederholen, anderen Aspekt wählen):" : "",
     ...input.existingQuestionTexts.slice(0, 12).map((text) => `- ${compact(text, 200)}`),
-    "Schwierigkeitsstufen (alle vier zum SELBEN Thema):",
-    "4.0 Wiedergeben: zentraler Begriff oder Aussage.",
-    "3.0 Verstehen: Zusammenhang erklären.",
-    "2.0 Anwenden: konkreter Fall, Zahl oder Formel.",
-    "1.0 Übertragen oder Bewerten: neue technische Situation oder Fehlvorstellung beurteilen.",
-    "Anforderung:",
-    "Genau vier Varianten, je eine pro Niveau 4.0, 3.0, 2.0, 1.0, alle zum selben Thema aus dem Transkript.",
+    "Vorgehen:",
+    "1. Wähle EINE Kernaussage, die im Transkript ausdrücklich vorkommt, und formuliere sie als \"coreStatement\" (ein Satz).",
+    "2. Erzeuge vier Varianten, die ALLE diese Kernaussage prüfen – nur die Schwierigkeit steigt:",
+    "4.0 Wiedergeben: die Kernaussage oder ihren zentralen Begriff erkennen.",
+    "3.0 Verstehen: erklären, warum die Kernaussage gilt oder wie ihre Teile zusammenhängen.",
+    "2.0 Anwenden: die Kernaussage auf einen konkreten Fall, eine Zahl oder Formel anwenden.",
+    "1.0 Übertragen oder Bewerten: die Kernaussage auf eine neue technische Situation übertragen oder eine Fehlvorstellung dazu beurteilen.",
     "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier Antworten, genau eine korrekt, Erklärung höchstens 480 Zeichen.",
-    "Ablenker sind typische Fehlvorstellungen zum selben Thema: fachlich plausibel für Studierende, die das Thema nicht sicher beherrschen, in gleicher Form und ähnlicher Länge wie die richtige Antwort. Keine offensichtlich absurden Aussagen.",
+    "Ablenker sind typische Fehlvorstellungen zur Kernaussage: fachlich plausibel für Studierende, die sie nicht sicher beherrschen, in gleicher Form und ähnlicher Länge wie die richtige Antwort. Keine offensichtlich absurden Aussagen.",
     "Jede Antwort ist ein vollständiger, grammatisch korrekter Ausdruck oder Satz. Die richtige Antwort ist nicht auffällig länger oder genauer formuliert als die Ablenker.",
     "Die Erklärung sagt, warum die richtige Antwort stimmt, und benennt die Fehlvorstellung des stärksten Ablenkers.",
     "Keine Antworten wie „alle/keine der genannten“, keine verneinten Fragestellungen.",
-    "Zusätzlich ein Feld \"topic\" mit 2 bis 5 Wörtern.",
     "JSON-Schema:",
-    "{\"topic\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}"
+    "{\"topic\":\"2 bis 5 Wörter\",\"coreStatement\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}"
   ].filter(Boolean).join("\n");
 }
 
