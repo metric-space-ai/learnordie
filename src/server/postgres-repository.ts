@@ -2437,7 +2437,8 @@ export class PostgresLectureRepository implements LectureRepository {
       id: row.lecture.id,
       publicToken: row.lecture.publicToken,
       title: row.lecture.title,
-      seriesId: row.lecture.seriesId ?? undefined,
+      // An orphaned PG record must not fall back to another tenant's title slug.
+      seriesId: row.lecture.seriesId ?? "",
       seriesTitle: row.series?.title ?? "Maschinenelemente I",
       language: "de",
       status: coerceLectureStatus(row.lecture.status),
