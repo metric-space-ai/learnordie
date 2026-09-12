@@ -190,7 +190,7 @@ test("Material extraction, question generation and HTML formula/table editing re
   expect(processed.slideDocument.slides[0].canvas).toEqual(before.slideDocument.slides[0].canvas);
   await page.getByLabel("Quellen schließen", { exact: true }).click();
   await openStudioTool(page, "Fragen");
-  await expect(page.getByLabel("Fragen direkt an der Folie", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Fragen direkt auf der Folie", { exact: true })).toBeVisible();
   await expect(page.locator(".review-live-title")).not.toBeEmpty();
   await page.getByLabel("Fragen schließen", { exact: true }).click();
 
