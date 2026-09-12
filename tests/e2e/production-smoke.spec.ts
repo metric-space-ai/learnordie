@@ -50,7 +50,7 @@ async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quelle
 
 async function requestMagicLink(page: Page, email = "e2e@example.test") {
   await page.goto("/lecturer/login");
-  await page.getByLabel("E-Mail").fill(email);
+  await page.getByLabel("E-Mail", { exact: true }).fill(email);
   await page.getByRole("button", { name: "Code senden" }).click();
   const href = await page.getByRole("link", { name: "Direkt zum Dozentenbereich" }).getAttribute("href");
   if (!href) throw new Error("Magic link was not rendered in local mail mode.");

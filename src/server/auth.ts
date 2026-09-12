@@ -428,11 +428,11 @@ export async function loginTestAccount(email: string, password: string) {
   if (!accounts.length) return null;
   // All password attempts for an account share the same persistent limit across
   // serverless instances. Unknown accounts return the same authentication error.
-  const hash = bucketHash(`test-login:attempts:${cleanEmail}`);
+  const account = accounts.find((entry) => entry.email === cleanEmail);
+  const hash = bucketHash(`test-login:attempts:${account?.email ?? "unknown"}`);
   if (canPersistMagicTokens()) await evaluateStoredMagicLinkBucket(hash);
   else if (isProductionDeployment()) throw new Error("Database required for test-login rate limits");
   else evaluateDevMagicLinkBucket(hash);
-  const account = accounts.find((entry) => entry.email === cleanEmail);
   if (!await verifyTestAccountPassword(account, password) || !account) return null;
   if (canPersistMagicTokens()) {
     await getDb().insert(users).values({ email: cleanEmail, role: "lecturer" })

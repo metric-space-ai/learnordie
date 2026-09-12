@@ -25,7 +25,7 @@ const LECTURER_EMAIL = process.env.LOCAL_E2E_LECTURER_EMAIL ?? "referent@example
 
 async function loginLecturerAndSetCode(page: Page, code: string) {
   await page.goto("/lecturer/login");
-  await page.getByLabel("E-Mail").fill(LECTURER_EMAIL);
+  await page.getByLabel("E-Mail", { exact: true }).fill(LECTURER_EMAIL);
   await page.getByRole("button", { name: "Code senden" }).click();
   const link = page.getByRole("link", { name: "Direkt zum Dozentenbereich" });
   await expect(link).toBeVisible();
