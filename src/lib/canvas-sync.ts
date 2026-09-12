@@ -6,6 +6,7 @@ export function canvasFingerprint(value: unknown): string {
     if (!item || typeof item !== "object" || Array.isArray(item)) return item;
     return Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]]));
   });
+}
 export function isCanvasGestureActive(state: Record<string, unknown>): boolean {
   return state.cursorButton === "down" || Boolean(state.newElement || state.editingTextElement || state.resizingElement || state.isResizing || state.isRotating);
 }
