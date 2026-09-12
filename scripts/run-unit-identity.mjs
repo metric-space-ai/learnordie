@@ -14,6 +14,7 @@ const child = spawn(
     "--test-concurrency=2",
     "src/lib/student-pseudonym.test.ts",
     "src/lib/canvas-sync.test.ts",
+    "src/components/theme/theme-store.test.mjs",
     "src/server/model-demo.test.ts",
     "src/server/student-claims.test.ts",
     "src/server/test-accounts.test.ts",
