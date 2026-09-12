@@ -203,7 +203,8 @@ html[data-theme="dark"] .native-workspace {
 .native-canvas-edit .excalidraw .FixedSideContainer_side_top { top: -84px; left: 4px; right: 4px; bottom: 4px; }
 .native-canvas-edit .excalidraw .App-toolbar { box-shadow: none; }
 .native-canvas-edit .excalidraw .App-menu_top { grid-gap: 4px; }
-.native-canvas-edit .excalidraw .App-menu_top__left > .Island { margin-top: 44px; max-height: calc(100% - 88px); }
+.native-canvas-edit .excalidraw .App-menu_top__left .selected-shape-actions { margin-top: 28px; }
+.native-canvas-edit .excalidraw .selected-shape-actions .Island { max-height: calc(100dvh - 148px); }
 .native-canvas-edit .excalidraw .App-menu_bottom { top: -40px; bottom: auto; left: 148px; right: 4px; width: auto; height: 36px; padding: 0; }
 .native-canvas-edit .excalidraw .App-bottom-bar { inset: -40px 4px auto 148px; height: 36px; padding: 0; margin: 0 !important; align-items: flex-start; }
 .native-canvas-edit .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; min-width: 0; max-height: calc(100dvh - 100px); box-shadow: none; }
