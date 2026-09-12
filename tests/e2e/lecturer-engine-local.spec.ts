@@ -74,7 +74,9 @@ async function readLecture(page: Page, id: string) {
 async function save(page: Page, id: string) {
   const saved = page.waitForResponse((response) => new URL(response.url()).pathname === `/api/lectures/${id}` && response.request().method() === "PATCH");
   await page.locator(".studio-save-inline").click();
-  expect((await saved).ok()).toBe(true);
+  const response = await saved;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).not.toHaveProperty("slides");
   await expect(page.locator(".studio-save-status")).toHaveText("Gespeichert");
   return readLecture(page, id);
 }
@@ -97,7 +99,8 @@ async function addNativeText(page: Page, text: string) {
 test("Native Studio preserves canonical text and quiz anchors through preview and metadata saves", async ({ page }) => {
   const clean = diagnostics(page);
   const { lecture, csrf } = await fixture(page);
-  const note = `Canvas bleibt maßgeblich ${randomUUID().slice(0, 8)}`;
+  const note = `Canvas bleibt maßgeblich ${randomUUID().slice(0, 8)}: ${"Ausführliche native Erklärung zur Mischreibung. ".repeat(8)}`;
+  expect(note.length).toBeGreaterThan(240);
   await addNativeText(page, note);
   const firstSave = await save(page, lecture.id);
   const scene = firstSave.slideDocument.slides[0].canvas;

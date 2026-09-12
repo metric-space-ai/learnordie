@@ -100,7 +100,9 @@ async function save(page: Page, lecture: FixtureLecture) {
     new URL(response.url()).pathname === `/api/lectures/${lecture.id}` && response.request().method() === "PATCH"
   );
   await page.locator(".studio-save-inline").click();
-  expect((await saved).ok()).toBe(true);
+  const response = await saved;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).not.toHaveProperty("slides");
   await expect(page.locator(".studio-save-status")).toHaveText("Gespeichert");
   return savedLecture(page, lecture.id);
 }

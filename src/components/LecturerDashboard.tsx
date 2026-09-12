@@ -41,6 +41,8 @@ import type {
 import type { SlideDocument } from "@learnordie/slide-engine";
 import type { FormEvent, KeyboardEvent } from "react";
 
+const MAX_LECTURE_EDIT_BYTES = 4 * 1024 * 1024;
+
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
   { value: "draft", label: "Entwurf" },
   { value: "material_processing", label: "Material wird verarbeitet" },
@@ -907,10 +909,22 @@ export function LecturerDashboard({
     const draft = visibleStageEditDraft(edit);
     setEdit(draft);
     try {
+      const body = JSON.stringify({
+        ...draft,
+        // The server derives legacy text from the authoritative document. Its
+        // projection may be empty/long and must not pass through legacy limits.
+        slides: draft.slideDocument ? undefined : draft.slides,
+        liveAt: localDateTimeToIso(draft.liveAt)
+      });
+      if (new TextEncoder().encode(body).byteLength > MAX_LECTURE_EDIT_BYTES) {
+        setEditError("Die Folien sind zu groß zum Speichern (maximal 4 MiB). Bitte Bilder verkleinern oder Inhalte aufteilen. Der Entwurf bleibt erhalten.");
+        setSaveStatus("error");
+        return;
+      }
       const response = await fetch(`/api/lectures/${selected.id}`, {
         method: "PATCH",
         headers: csrfJsonHeaders,
-        body: JSON.stringify({ ...draft, liveAt: localDateTimeToIso(draft.liveAt) })
+        body
       });
       const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
       if (!response.ok || !payload.lectures) {
@@ -2644,7 +2658,7 @@ export function LecturerDashboard({
                     ▶ Präsentieren
                   </a>
                 )}
-                {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
+                {editError && <p role="alert" className="form-error deck-error">{editError}</p>}
               </div>
             )}
 
