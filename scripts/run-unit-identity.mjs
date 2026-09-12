@@ -16,7 +16,8 @@ const child = spawn(
     "src/server/student-claims.test.ts",
     "src/server/test-accounts.test.ts",
     "src/server/request-json.test.ts",
-    "packages/slide-engine/src/excalidraw/scene.test.ts"
+    "packages/slide-engine/src/excalidraw/scene.test.ts",
+    "tests/unit/excalidraw-runtime.test.mjs"
   ],
   { stdio: "inherit", cwd: root }
 );

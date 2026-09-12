@@ -90,7 +90,10 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
           const serialized = JSON.stringify(next);
           if (serialized === lastScene.current) return;
           lastScene.current = serialized;
-          callbacks.current.onChange?.(next);
+          // The native runtime includes optional fields with value undefined.
+          // Normalize to the same JSON boundary used by the save API before
+          // schema validation; undefined is not a persisted element value.
+          callbacks.current.onChange?.(JSON.parse(serialized) as CanvasScene);
         }
       });
       resize = new ResizeObserver(fit);
