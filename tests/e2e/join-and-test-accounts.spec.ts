@@ -105,7 +105,7 @@ test("three fresh student contexts enter by link, persist identity and enforce u
 });
 
 test("test login rejects cross-site requests and serializes concurrent password limits", async ({ request }) => {
-  test.info().annotations.push({ type: "retry", description: "A retry uses a separate unknown-account bucket; rate-limit assertions remain exact." });
+  test.info().annotations.push({ type: "retry", description: "A retry uses a separate fixture account bucket; rate-limit assertions remain exact." });
   const email = test.info().retry ? "qa-rate-retry@learnordie.test" : "qa-rate@learnordie.test";
   const rejected = await request.post("/api/auth/test-login", {
     headers: { origin: "https://untrusted.example", "sec-fetch-site": "cross-site" },

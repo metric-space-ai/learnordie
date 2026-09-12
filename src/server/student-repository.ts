@@ -1082,7 +1082,7 @@ class PostgresStudentRepository implements StudentRepository {
     const seriesUuid = seriesRow.id;
     const seriesTitle = seriesRow.title;
     if (target.lectureId) {
-      if (!isUuid(target.lectureId)) return null;
+      if (!UUID_PATTERN.test(target.lectureId)) return null;
       const [lecture] = await this.db.select({ id: lecturesTable.id }).from(lecturesTable)
         .where(and(eq(lecturesTable.id, target.lectureId), eq(lecturesTable.seriesId, seriesUuid))).limit(1);
       if (!lecture) return null;
