@@ -1,347 +1,216 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 
-function attachDiagnostics(page: Page) {
-  const problems: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().includes("Failed to load resource")) {
-      problems.push(`console:${message.text()}`);
-    }
-  });
-  page.on("pageerror", (error) => problems.push(`pageerror:${error.message}`));
-  page.on("response", (response) => {
-    if (response.status() >= 500) problems.push(`response:${response.status()} ${response.url()}`);
-  });
-  return () => expect(problems, problems.join("\n")).toEqual([]);
-}
-
-async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen" | "Auswertung" | "Evaluation") {
-  await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
-  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: new RegExp(`^${name}`) }).click();
-}
-
-async function loginLecturer(page: Page) {
-  const email = `engine-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
-  await page.goto("/lecturer/login");
-  await page.getByLabel("E-Mail", { exact: true }).fill(email);
-  await page.getByRole("button", { name: "Code senden" }).click();
-  const link = page.getByRole("link", { name: "Direkt zum Dozentenbereich" });
-  await expect(link).toBeVisible();
-  const href = await link.getAttribute("href");
-  if (!href) throw new Error("Magic link was not rendered in local mail mode.");
-  await page.goto(href);
-  await expect(page).toHaveURL(/\/lecturer$/);
-
-  const titleInput = page.getByRole("textbox", { name: "Folientitel" });
-  if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
-    const csrfToken = await page.locator("[data-csrf-token]").first().getAttribute("data-csrf-token");
-    if (!csrfToken) throw new Error("Lecturer CSRF token missing during isolated lecture setup.");
-    const createResponse = await page.request.post("/api/lectures", {
-      headers: { "x-learnbuddy-csrf": csrfToken },
-      data: {
-        title: "Gleitlagerung",
-        seriesTitle: "Maschinenelemente I",
-        liveAt: "2026-06-19T11:00",
-        examDate: "2027-07-23"
-      }
-    });
-    expect(createResponse.ok()).toBe(true);
-    await page.reload();
-  }
-
-  await expect(titleInput).toBeVisible();
-}
-
-async function clickVisibleEditorBlock(locator: Locator) {
-  await locator.click({ position: { x: 12, y: 12 } });
-}
-
-test("Dozentenstudio speichert SlideDocument-Engine-Edits in der Lecture", async ({ page }) => {
-  const assertClean = attachDiagnostics(page);
-  const replacementText = `Engine-Editor speichert einen echten Folientext ${Date.now()}.`;
-
-  await loginLecturer(page);
-  await expect(page.getByRole("textbox", { name: "Folientitel" })).toBeVisible();
-
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  await expect(page.locator('[data-studio-engine-editor="true"]')).toBeVisible();
-  await clickVisibleEditorBlock(page.locator('[data-studio-engine-editor="true"] [data-editor-block-type="paragraph"]').first());
-  await page.getByLabel("Engine Folientext").fill(replacementText);
-  await page.getByRole("button", { name: "Übernehmen" }).click();
-  await expect(page.getByText("Text geändert. Mit „Speichern“ sichern.")).toBeVisible();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(replacementText);
-
-  const saveResponsePromise = page.waitForResponse((response) => (
-    response.url().includes("/api/lectures/") &&
-    response.request().method() === "PATCH"
-  ));
-  await page.locator(".studio-save-inline").click();
-  const saveResponse = await saveResponsePromise;
-  expect(saveResponse.ok()).toBe(true);
-  const savePayload = await saveResponse.json() as {
-    lectures?: Array<{
-      title: string;
-      slideDocument?: {
-        slides?: Array<{
-          blocks?: Array<{ type?: string; text?: string }>;
-        }>;
-      };
+// Native text/double-click, HTML sandbox and WebGL user stories are covered in
+// excalidraw-editor.spec.ts. These complementary stories retain the actual
+// material, AI and document-metadata workflows around the new primary editor.
+type LectureApi = {
+  id: string;
+  title: string;
+  slideDocument: {
+    slides: Array<{
+      id: string;
+      blocks: Array<{ id: string; type: string }>;
+      canvas?: { elements: Array<{ id: string; type: string; text?: string; isDeleted?: boolean }> };
+      quizAnchors?: Array<{ id: string; level: string; blockId: string; label?: string }>;
     }>;
+    assets: Array<{ id: string; title: string }>;
   };
-  const savedLecture = savePayload.lectures?.find((lecture) => lecture.title === "Gleitlagerung");
-  expect(savedLecture?.slideDocument?.slides?.[0]?.blocks?.some((block) => (
-    block.type === "paragraph" && block.text === replacementText
-  ))).toBe(true);
-
-  await page.reload();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(replacementText);
-  assertClean();
-});
-
-test("Dozentenstudio startet Pi-Agent-Thread und übernimmt Review-Diff", async ({ page }) => {
-  const assertClean = attachDiagnostics(page);
-  const agentInstruction = `Mischreibung präziser einordnen ${Date.now()}`;
-
-  await loginLecturer(page);
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  const editor = page.locator('[data-studio-engine-editor="true"]');
-  await expect(editor).toBeVisible();
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="paragraph"]').first());
-
-  const preview = editor.locator(".studio-engine-editor-preview");
-  await preview.click({ button: "right", position: { x: 96, y: 84 } });
-  await expect(page.getByRole("dialog", { name: "Mit KI bearbeiten" })).toBeVisible();
-  await page.getByLabel("Was soll die KI ändern?").fill(agentInstruction);
-
-  const threadResponsePromise = page.waitForResponse((response) => (
-    response.url().includes("/api/lectures/") &&
-    response.url().includes("/agent-threads") &&
-    response.request().method() === "POST"
-  ));
-  await page.getByRole("button", { name: "Vorschlag holen" }).click();
-  const threadResponse = await threadResponsePromise;
-  expect(threadResponse.ok()).toBe(true);
-  const agentDialog = page.getByRole("dialog", { name: "Mit KI bearbeiten" });
-  await expect(agentDialog.getByText("Vorschlag", { exact: true })).toBeVisible();
-
-  const acceptResponsePromise = page.waitForResponse((response) => (
-    response.url().includes("/agent-threads/") &&
-    response.url().includes("/accept") &&
-    response.request().method() === "POST"
-  ));
-  await page.getByRole("button", { name: "Änderung übernehmen" }).click();
-  const acceptResponse = await acceptResponsePromise;
-  expect(acceptResponse.ok()).toBe(true);
-  await expect(page.getByText("KI-Vorschlag übernommen.")).toBeVisible();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(agentInstruction);
-
-  await page.reload();
-  await expect(page.locator('[data-slide-copy-index="0"]')).toContainText(agentInstruction);
-  assertClean();
-});
-
-test("Dozentenstudio editiert native SlideDocument-Layouts, Assets, Formeln, Tabellen und Quizanker", async ({ page }) => {
-  const assertClean = attachDiagnostics(page);
-  const runId = Date.now();
-  const formulaLatex = `S_${runId} = \\frac{\\eta \\cdot n}{p}`;
-  const tableCell = `Mischreibung ${runId}`;
-  const libraryNote = `Stribeck-Diagramm ${runId}: Diagramm der Stribeck-Kurve mit Mischreibung, hydrodynamischer Gleitlagerung und Sommerfeldzahl.`;
-
-  await loginLecturer(page);
-  const csrfToken = await page.locator("[data-csrf-token]").first().getAttribute("data-csrf-token");
-  if (!csrfToken) throw new Error("Lecturer CSRF token missing.");
-
-  const lecturesResponse = await page.request.get("/api/lectures");
-  expect(lecturesResponse.ok()).toBe(true);
-  const lecturesPayload = await lecturesResponse.json() as { lectures?: Array<LectureApiShape> };
-  const lecture = lecturesPayload.lectures?.find((item) => item.title === "Gleitlagerung");
-  if (!lecture?.slideDocument) throw new Error("Demo lecture is missing slideDocument.");
-
-  const injectedDocument = withNativeEditorBlocks(lecture.slideDocument, runId);
-  const patchResponse = await page.request.patch(`/api/lectures/${lecture.id}`, {
-    headers: { "x-learnbuddy-csrf": csrfToken },
-    data: { slideDocument: injectedDocument }
-  });
-  expect(patchResponse.ok()).toBe(true);
-
-  const materialResponse = await page.request.post(`/api/lectures/${lecture.id}/materials`, {
-    headers: { "x-learnbuddy-csrf": csrfToken },
-    multipart: { notes: libraryNote }
-  });
-  expect(materialResponse.status()).toBe(201);
-  const processingResponse = await page.request.post(`/api/lectures/${lecture.id}/process-materials`, {
-    headers: { "x-learnbuddy-csrf": csrfToken }
-  });
-  expect(processingResponse.ok()).toBe(true);
-  const libraryResponse = await page.request.get("/api/lectures");
-  expect(libraryResponse.ok()).toBe(true);
-  const libraryPayload = await libraryResponse.json() as { lectures?: Array<LectureApiShape> };
-  const libraryLecture = libraryPayload.lectures?.find((item) => item.id === lecture.id);
-  const libraryAsset = libraryLecture?.presentationAssets?.find((asset) => asset.kind === "diagram" && asset.extractedText?.includes(`Stribeck-Diagramm ${runId}`));
-  if (!libraryAsset) throw new Error("Processed presentation diagram asset was not returned by /api/lectures.");
-
-  await page.reload();
-  await openStudioTool(page, "Quellen");
-  await expect(page.getByLabel("Erkannte Inhalte")).toContainText("Diagramm");
-  await expect(page.getByLabel("Erkannte Inhalte")).toContainText("Prüfen");
-  await page.getByLabel("Quellen schließen").click();
-
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  const editor = page.locator('[data-studio-engine-editor="true"]');
-  await expect(editor).toBeVisible();
-
-  await page.getByLabel("Engine Layout").selectOption("technical_two_column");
-  await expect(page.getByText("Layout geändert. Mit „Speichern“ sichern.")).toBeVisible();
-
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="figure"]').first());
-  await page.getByLabel("Engine Asset").selectOption(libraryAsset.id);
-  await expect(page.getByText("Grafik geändert. Mit „Speichern“ sichern.")).toBeVisible();
-
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-formula-test"]'));
-  await page.getByLabel("Engine Formel").fill(formulaLatex);
-  await page.getByRole("button", { name: "Übernehmen" }).click();
-  await expect(page.getByText("Text geändert. Mit „Speichern“ sichern.")).toBeVisible();
-
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-table-test"]'));
-  await page.getByLabel("Engine Tabellenzeile").selectOption("0");
-  await page.getByLabel("Engine Tabellenspalte").selectOption("1");
-  await page.getByLabel("Engine Tabellenzelle").fill(tableCell);
-  await page.getByRole("button", { name: "Zelle speichern" }).click();
-  await expect(page.getByText("Zelle geändert. Mit „Speichern“ sichern.")).toBeVisible();
-
-  await page.getByLabel("Engine Quizanker Niveau").selectOption("1.0");
-  await page.getByRole("button", { name: "Quizpunkt setzen" }).click();
-  await expect(page.getByText("Quizpunkt gesetzt. Mit „Speichern“ sichern.")).toBeVisible();
-
-  const saveResponsePromise = page.waitForResponse((response) => (
-    response.url().includes("/api/lectures/") &&
-    response.request().method() === "PATCH"
-  ));
-  await page.locator(".studio-save-inline").click();
-  const saveResponse = await saveResponsePromise;
-  expect(saveResponse.ok()).toBe(true);
-  const savePayload = await saveResponse.json() as { lectures?: Array<LectureApiShape> };
-  const savedLecture = savePayload.lectures?.find((item) => item.title === "Gleitlagerung");
-  const savedSlide = savedLecture?.slideDocument?.slides?.[0];
-  expect(savedSlide?.layout).toBe("technical_two_column");
-  expect(savedSlide?.blocks?.find((block) => block.id === "product-formula-test")).toMatchObject({
-    type: "formula",
-    latex: formulaLatex
-  });
-  expect(savedSlide?.blocks?.find((block) => block.id === "product-table-test")).toMatchObject({
-    type: "table",
-    rows: expect.arrayContaining([
-      expect.arrayContaining([tableCell])
-    ])
-  });
-  expect(savedSlide?.blocks?.find((block) => block.type === "figure")).toMatchObject({
-    assetId: libraryAsset.id
-  });
-  expect(savedLecture?.slideDocument?.assets).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      id: libraryAsset.id,
-      kind: "diagram",
-      title: libraryAsset.title,
-      quality: expect.objectContaining({ needsReview: true })
-    })
-  ]));
-  expect(savedSlide?.quizAnchors).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      blockId: "product-table-test",
-      level: "1.0"
-    })
-  ]));
-
-  await page.reload();
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  await expect(page.getByLabel("Engine Layout")).toHaveValue("technical_two_column");
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-type="figure"]').first());
-  await expect(page.getByLabel("Engine Asset")).toHaveValue(libraryAsset.id);
-  await clickVisibleEditorBlock(editor.locator('[data-editor-block-id="product-formula-test"]'));
-  await expect(page.getByLabel("Engine Formel")).toHaveValue(formulaLatex);
-  assertClean();
-});
-
-type LectureApiShape = {
-  id: string;
-  title: string;
-  slideDocument?: SlideDocumentApiShape;
-  presentationAssets?: Array<{
-    id: string;
-    kind: string;
-    title: string;
-    extractedText?: string;
-  }>;
+  presentationAssets?: Array<{ id: string; kind: string; extractedText?: string }>;
+  questionReviews?: Array<{ id: string }>;
 };
 
-type SlideDocumentApiShape = {
-  schemaVersion: string;
-  id: string;
-  title: string;
-  language: string;
-  aspect: string;
-  theme: string;
-  deckSettings: Record<string, unknown>;
-  slides: Array<{
-    id: string;
-    title: string;
-    layout: string;
-    intent: string;
-    blocks: Array<Record<string, unknown> & { id: string; type: string }>;
-    quizAnchors?: Array<Record<string, unknown>>;
-    sourceRefs: Array<Record<string, unknown>>;
-  }>;
-  assets: Array<Record<string, unknown> & { id: string; kind: string; title: string }>;
-  createdBy: Record<string, unknown>;
-};
-
-function withNativeEditorBlocks(document: SlideDocumentApiShape, runId: number): SlideDocumentApiShape {
-  const next = JSON.parse(JSON.stringify(document)) as SlideDocumentApiShape;
-  const firstSlide = next.slides[0];
-  if (!firstSlide) throw new Error("SlideDocument has no first slide.");
-  firstSlide.layout = "technical_one_column";
-  firstSlide.blocks = firstSlide.blocks.filter((block) => (
-    block.id !== "product-formula-test" &&
-    block.id !== "product-table-test"
-  ));
-  firstSlide.blocks.push(
-    {
-      id: "product-formula-test",
-      type: "formula",
-      latex: "S = eta * n / p",
-      caption: "Sommerfeldzahl als dimensionslose Kenngröße"
-    },
-    {
-      id: "product-table-test",
-      type: "table",
-      caption: "Reibzustände im Überblick",
-      columns: ["Betriebspunkt", "Reibzustand"],
-      rows: [
-        ["Anlauf", "Mischreibung"],
-        ["Auslegung", "Flüssigkeitsreibung"]
-      ],
-      mobileStrategy: "cards"
-    }
-  );
-  firstSlide.quizAnchors = (firstSlide.quizAnchors ?? []).filter((anchor) => (
-    anchor.blockId !== "product-table-test"
-  ));
-
-  next.assets = next.assets.filter((asset) => asset.id !== "asset-product-bearing-detail");
-  next.assets.push({
-    id: "asset-product-bearing-detail",
-    kind: "diagram",
-    title: "Schmierfilm-Detail",
-    url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
-  <rect width="640" height="360" rx="30" fill="#edf6f8"/>
-  <path d="M92 250c78-95 171-97 276-20 66 49 119 39 178-76" fill="none" stroke="#2b82ad" stroke-width="18" stroke-linecap="round"/>
-  <path d="M160 190c82 70 201 55 270-62" fill="none" stroke="#c28516" stroke-width="22" stroke-linecap="round"/>
-  <circle cx="305" cy="160" r="74" fill="#f8fbfc" stroke="#36515c" stroke-width="12"/>
-  <text x="84" y="70" fill="#001926" font-family="Arial" font-size="34" font-weight="700">Schmierfilm ${runId}</text>
-</svg>
-`)}`,
-    altText: "Abstrahierte Detailgrafik eines Schmierfilms im Gleitlager.",
-    quality: { needsReview: false }
-  });
-  return next;
+function diagnostics(page: Page) {
+  const problems: string[] = [];
+  page.on("pageerror", (error) => problems.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") problems.push(message.text()); });
+  page.on("response", (response) => { if (response.status() >= 500) problems.push(`${response.status()} ${response.url()}`); });
+  return () => expect(problems).toEqual([]);
 }
+
+async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen") {
+  await page.getByRole("button", { name: "Folienwerkzeuge öffnen", exact: true }).click();
+  await page.getByLabel("Folienwerkzeuge", { exact: true }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
+}
+
+async function fixture(page: Page) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const nonce = randomUUID().slice(0, 8);
+  await page.goto("/lecturer/login");
+  await page.getByLabel("E-Mail", { exact: true }).fill(`native-studio-${nonce}@example.test`);
+  await page.getByRole("button", { name: "Code senden", exact: true }).click();
+  const link = page.getByRole("link", { name: "Direkt zum Dozentenbereich", exact: true });
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(/\/lecturer$/);
+  await page.reload();
+  await expect(page).toHaveURL(/\/lecturer$/);
+  const form = page.locator(".new-lecture-composer");
+  await expect(form).toBeVisible();
+  await form.getByLabel("Titel", { exact: true }).fill(`Native Studio ${nonce}`);
+  await form.getByLabel("Vorlesungsreihe", { exact: true }).fill(`Gleitlagerung ${nonce}`);
+  await form.getByLabel("Termin", { exact: true }).fill("2030-10-01T10:00");
+  await form.getByLabel("Prüfung", { exact: true }).fill("2030-12-01");
+  const creation = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/lectures" && response.request().method() === "POST");
+  await form.getByRole("button", { name: "Anlegen", exact: true }).click();
+  const response = await creation;
+  expect(response.status()).toBe(201);
+  const { lecture } = await response.json() as { lecture: LectureApi };
+  await expect(page.getByLabel("Excalidraw-Folieneditor", { exact: true })).toHaveAttribute("data-canvas-ready", "true");
+  const csrf = await page.locator("[data-csrf-token]").getAttribute("data-csrf-token");
+  expect(csrf).toBeTruthy();
+  return { lecture, csrf: csrf! };
+}
+
+async function readLecture(page: Page, id: string) {
+  const response = await page.request.get("/api/lectures");
+  expect(response.ok()).toBe(true);
+  const { lectures } = await response.json() as { lectures: LectureApi[] };
+  const lecture = lectures.find((item) => item.id === id);
+  expect(lecture).toBeTruthy();
+  return lecture!;
+}
+
+async function save(page: Page, id: string) {
+  const saved = page.waitForResponse((response) => new URL(response.url()).pathname === `/api/lectures/${id}` && response.request().method() === "PATCH");
+  await page.locator(".studio-save-inline").click();
+  const response = await saved;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).not.toHaveProperty("slides");
+  await expect(page.locator(".studio-save-status")).toHaveText("Gespeichert");
+  return readLecture(page, id);
+}
+
+async function addNativeText(page: Page, text: string) {
+  const editor = page.getByLabel("Excalidraw-Folieneditor", { exact: true });
+  await expect(editor).toHaveAttribute("data-canvas-ready", "true");
+  await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "Text", exact: true }).click();
+  const canvas = editor.locator("canvas.interactive");
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await canvas.click({ position: { x: box!.width * 0.3, y: box!.height * 0.72 } });
+  const textarea = page.locator("textarea.excalidraw-wysiwyg");
+  await expect(textarea).toBeVisible();
+  await textarea.fill(text);
+  await textarea.press("Escape");
+  await expect(page.locator(".studio-save-status")).toHaveText("Ungespeichert");
+}
+
+test("Native Studio preserves canonical text and quiz anchors through preview and metadata saves", async ({ page }) => {
+  const clean = diagnostics(page);
+  const { lecture, csrf } = await fixture(page);
+  const note = `Canvas bleibt maßgeblich ${randomUUID().slice(0, 8)}: ${"Ausführliche native Erklärung zur Mischreibung. ".repeat(8)}`;
+  expect(note.length).toBeGreaterThan(240);
+  await addNativeText(page, note);
+  const firstSave = await save(page, lecture.id);
+  const scene = firstSave.slideDocument.slides[0].canvas;
+  expect(scene?.elements).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: note })]));
+
+  // Quiz anchors are document metadata, not replacements for native content.
+  // Establish real persisted metadata through the owner-authenticated API, then
+  // prove a normal dashboard save does not silently discard it or the canvas.
+  const document = structuredClone(firstSave.slideDocument);
+  const slide = document.slides[0];
+  const anchor = { id: `native-anchor-${randomUUID()}`, level: "1.0", blockId: slide.blocks[0].id, label: "Begriffsfrage" };
+  slide.quizAnchors = [...(slide.quizAnchors ?? []), anchor];
+  const metadata = await page.request.patch(`/api/lectures/${lecture.id}`, {
+    headers: { "x-learnbuddy-csrf": csrf }, data: { slideDocument: document }
+  });
+  expect(metadata.ok()).toBe(true);
+  await page.reload();
+  await expect(page.getByLabel("Excalidraw-Folieneditor", { exact: true })).toHaveAttribute("data-canvas-ready", "true");
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await expect(page.getByRole("toolbar", { name: "Folienelemente" })).toHaveCount(0);
+  await expect(page.locator('[data-canvas-engine="excalidraw"]')).toHaveAttribute("data-canvas-ready", "true");
+  const secondSave = await save(page, lecture.id);
+  expect(secondSave.slideDocument.slides[0].canvas).toEqual(scene);
+  expect(secondSave.slideDocument.slides[0].quizAnchors).toContainEqual(anchor);
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await expect(page.getByRole("toolbar", { name: "Folienelemente" })).toBeVisible();
+  clean();
+});
+
+test("Pi block edits fail clearly on a canonical canvas; the surrounding planning assistant still works", async ({ page }) => {
+  test.setTimeout(120_000);
+  const clean = diagnostics(page);
+  const { lecture, csrf } = await fixture(page);
+  await addNativeText(page, "Nicht durch einen alten KI-Blockpatch ersetzen");
+  const before = await save(page, lecture.id);
+
+  // The old context-menu block editor was removed. Exercise its still-existing
+  // real API contract, which must reject obsolete block mutations explicitly.
+  const response = await page.request.post(`/api/lectures/${lecture.id}/agent-threads`, {
+    headers: { "x-learnbuddy-csrf": csrf },
+    data: { mode: "studio_slide_edit", slideId: before.slideDocument.slides[0].id, prompt: "Formuliere den Folientext zur Mischreibung präziser." }
+  });
+  expect(response.ok()).toBe(true);
+  const { thread } = await response.json() as { thread: { status: string; error?: string; reviewPatch?: unknown; messages: Array<{ content: string }> } };
+  expect(thread.status).toBe("failed");
+  expect(JSON.stringify(thread)).toContain("edit.canvas_authoritative");
+  expect(thread.messages.map((message) => message.content).join(" ")).toMatch(/native scene|Excalidraw/i);
+  expect(thread.reviewPatch ?? null).toBeNull();
+  expect((await readLecture(page, lecture.id)).slideDocument).toEqual(before.slideDocument);
+  await page.reload();
+  await expect(page.getByLabel("Excalidraw-Folieneditor", { exact: true })).toHaveAttribute("data-canvas-ready", "true");
+
+  await openStudioTool(page, "Assistent");
+  const assistant = page.getByLabel("Planungsassistent direkt an der Folie", { exact: true });
+  await assistant.getByRole("textbox", { name: "Nachricht an den Planungsassistenten", exact: true }).fill("Erkläre die Mischreibung beim Anlauf und schlage eine Frage zur Gleitlagerung vor.");
+  await assistant.getByRole("button", { name: "Senden", exact: true }).click();
+  await expect(assistant.locator('.assistant-message.assistant[data-ai-provider-used="true"]')).toBeVisible();
+  await expect(assistant.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier/i);
+  await assistant.getByRole("button", { name: /Als Quelle speichern/ }).click();
+  await expect(page.getByLabel("Quellen direkt an der Folie", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Hinterlegte Quellen", { exact: true })).toContainText("Assistent");
+  expect((await readLecture(page, lecture.id)).slideDocument.slides[0].canvas).toEqual(before.slideDocument.slides[0].canvas);
+  await page.reload();
+  await openStudioTool(page, "Assistent");
+  await expect(page.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier/i);
+  clean();
+});
+
+test("Material extraction, question generation and HTML formula/table editing remain usable beside the native canvas", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const clean = diagnostics(page);
+  const { lecture } = await fixture(page);
+  const nonce = randomUUID().slice(0, 8);
+  await addNativeText(page, `Eigene Erklärung ${nonce}`);
+  const before = await save(page, lecture.id);
+  await openStudioTool(page, "Quellen");
+  const sources = page.getByLabel("Quellen direkt an der Folie", { exact: true });
+  await sources.getByRole("button", { name: "Notiz", exact: true }).click();
+  const notes = `Stribeck-Diagramm ${nonce}: Diagramm der Stribeck-Kurve mit Mischreibung, hydrodynamischer Gleitlagerung und Sommerfeldzahl.`;
+  await sources.getByRole("textbox", { name: "Notiz", exact: true }).fill(notes);
+  await sources.getByRole("button", { name: "Notiz hinzufügen", exact: true }).click();
+  await expect(sources.getByText("Quelle hinzugefügt.", { exact: true })).toBeVisible();
+  await sources.getByRole("button", { name: "Fragen aktualisieren", exact: true }).click();
+  await expect(sources.getByLabel("Letzte Materialverarbeitung", { exact: true })).toContainText("Abgeschlossen");
+  await expect(sources.getByLabel("Erkannte Inhalte", { exact: true })).toContainText("Diagramm");
+  await expect(sources.getByLabel("Erkannte Inhalte", { exact: true })).toContainText(nonce);
+  const processed = await readLecture(page, lecture.id);
+  expect(processed.presentationAssets?.some((asset) => asset.kind === "diagram" && asset.extractedText?.includes(nonce))).toBe(true);
+  expect(processed.questionReviews?.length).toBeGreaterThan(0);
+  expect(processed.slideDocument.slides[0].canvas).toEqual(before.slideDocument.slides[0].canvas);
+  await page.getByLabel("Quellen schließen", { exact: true }).click();
+  await openStudioTool(page, "Fragen");
+  await expect(page.getByLabel("Fragen direkt auf der Folie", { exact: true })).toBeVisible();
+  await expect(page.locator(".review-live-title")).not.toBeEmpty();
+  await page.getByLabel("Fragen schließen", { exact: true }).click();
+
+  // Formulas/tables now use native embedded HTML instead of the retired block
+  // inspector; ordinary slide text above was edited with the real Text tool.
+  await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "HTML", exact: true }).click();
+  await page.getByLabel("HTML und CSS", { exact: true }).fill(`<h2>Sommerfeldzahl ${nonce}</h2><p>S = η · n / p</p><table><thead><tr><th>Betriebspunkt</th><th>Reibzustand</th></tr></thead><tbody><tr><td>Anlauf</td><td>Mischreibung ${nonce}</td></tr></tbody></table>`);
+  await page.getByRole("button", { name: "HTML einfügen", exact: true }).click();
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  const embedded = page.frameLocator("iframe.learnordie-canvas-html");
+  await expect(embedded.getByRole("cell", { name: `Mischreibung ${nonce}`, exact: true })).toBeVisible();
+  await expect(embedded.getByText("S = η · n / p", { exact: true })).toBeVisible();
+  await save(page, lecture.id);
+  await page.reload();
+  await expect(page.getByLabel("Excalidraw-Folieneditor", { exact: true })).toHaveAttribute("data-canvas-ready", "true");
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await expect(embedded.getByRole("cell", { name: `Mischreibung ${nonce}`, exact: true })).toBeVisible();
+  await testInfo.attach("native-materials-formula-table-reload", { body: await page.screenshot(), contentType: "image/png" });
+  clean();
+});
