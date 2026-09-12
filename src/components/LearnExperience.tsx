@@ -112,7 +112,8 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       const isTyping =
         event.target instanceof HTMLInputElement ||
         event.target instanceof HTMLTextAreaElement ||
-        event.target instanceof HTMLSelectElement;
+        event.target instanceof HTMLSelectElement ||
+        (event.target instanceof Element && Boolean(event.target.closest("button, a, summary, [contenteditable=true]")));
       if (event.code === "Space" && !isTyping) {
         event.preventDefault();
         setQuestionOrigin("space");
@@ -576,6 +577,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             origin={questionOrigin}
             motionState={motionState}
             mode="learn"
+            peeking={peekingSlide}
             onPeekSlide={() => {
               closeMore();
               setPeekingSlide(true);
@@ -612,7 +614,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         )}
       </Presence>
       {peekingSlide && questionOpen && (
-        <button className="plain-button slide-peek-return island-control" type="button" onClick={() => setPeekingSlide(false)}>
+        <button autoFocus className="plain-button slide-peek-return island-control" type="button" onClick={() => setPeekingSlide(false)}>
           Zurück zur Frage
         </button>
       )}

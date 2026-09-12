@@ -136,3 +136,15 @@ test("postgres unique-violation mapper recognizes 23505", () => {
   assert.equal(isUniqueViolation({ cause: { code: "23505" } }), true);
   assert.equal(isUniqueViolation(new Error("other")), false);
 });
+
+test("legacy backfill preserves a name already claimed by a newer enrollment", () => {
+  const profiles = [profile("older", "Keilspalt"), profile("newer", "Keilspalt")];
+  const rows = [
+    enrollment({ id: "a", studentProfileId: "older" }),
+    enrollment({ id: "b", studentProfileId: "newer", displayName: "Keilspalt", displayNameNormalized: "keilspalt" })
+  ];
+  migrateEnrollmentClaims(profiles, rows);
+  assert.equal(rows[1].displayName, "Keilspalt");
+  assert.notEqual(rows[0].displayNameNormalized, "keilspalt");
+  assert.equal(migrateEnrollmentClaims(profiles, rows), false);
+});

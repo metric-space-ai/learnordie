@@ -62,3 +62,12 @@ test("conflict suggestions drop the rejected name", () => {
   assert.equal(filtered.length, 2);
   assert.ok(!filtered.map(pseudonymKey).includes(pseudonymKey("Keilspalt-Scout")));
 });
+
+test("migration remains unique after more than 99 suffix collisions", () => {
+  const names: string[] = ["Keilspalt"];
+  for (let index = 0; index < 120; index += 1) {
+    const name = migratedDisplayName("Keilspalt", "student_aaa111", names);
+    assert.ok(!names.includes(name));
+    names.push(name);
+  }
+});

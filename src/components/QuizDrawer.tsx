@@ -16,7 +16,9 @@ export function QuizDrawer({
   origin = "control",
   motionState = "open",
   mode = "live",
+  peeking = false,
   onAnswered,
+  onExpired,
   onContinue,
   onPeekSlide
 }: {
@@ -26,7 +28,9 @@ export function QuizDrawer({
   origin?: "control" | "hotspot" | "space";
   motionState?: PresenceState;
   mode?: "live" | "learn";
+  peeking?: boolean;
   onAnswered?: (payload: { level: QuestionLevel; correct: boolean; question: QuestionVariant; selected: string }) => void;
+  onExpired?: () => void;
   onContinue?: () => void;
   onPeekSlide?: () => void;
 }) {
@@ -43,7 +47,7 @@ export function QuizDrawer({
   const drawerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const root = drawerRef.current;
-    if (!root) return;
+    if (!root || peeking) return;
     const focusable = () =>
       Array.from(root.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled])"));
     const first = focusable()[0];
@@ -64,20 +68,21 @@ export function QuizDrawer({
     }
     root.addEventListener("keydown", onKey);
     return () => root.removeEventListener("keydown", onKey);
-  }, [level, revealed]);
+  }, [level, revealed, peeking]);
   useEffect(() => {
-    if (revealed) return;
+    if (revealed && mode === "learn") return;
     const timer = window.setInterval(() => {
-      setSeconds((current) => {
-        if (current <= 1) {
-          expiredRef.current = true;
-          return 0;
-        }
-        return current - 1;
-      });
+      setSeconds((current) => Math.max(0, current - 1));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [revealed]);
+  }, [revealed, mode]);
+
+  useEffect(() => {
+    if (mode === "live" && seconds === 0 && !expiredRef.current) {
+      expiredRef.current = true;
+      onExpired?.();
+    }
+  }, [mode, seconds, onExpired]);
 
   useEffect(() => {
     setLevel(initialLevel);
@@ -106,14 +111,16 @@ export function QuizDrawer({
     : timedOut
       ? mode === "learn"
         ? "Zeit vorbei — Antwort bleibt offen"
-        : "Zeit abgelaufen — keine Punkte, Begründung bleibt sichtbar"
+        : "Zeit abgelaufen"
       : mode === "learn"
         ? "Übungszeit"
-        : "bei 0: keine Punkte, Panel bleibt";
+        : "schließt nach Ablauf";
 
   return (
     <section
       ref={drawerRef}
+      inert={peeking}
+      aria-hidden={peeking || undefined}
       className="question-drawer lb-enter-sheet"
       data-answer-state={revealed ? "answered" : timedOut ? "expired" : "open"}
       data-level={level}
@@ -187,6 +194,7 @@ export function QuizDrawer({
           <div className="question-feedback" role="status">
             <p className="feedback-no">Zeit abgelaufen — keine Punkte</p>
             <p className="question-explanation">Die Frage bleibt offen zum Lesen. Eine verspätete Antwort wird nicht gewertet.</p>
+            {question.explanation && <p className="question-explanation">{question.explanation}</p>}
           </div>
         )}
       </div>

@@ -174,6 +174,9 @@ export function rankingDisplayName(
   if (claim?.status === "active" && claim.displayName) {
     return claim.displayName.slice(0, 40);
   }
+  if (claim?.status === "anonymized" && claim.displayName?.startsWith("Anonym·")) {
+    return claim.displayName.slice(0, 40);
+  }
   return anonymizedDisplayName(claim?.studentProfileId || profileId, []);
 }
 
@@ -190,11 +193,16 @@ export function migrateEnrollmentClaims(profiles: StudentProfile[], enrollments:
 
   for (const list of bySeries.values()) {
     list.sort((left, right) => left.addedAt.localeCompare(right.addedAt) || left.id.localeCompare(right.id));
-    const assigned = new Set<string>();
+    const existingOwners = new Map<string, string>();
+    for (const enrollment of list) {
+      const valid = validateClaimablePseudonym(enrollment.displayName ?? "");
+      if (valid && !existingOwners.has(pseudonymKey(valid))) existingOwners.set(pseudonymKey(valid), enrollment.id);
+    }
+    const assigned = new Set(existingOwners.keys());
     for (const enrollment of list) {
       const current = enrollment.displayName ?? "";
       const valid = validateClaimablePseudonym(current);
-      const keepable = Boolean(valid && !assigned.has(pseudonymKey(valid)));
+      const keepable = Boolean(valid && existingOwners.get(pseudonymKey(valid)) === enrollment.id);
       if (keepable && valid) {
         if (enrollment.displayName !== valid || enrollment.displayNameNormalized !== pseudonymKey(valid)) {
           enrollment.displayName = valid;

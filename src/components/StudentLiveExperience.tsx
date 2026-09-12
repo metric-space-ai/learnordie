@@ -62,7 +62,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       if (
         event.code === "Space" &&
         !(event.target instanceof HTMLInputElement) &&
-        !(event.target instanceof HTMLTextAreaElement)
+        !(event.target instanceof HTMLTextAreaElement) &&
+        !(event.target instanceof Element && event.target.closest("button, a, summary, select, [contenteditable=true]"))
       ) {
         event.preventDefault();
         setQuestionOrigin("space");
@@ -301,6 +302,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
             origin={questionOrigin}
             motionState={motionState}
             mode="live"
+            onExpired={() => setQuestionOpen(false)}
             onAnswered={({ question, correct, selected }) => {
               const selectedAnswer = question.answers.find((answer) => answer.key === selected);
               const correctAnswer = question.answers.find((answer) => answer.correct);

@@ -8,10 +8,11 @@
 // deliberate, human-readable product object and never falls back to demo content.
 
 import crypto from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { normalizeJoinCode, sanitizeJoinCode } from "@/lib/join-code";
 import { QA_MECHANICS_JOIN_CODE, QA_MECHANICS_SERIES_TITLE } from "@/lib/qa-fixture-mechanics";
@@ -116,6 +117,7 @@ function nowIso() {
 }
 
 function preferredName(profile: StudentProfile, fallback?: string) {
+  if (fallback !== undefined && !validateClaimablePseudonym(fallback)) throw new Error("INVALID_PSEUDONYM");
   return validateClaimablePseudonym(fallback ?? "") ?? validateClaimablePseudonym(profile.pseudonym) ?? "Teilnehmer";
 }
 
@@ -262,9 +264,12 @@ async function writeStudentStore(data: LocalStudentData) {
 }
 
 let storeLock: Promise<void> = Promise.resolve();
+const studentStoreContext = new AsyncLocalStorage<boolean>();
 
 function withStudentStoreLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = storeLock.then(fn, fn);
+  if (studentStoreContext.getStore()) return fn();
+  const guarded = () => studentStoreContext.run(true, fn);
+  const run = storeLock.then(guarded, guarded);
   storeLock = run.then(
     () => undefined,
     () => undefined
@@ -292,6 +297,7 @@ async function seedQaJoinCode(store: LocalStudentData): Promise<boolean> {
 }
 
 async function readStudentStoreMigrated(): Promise<LocalStudentData> {
+  return withStudentStoreLock(async () => {
   const store = await readStudentStore();
   const migrated = migrateEnrollmentClaims(store.profiles, store.enrollments);
   const seeded = await seedQaJoinCode(store);
@@ -299,6 +305,7 @@ async function readStudentStoreMigrated(): Promise<LocalStudentData> {
     await writeStudentStore(store);
   }
   return store;
+  });
 }
 
 class LocalStudentRepository implements StudentRepository {
@@ -576,6 +583,7 @@ class LocalStudentRepository implements StudentRepository {
   }
 
   async touchEnrollment(profileId: string, seriesId: string): Promise<void> {
+    return withStudentStoreLock(async () => {
     const store = await readStudentStore();
     const enrollment = store.enrollments.find(
       (item) => item.studentProfileId === profileId && item.seriesId === seriesId && item.status === "active"
@@ -583,6 +591,7 @@ class LocalStudentRepository implements StudentRepository {
     if (!enrollment) return;
     enrollment.lastOpenedAt = nowIso();
     await writeStudentStore(store);
+    });
   }
 
   async listStudentDashboard(profileId: string): Promise<StudentDashboard | null> {
@@ -743,6 +752,15 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 class PostgresStudentRepository implements StudentRepository {
   private readonly db = getDb();
+  private claimsReady?: Promise<void>;
+
+  private ensureClaimsMigrated(): Promise<void> {
+    this.claimsReady ??= this.migrateEnrollmentClaims().catch((error) => {
+      this.claimsReady = undefined;
+      throw error;
+    });
+    return this.claimsReady;
+  }
 
   // The API surface uses the slug (`seriesIdFromTitle`) as the canonical seriesId in
   // BOTH local and Postgres modes. Internally Postgres keys by lecture_series.id (UUID),
@@ -805,10 +823,10 @@ class PostgresStudentRepository implements StudentRepository {
     exceptProfileId?: string,
     extraExclude?: Iterable<string>
   ): Promise<string[]> {
-    await this.migrateEnrollmentClaims();
+    await this.ensureClaimsMigrated();
     const series = await this.resolveSeriesRow(seriesId);
     if (!series) return suggestionsForSeries([], seriesId, count, exceptProfileId, extraExclude);
-    const rows = await this.db.select().from(studentEnrollments).where(eq(studentEnrollments.status, "active"));
+    const rows = await this.db.select().from(studentEnrollments).where(and(eq(studentEnrollments.status, "active"), eq(studentEnrollments.seriesId, series.id)));
     const mapped: StudentEnrollment[] = rows
       .filter((row) => row.seriesId === series.id)
       .map((row) => this.mapEnrollment(row, series.title));
@@ -816,7 +834,7 @@ class PostgresStudentRepository implements StudentRepository {
   }
 
   async getActiveClaim(profileId: string, seriesId: string): Promise<StudentEnrollment | null> {
-    await this.migrateEnrollmentClaims();
+    await this.ensureClaimsMigrated();
     const series = await this.resolveSeriesRow(seriesId);
     if (!series) return null;
     const [row] = await this.db
@@ -840,7 +858,7 @@ class PostgresStudentRepository implements StudentRepository {
   }
 
   async getRankingClaim(anonymousKey: string, seriesId: string): Promise<StudentEnrollment | null> {
-    await this.migrateEnrollmentClaims();
+    await this.ensureClaimsMigrated();
     const profile = await this.getProfileByAnonymousKey(anonymousKey);
     if (!profile) return null;
     const series = await this.resolveSeriesRow(seriesId);
@@ -867,8 +885,9 @@ class PostgresStudentRepository implements StudentRepository {
           displayNameNormalized: enrollment.displayNameNormalized ?? "",
           lastOpenedAt: new Date()
         })
-        .where(eq(studentEnrollments.id, enrollment.id))
+        .where(and(eq(studentEnrollments.id, enrollment.id), eq(studentEnrollments.status, "active")))
         .returning();
+      if (!row) throw new ClaimRequiredError();
       return this.mapEnrollment(row, series?.title ?? enrollment.seriesTitle);
     } catch (error) {
       if (isUniqueViolation(error)) throw new PseudonymTakenError(displayName, seriesId);
@@ -902,24 +921,36 @@ class PostgresStudentRepository implements StudentRepository {
   }
 
   async migrateEnrollmentClaims(): Promise<void> {
-    const rows = await this.db.select().from(studentEnrollments);
-    const profiles = await this.db.select().from(studentProfiles);
-    const seriesRows = await this.db.select().from(lectureSeries);
-    const titleById = new Map(seriesRows.map((row) => [row.id, row.title]));
-    const profileMap = new Map(profiles.map((row) => [row.id, this.mapProfile(row)]));
-    const enrollments = rows.map((row) => this.mapEnrollment(row, titleById.get(row.seriesId ?? "") ?? row.seriesId ?? ""));
-    if (!migrateEnrollmentClaims([...profileMap.values()], enrollments)) return;
-    for (const enrollment of enrollments) {
-      if (!enrollment.displayName || !enrollment.displayNameNormalized) continue;
-      await this.db
-        .update(studentEnrollments)
-        .set({
-          status: enrollment.status,
-          displayName: enrollment.displayName,
-          displayNameNormalized: enrollment.displayNameNormalized
-        })
-        .where(eq(studentEnrollments.id, enrollment.id));
-    }
+    await this.db.transaction(async (tx) => {
+      // A backfill must not overwrite claims/withdrawals made after its snapshot.
+      // This also serializes cold starts across serverless instances.
+      await tx.execute(sql`LOCK TABLE student_enrollments IN SHARE ROW EXCLUSIVE MODE`);
+      const rows = await tx.select().from(studentEnrollments);
+      const profiles = await tx.select().from(studentProfiles);
+      const enrollments = rows.map((row) => ({
+        ...this.mapEnrollment(row, ""), seriesId: row.seriesId ?? ""
+      }));
+      if (!migrateEnrollmentClaims(profiles.map((row) => this.mapProfile(row)), enrollments)) return;
+      const originals = new Map(rows.map((row) => [row.id, row]));
+      const changed = enrollments.filter((entry) => {
+        const before = originals.get(entry.id)!;
+        return before.status !== entry.status || before.displayName !== (entry.displayName ?? "") ||
+          before.displayNameNormalized !== (entry.displayNameNormalized ?? "");
+      });
+      // Release only changed keys before assignment so normalization cannot clash
+      // with an old key scheduled for replacement later in the same transaction.
+      for (const entry of changed) {
+        await tx.update(studentEnrollments).set({ displayNameNormalized: "", status: entry.status })
+          .where(eq(studentEnrollments.id, entry.id));
+      }
+      for (const entry of changed) {
+        await tx.update(studentEnrollments).set({
+          status: entry.status,
+          displayName: entry.displayName ?? "",
+          displayNameNormalized: entry.displayNameNormalized ?? ""
+        }).where(eq(studentEnrollments.id, entry.id));
+      }
+    });
   }
 
   private async activeClaimsForSeries(seriesId: string): Promise<StudentEnrollment[]> {
@@ -1039,14 +1070,24 @@ class PostgresStudentRepository implements StudentRepository {
     }
   ): Promise<StudentEnrollment | null> {
     if (!target.seriesId) return null;
+    await this.ensureClaimsMigrated();
     const seriesRow = await this.resolveSeriesRow(target.seriesId);
     if (!seriesRow) return null;
     const seriesUuid = seriesRow.id;
-    const seriesTitle = target.seriesTitle || seriesRow.title;
+    const seriesTitle = seriesRow.title;
     const profile = await this.getProfileById(profileId);
     if (!profile) return null;
-    const siblings = await this.activeClaimsForSeries(slugify(seriesTitle));
-    const existing = await this.db
+    const name = preferredName(profile, target.displayName);
+    try {
+    return await this.db.transaction(async (tx) => {
+    // Serialize retries for one browser/profile; distinct students are protected
+    // by the database's unique active-name index.
+    await tx.select({ id: studentProfiles.id }).from(studentProfiles)
+      .where(eq(studentProfiles.id, profileId)).for("update");
+    const siblings = (await tx.select().from(studentEnrollments).where(and(
+      eq(studentEnrollments.seriesId, seriesUuid), eq(studentEnrollments.status, "active")
+    ))).map((row) => this.mapEnrollment(row, seriesTitle));
+    const existing = await tx
       .select()
       .from(studentEnrollments)
       .where(
@@ -1057,17 +1098,15 @@ class PostgresStudentRepository implements StudentRepository {
         )
       )
       .limit(1);
-    const name = target.displayName ? preferredName(profile, target.displayName) : undefined;
-    try {
     if (existing[0]) {
       const mapped = this.mapEnrollment(existing[0], seriesTitle);
-      if (name) applyClaim(mapped, name, siblings);
+      if (target.displayName !== undefined) applyClaim(mapped, name, siblings);
       else if (!mapped.displayName) applyClaim(mapped, preferredName(profile), siblings);
-      const [updated] = await this.db
+      const [updated] = await tx
         .update(studentEnrollments)
         .set({
           lastOpenedAt: new Date(),
-          displayName: mapped.displayName ?? mapped.displayName,
+          displayName: mapped.displayName,
           displayNameNormalized: mapped.displayNameNormalized ?? "",
           ...(target.lectureId ? { lectureId: target.lectureId } : {}),
           ...(target.joinCodeId ? { joinCodeId: target.joinCodeId } : {})
@@ -1086,7 +1125,7 @@ class PostgresStudentRepository implements StudentRepository {
       addedAt: nowIso()
     };
     applyClaim(draft, preferredName(profile, target.displayName), siblings);
-    const [created] = await this.db
+    const [created] = await tx
       .insert(studentEnrollments)
       .values({
         studentProfileId: profileId,
@@ -1101,6 +1140,7 @@ class PostgresStudentRepository implements StudentRepository {
       })
       .returning();
     return this.mapEnrollment(created, seriesTitle);
+    });
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new PseudonymTakenError(name ?? target.displayName ?? profile.pseudonym, slugify(seriesTitle));
@@ -1154,6 +1194,7 @@ class PostgresStudentRepository implements StudentRepository {
   }
 
   private async composeSeriesViews(profile: StudentProfile, onlySeriesId: string | undefined): Promise<StudentDashboardSeries[]> {
+    await this.ensureClaimsMigrated();
     const now = new Date();
     const enrollmentRows = await this.db
       .select()

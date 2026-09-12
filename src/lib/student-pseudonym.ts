@@ -118,7 +118,6 @@ function uniqueSuffixedName(stemSource: string, profileId: string, takenKeys: Se
     );
     candidate = `${nextStem}·${suffix}${extra}`.slice(0, PSEUDONYM_MAX_LENGTH);
     index += 1;
-    if (index > 99) break;
   }
   return candidate;
 }
