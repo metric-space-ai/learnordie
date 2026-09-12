@@ -35,6 +35,7 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
   const [sceneId, setSceneId] = useState<(typeof scene3dSceneIdValues)[number]>("modell.morph");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [canvasReady, setCanvasReady] = useState(false);
   const [editingElementId, setEditingElementId] = useState<string | null>(null);
 
   function openEmbedPanel(kind: "html" | "scene3d") {
@@ -63,6 +64,27 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
     }
   }
 
+  async function insertBasic(type: "text" | "rectangle") {
+    if (!api.current || busy) return;
+    setBusy(true);
+    try {
+      const runtime = await loadCanvasRuntime();
+      const state = api.current.getAppState();
+      const zoom = Number((state.zoom as { value?: number })?.value ?? 1);
+      const x = -Number(state.scrollX ?? 0) + Number(state.width ?? 1000) / zoom / 2 - 160;
+      const y = -Number(state.scrollY ?? 0) + Number(state.height ?? 700) / zoom / 2 - 50;
+      const id = `element-${crypto.randomUUID()}`;
+      const added = runtime.convertToExcalidrawElements<import("@learnordie/slide-engine/excalidraw/canvas-schema").CanvasElement>([{
+        id, type, x, y, width: 320, height: type === "text" ? 48 : 180,
+        strokeColor: "#1e1e1e", roughness: 1,
+        ...(type === "text" ? { text: "Neuer Text", fontSize: 32, fontFamily: 5 } : { backgroundColor: "#d0bfff", fillStyle: "hachure" })
+      }], { regenerateIds: false });
+      api.current.updateScene({ elements: [...api.current.getSceneElements(), ...added], appState: { selectedElementIds: { [id]: true } }, captureUpdate: "IMMEDIATELY" });
+      api.current.setActiveTool({ type: "selection" });
+    } catch { setStatus("Element konnte nicht eingefügt werden. Bitte erneut versuchen."); }
+    finally { setBusy(false); }
+  }
+
   async function insertEmbed(embed: CanvasEmbed) {
     if (!api.current || busy) return;
     setBusy(true);
@@ -84,14 +106,14 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
 
   return <section className="native-studio-editor" aria-label="Folie mit Excalidraw bearbeiten">
     {!readOnly && <div className="native-studio-tools" role="toolbar" aria-label="Folienelemente">
-      <span className="native-studio-title">Zeichenfläche</span>
-      <button type="button" onClick={() => api.current?.setActiveTool({ type: "text" })}>Text</button>
-      <button type="button" onClick={() => api.current?.setActiveTool({ type: "rectangle" })}>Form</button>
-      <button type="button" onClick={() => openEmbedPanel("scene3d")} aria-expanded={panel === "scene3d"}>3D-Szene</button>
-      <button type="button" onClick={() => openEmbedPanel("html")} aria-expanded={panel === "html"}>HTML</button>
-      <button type="button" onClick={() => api.current?.scrollToContent(undefined, { fitToContent: true, viewportZoomFactor: 0.92, animate: true })}>Einpassen</button>
+      <span className="native-studio-title">Einfügen</span>
+      <button type="button" disabled={!canvasReady || busy} onClick={() => void insertBasic("text")} aria-label="Text hinzufügen">Text</button>
+      <button type="button" disabled={!canvasReady || busy} onClick={() => void insertBasic("rectangle")} aria-label="Form hinzufügen">Form</button>
+      <button type="button" disabled={!canvasReady} onClick={() => openEmbedPanel("scene3d")} aria-expanded={panel === "scene3d"}>3D-Szene</button>
+      <button type="button" disabled={!canvasReady} onClick={() => openEmbedPanel("html")} aria-expanded={panel === "html"}>HTML</button>
+      <button type="button" disabled={!canvasReady} onClick={() => api.current?.scrollToContent(undefined, { fitToContent: true, viewportZoomFactor: 0.92, animate: true })}>Einpassen</button>
     </div>}
-    <ExcalidrawCanvas key={`${lectureId}:${current.id}`} slideId={current.id} title={current.title} scene={scene} assets={document.assets} readOnly={readOnly} onReady={(value) => { api.current = value; }} onChange={changed} />
+    <ExcalidrawCanvas key={`${lectureId}:${current.id}`} slideId={current.id} title={current.title} scene={scene} assets={document.assets} readOnly={readOnly} onReady={(value) => { api.current = value; setCanvasReady(Boolean(value)); }} onChange={changed} />
     {!readOnly && panel && <aside className="native-insert-panel" aria-label={panel === "html" ? "HTML einbetten" : "3D-Szene einfügen"}>
       <div className="native-insert-heading"><h2>{panel === "html" ? "HTML einbetten" : "3D-Szene"}</h2><button type="button" aria-label="Einfügen schließen" onClick={() => setPanel(null)}>×</button></div>
       {panel === "html" ? <>

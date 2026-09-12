@@ -20,6 +20,7 @@ import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { buildLegacyLectureSlideDocument, hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
+import { ThemeToggle } from "./theme/ThemeToggle";
 import { Presence } from "./Presence";
 import type { PresenceState } from "./Presence";
 import type {
@@ -484,6 +485,8 @@ export function LecturerDashboard({
   csrfToken: string;
 }) {
   const [lectures, setLectures] = useState(initialLectures);
+  const [modelDemoBusy, setModelDemoBusy] = useState(false);
+  const [modelDemoError, setModelDemoError] = useState("");
   const [selectedId, setSelectedId] = useState(initialLectures[0]?.id ?? "");
   const selected = useMemo(() => lectures.find((lecture) => lecture.id === selectedId) ?? lectures[0], [lectures, selectedId]);
   const [createError, setCreateError] = useState("");
@@ -974,6 +977,25 @@ export function LecturerDashboard({
       slides,
       slideDocument: document
     }));
+  }
+
+  async function addModelSlides() {
+    if (modelDemoBusy) return;
+    setModelDemoBusy(true);
+    setModelDemoError("");
+    try {
+      const response = await fetch("/api/lectures/model-demo", { method: "POST", headers: csrfHeaders });
+      if (!response.ok) throw new Error("Die Modell-Slides konnten nicht geladen werden. Bitte erneut versuchen.");
+      const result = await response.json() as { lectureId: string };
+      const list = await fetch("/api/lectures", { cache: "no-store" });
+      if (!list.ok) throw new Error("Die Vorlesungsliste konnte nicht geladen werden.");
+      const payload = await list.json() as { lectures: Lecture[] };
+      setLectures(payload.lectures);
+      setSelectedId(result.lectureId);
+      setShowCreateForm(false);
+      setCommandMenuOpen(false);
+    } catch (error) { setModelDemoError(error instanceof Error ? error.message : "Modell-Slides konnten nicht geladen werden."); }
+    finally { setModelDemoBusy(false); }
   }
 
   function applyAgentLecturesChange(nextLectures: Lecture[]) {
@@ -2452,12 +2474,14 @@ export function LecturerDashboard({
 
   if (!selected) {
     return (
-      <main className="app-shell lecturer-studio-shell lb-motion-root" data-csrf-token={csrfToken}>
+      <main className="app-shell lecturer-studio-shell native-workspace" data-csrf-token={csrfToken}>
         <section className="lecturer-studio lecturer-studio-empty">
           <section className="studio-slide-stage" aria-label="Neue Vorlesung anlegen">
             <div className="studio-slide-shell">
               <div className="slide-preview-frame editable-slide-frame studio-editor-frame studio-create-stage" role="dialog" aria-label="Neue Vorlesung anlegen">
                 {renderCreateLectureForm("empty")}
+                <button type="button" className="plain-button" disabled={modelDemoBusy} onClick={() => void addModelSlides()}>Modell-Slides hinzufügen</button>
+                {modelDemoError && <p role="alert">{modelDemoError}</p>}
               </div>
             </div>
           </section>
@@ -2467,9 +2491,11 @@ export function LecturerDashboard({
   }
 
   return (
-    <main className="app-shell lecturer-studio-shell lb-motion-root" data-csrf-token={csrfToken}>
+    <main className="app-shell lecturer-studio-shell native-workspace" data-csrf-token={csrfToken}>
         <section className={`lecturer-studio ${workspaceTool !== "presentation" ? "tool-open" : ""}`}>
           <div className="studio-top-actions">
+            <div className="native-workspace-heading"><span>learnordie</span><strong title={edit.title}>{edit.title}</strong></div>
+            <ThemeToggle />
             <div className="studio-save-island" aria-live="polite">
               <span className={`studio-save-status is-${saveStatus}`}>
                 {saveStatus === "saving"
@@ -2480,7 +2506,7 @@ export function LecturerDashboard({
                       ? "Ungespeichert"
                       : "Gespeichert"}
               </span>
-              <button className="primary-button studio-save-inline" type="button" onClick={() => void persistLectureEdits()}>
+              <button className="plain-button studio-save-inline" disabled={saveStatus === "saving"} type="button" onClick={() => void persistLectureEdits()}>
                 Speichern
               </button>
             </div>
@@ -2489,7 +2515,7 @@ export function LecturerDashboard({
             open={commandMenuOpen}
             onToggle={(event) => setCommandMenuOpen(event.currentTarget.open)}
           >
-            <summary aria-label="Studio-Menü" title="Studio-Menü">☰</summary>
+            <summary aria-label="Studio-Menü" title="Vorlesungen und Einstellungen">Vorlesungen</summary>
             <div className="studio-command-popover">
               <section className="studio-menu-section" aria-label="Vorlesung wechseln">
                 <div className="studio-menu-heading">
@@ -2527,6 +2553,8 @@ export function LecturerDashboard({
                 >
                   Neue Vorlesung
                 </button>
+                <button className="studio-command-link" type="button" disabled={modelDemoBusy} onClick={() => void addModelSlides()}>{modelDemoBusy ? "Modell-Slides werden geladen …" : "Modell-Slides hinzufügen"}</button>
+                {modelDemoError && <p role="alert">{modelDemoError}</p>}
               </section>
               <section className="studio-menu-section" aria-label="Ansichten">
                 <div className="studio-menu-heading">
@@ -2574,6 +2602,7 @@ export function LecturerDashboard({
               <a className="studio-command-link" href="/api/auth/logout">Abmelden</a>
             </div>
           </details>
+          <a className="primary-button studio-present-link" href={`/lecturer/live/${selected.publicToken}`}>Präsentieren</a>
           </div>
           {renderFilmstripRail()}
 
@@ -2653,11 +2682,6 @@ export function LecturerDashboard({
                 >
                   {engineEditing ? "Vorschau" : "Bearbeiten"}
                 </button>
-                {selected && (
-                  <a className="primary-button studio-present-link" href={`/lecturer/live/${selected.publicToken}`}>
-                    ▶ Präsentieren
-                  </a>
-                )}
                 {editError && <p role="alert" className="form-error deck-error">{editError}</p>}
               </div>
             )}

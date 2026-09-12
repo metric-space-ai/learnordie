@@ -6,6 +6,8 @@ import type { SlideAssetRef } from "@learnordie/slide-engine/schema";
 import { loadCanvasRuntime } from "@/lib/excalidraw-runtime";
 import { hydrateCanvasAssets } from "@/lib/canvas-assets";
 import { renderCanvasEmbeddable } from "./CanvasEmbed";
+import { canvasFingerprint, isCanvasGestureActive } from "@/lib/canvas-sync";
+import { useAppTheme } from "@/components/theme/ThemeProvider";
 
 export type CanvasApi = {
   getSceneElements: () => readonly CanvasElement[];
@@ -26,17 +28,29 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
   onChange?: (scene: CanvasScene) => boolean | void;
   onReady?: (api: CanvasApi | null) => void;
 }) {
+  const { theme } = useAppTheme();
   const host = useRef<HTMLDivElement>(null);
   const callbacks = useRef({ onChange, onReady });
   const initial = useRef(scene);
   const initialTitle = useRef(title);
   const assetsRef = useRef(assets);
   const apiRef = useRef<CanvasApi | null>(null);
-  const lastScene = useRef(JSON.stringify(scene));
+  const lastScene = useRef(canvasFingerprint(scene));
+  const mountRef = useRef<{ update(props: object): void; unmount(): void } | null>(null);
+  const propsRef = useRef<Record<string, unknown>>({});
+  const themeRef = useRef(theme);
   const [failure, setFailure] = useState("");
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [assetWarning, setAssetWarning] = useState("");
+
+  useLayoutEffect(() => {
+    themeRef.current = theme;
+    if (mountRef.current) {
+      propsRef.current = { ...propsRef.current, theme };
+      mountRef.current.update(propsRef.current);
+    }
+  }, [theme]);
 
   useLayoutEffect(() => {
     callbacks.current = { onChange, onReady };
@@ -63,7 +77,8 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
       if (cancelled || !host.current) return;
       const currentScene = hydrated.scene;
       setAssetWarning(hydrated.failed.length ? `Bildimport nicht möglich: ${hydrated.failed.join(", ")}. Originaldateien bleiben erhalten.` : "");
-      handle = runtime.mountExcalidraw(host.current, {
+      let initialized = false;
+      propsRef.current = {
         initialData: {
           elements: currentScene.elements,
           files: currentScene.files,
@@ -71,7 +86,7 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
           scrollToContent: true
         },
         name: initialTitle.current,
-        theme: "light",
+        theme: themeRef.current,
         langCode: "de-DE",
         viewModeEnabled: readOnly,
         zenModeEnabled: readOnly,
@@ -89,12 +104,15 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
           fit();
         },
         onChange: (elements: readonly CanvasElement[], state: Record<string, unknown>, files: CanvasScene["files"]) => {
-          if (cancelled || readOnly) return;
+          if (cancelled || readOnly || isCanvasGestureActive(state)) return;
           // Excalidraw retains unused files for undo. Persist only files that
           // belong to visible images; the runtime still owns its undo cache.
           const usedFiles = new Set(elements.filter((element) => element.type === "image" && !element.isDeleted).map((element) => element.fileId));
           const next = { ...currentScene, elements: [...elements], files: Object.fromEntries(Object.entries(files).filter(([id]) => usedFiles.has(id))), backgroundColor: typeof state.viewBackgroundColor === "string" ? state.viewBackgroundColor : currentScene.backgroundColor };
-          const serialized = JSON.stringify(next);
+          const serialized = canvasFingerprint(next);
+          // The first native callback normalizes imported geometry/font metrics.
+          // Opening a lecture is not a user edit and must not mark it dirty.
+          if (!initialized) { initialized = true; lastScene.current = serialized; return; }
           if (serialized === lastScene.current) return;
           const previous = lastScene.current;
           lastScene.current = serialized;
@@ -109,10 +127,12 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
             apiRef.current?.updateScene({ elements: accepted.elements, appState: { viewBackgroundColor: accepted.backgroundColor }, captureUpdate: "NEVER" });
           }
         }
-      });
+      };
+      handle = runtime.mountExcalidraw(host.current, propsRef.current);
+      mountRef.current = handle as typeof mountRef.current;
       resize = new ResizeObserver(fit);
       resize.observe(host.current);
-    }).catch(() => { if (!cancelled) setFailure("Die Zeichenfläche konnte nicht geladen werden."); });
+    }).catch((error: unknown) => { if (!cancelled) setFailure(error instanceof Error ? error.message : "Die Zeichenfläche konnte nicht geladen werden."); });
     return () => {
       cancelled = true;
       abort.abort();
@@ -120,13 +140,14 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
       resize?.disconnect();
       callbacks.current.onReady?.(null);
       apiRef.current = null;
+      mountRef.current = null;
       handle?.unmount();
     };
   }, [attempt, readOnly]);
 
   // External edits (e.g. an accepted AI patch) reach the mounted native scene.
   useEffect(() => {
-    const serialized = JSON.stringify(scene);
+    const serialized = canvasFingerprint(scene);
     if (serialized === lastScene.current) return;
     lastScene.current = serialized;
     initial.current = scene;

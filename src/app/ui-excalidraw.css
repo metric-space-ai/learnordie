@@ -1,84 +1,135 @@
-/* Learnordie's native Excalidraw workspace. Vendor CSS stays scoped to its host. */
-.studio-slide-shell:has(.native-studio-frame) { padding: 8px 8px 70px; }
-.studio-editor-frame.native-studio-frame {
-  width: 100%;
-  height: 100%;
-  max-height: 100%;
-  min-height: 320px;
-  aspect-ratio: auto;
-  padding: 0;
-  border: 1px solid #e2e8df;
-  border-radius: 10px;
-  background: #fffef8;
-  box-shadow: 0 6px 24px #243f4308;
-  overflow: hidden;
+/* Native workspace owns layout: header, rail, canvas, footer never overlap. */
+.native-workspace {
+  --studio-surface: #fff; --studio-paper: #f8f9fa; --studio-ink: #1b1b1f;
+  --studio-muted: #696973; --studio-line: #e6e6ec; --studio-accent: #6965db;
+  --studio-selected: #eeedfc; --studio-shadow: 0 2px 12px #00000012;
+  background: var(--studio-paper); color: var(--studio-ink);
+  padding: 0; width: 100%; max-width: none; height: 100dvh; overflow: hidden;
 }
-.native-studio-editor {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  min-height: 320px;
-  overflow: hidden;
-  background: #fffef8;
-  color: #243f43;
+html[data-theme="dark"] .native-workspace {
+  --studio-surface: #232329; --studio-paper: #18181b; --studio-ink: #f1f0f5;
+  --studio-muted: #b3b1bf; --studio-line: #3c3c46; --studio-accent: #a8a5ff;
+  --studio-selected: #383552; --studio-shadow: 0 2px 12px #00000032;
 }
-.native-studio-tools {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  min-height: 48px;
-  padding: 6px 14px;
-  overflow-x: auto;
-  border-bottom: 1px solid #243f4315;
-  background: #fafaf5;
+.native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open {
+  grid-template: "header header" auto "film stage" minmax(0, 1fr) / 184px minmax(0, 1fr);
+  height: 100%; background: var(--studio-paper);
 }
+.native-workspace .lecturer-studio-empty { grid-template: "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+.native-workspace .studio-top-actions {
+  grid-area: header; position: relative; inset: auto; align-self: stretch; justify-self: stretch;
+  align-items: center; gap: 12px; min-width: 0; min-height: 64px; margin: 0; padding: 10px 16px;
+  background: var(--studio-surface); border-bottom: 1px solid var(--studio-line); z-index: 100;
+}
+.native-workspace-heading { order: 1; display: grid; gap: 2px; min-width: 0; margin-right: auto; }
+.native-workspace-heading span { font-size: 12px; color: var(--studio-muted); }
+.native-workspace-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; }
+.native-workspace .studio-top-actions > .theme-toggle { order: 2; flex-shrink: 0; }
+.native-workspace .studio-save-island { order: 3; flex-shrink: 0; padding: 0; gap: 8px; background: none; box-shadow: none; border: 0; }
+.native-workspace .studio-save-status { font-size: 12px; font-weight: 500; }
+.native-workspace .studio-save-status.is-unsaved { color: var(--studio-muted); }
+.native-workspace .studio-command-menu { order: 0; position: relative; inset: auto; margin: 0; align-self: center; flex-shrink: 0; }
+.native-workspace .studio-top-actions > .studio-present-link { order: 4; flex-shrink: 0; }
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar) :is(button, summary, a) {
+  width: auto; min-width: 0; min-height: 38px; height: auto; padding: 8px 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--studio-line); border-radius: 8px;
+  background: var(--studio-surface); color: var(--studio-ink);
+  font: inherit; font-size: 14px; font-weight: 500; line-height: 1.25; white-space: nowrap;
+  text-decoration: none; box-shadow: none; animation: none; transform: none; cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar) :is(button, summary, a):hover { background: var(--studio-selected); }
+.native-workspace .studio-top-actions .studio-present-link { background: #6965db; color: #fff; border-color: #6965db; }
+.native-workspace :is(button, summary, a):focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 3px; }
+.native-workspace button:disabled { opacity: .4; cursor: not-allowed; }
+.native-workspace .studio-top-actions .studio-command-popover {
+  position: absolute; top: calc(100% + 10px); left: 0; right: auto;
+  width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 90px);
+  padding: 16px; gap: 16px; background: var(--studio-surface); color: var(--studio-ink);
+  border: 1px solid var(--studio-line); border-radius: 12px; box-shadow: var(--studio-shadow);
+  animation: canvas-panel-in 140ms ease-out; transform: none;
+}
+.native-workspace .studio-command-popover :is(button, a) { display: flex; justify-content: flex-start; width: 100%; white-space: normal; text-align: left; font-size: 14px; }
+.native-workspace .studio-command-popover .studio-deck-card { display: grid; justify-content: stretch; }
+.native-workspace .studio-menu-heading strong { color: var(--studio-muted); font-size: 12px; font-weight: 600; }
+.native-workspace .studio-menu-section { animation: none; }
+.native-workspace .studio-deck-card.active { background: var(--studio-selected); border-color: var(--studio-accent); }
+.native-workspace .studio-filmstrip-rail {
+  display: grid; position: relative; inset: auto; width: auto; padding: 16px 12px;
+  background: var(--studio-surface); color: var(--studio-ink); border: 0;
+  border-right: 1px solid var(--studio-line); box-shadow: none; border-radius: 0; overflow: auto;
+}
+.native-workspace .studio-filmstrip-head { color: var(--studio-muted); padding: 0 4px 12px; border: 0; }
+.native-workspace .studio-filmstrip-head strong { font-size: 12px; font-weight: 500; line-height: 1.4; }
+.native-workspace .studio-filmstrip-list { gap: 10px; }
+.native-workspace .studio-filmstrip-list button { min-height: 76px; padding: 12px; background: var(--studio-paper); color: var(--studio-ink); border: 1px solid var(--studio-line); border-radius: 8px; box-shadow: none; }
+.native-workspace .studio-filmstrip-list button:is(.active, [aria-current="true"], [aria-pressed="true"]) { background: var(--studio-selected); border-color: var(--studio-accent); }
+.native-workspace .studio-filmstrip-list strong { font-size: 12px; line-height: 1.35; font-weight: 500; }
+.native-workspace .studio-slide-stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; background: var(--studio-paper); overflow: visible; min-height: 0; }
+.native-workspace .studio-slide-shell { position: relative; inset: auto; grid-row: 1; min-width: 0; min-height: 0; padding: 0; align-items: stretch; }
+.native-workspace .studio-editor-frame.native-studio-frame { width: 100%; height: 100%; max-height: none; min-height: 0; aspect-ratio: auto; align-self: stretch; padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
+.native-workspace .studio-bottom-bar, .native-workspace .lecturer-studio.tool-open .studio-bottom-bar {
+  position: relative; inset: auto; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: flex-end; gap: 8px; width: 100%; max-width: none; min-width: 0; margin: 0;
+  padding: 8px 14px; border: 0; border-top: 1px solid var(--studio-line); border-radius: 0;
+  background: var(--studio-surface); color: var(--studio-ink); transform: none; animation: none; box-shadow: none;
+}
+.native-workspace .studio-bottom-bar > * { grid-area: auto; flex-shrink: 0; }
+.native-workspace .studio-bottom-bar .studio-stepper { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.native-workspace .studio-stepper span { white-space: nowrap; min-width: 50px; text-align: center; font-size: 13px; }
+.native-workspace .studio-bottom-bar .studio-stepper button { width: 38px; height: 38px; padding: 0; font-size: 22px; }
+.native-workspace .studio-bottom-bar .studio-engine-toggle { display: inline-flex; }
+.native-workspace .studio-plan-summary-button { flex: 0 0 auto; width: auto; max-width: none; }
+.native-workspace .studio-plan-summary-button strong { font-size: 13px; font-weight: 500; }
+.native-workspace :is(.studio-tool-popover, .studio-plan-editor, .studio-slide-tool-overlay, .studio-slide-source-overlay) { background: var(--studio-surface); color: var(--studio-ink); border-color: var(--studio-line); box-shadow: var(--studio-shadow); }
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar, .studio-filmstrip-rail, .studio-slide-stage, .studio-tool-popover)::before,
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar, .studio-filmstrip-rail, .studio-slide-stage)::after { content: none; }
+.native-workspace .deck-error { width: 100%; margin: 0; }
+.native-studio-editor { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--studio-surface, #fff); color: var(--studio-ink, #1b1b1f); }
+.native-studio-tools { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; min-height: 44px; padding: 4px 12px; overflow-x: auto; border-bottom: 1px solid var(--studio-line, #e6e6ec); background: var(--studio-surface, #fff); }
 .native-studio-tools > * { flex-shrink: 0; }
-.native-studio-title { margin-right: auto; padding-right: 16px; font-size: 13px; font-weight: 650; letter-spacing: .02em; }
-.native-studio-tools button { min-height: 36px; padding: 6px 12px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; transition: background-color 140ms ease; }
-.native-studio-tools button:hover, .native-studio-tools button[aria-expanded="true"] { background: #e5eee8; }
-.native-studio-tools button:focus-visible { outline: 2px solid #498b79; outline-offset: 2px; }
-.native-canvas { position: relative; width: 100%; height: 100%; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
+.native-studio-title { padding-right: 8px; font-size: 12px; color: var(--studio-muted); }
+.native-studio-tools button { min-height: 36px; padding: 6px 12px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; transition: background-color 120ms ease; }
+.native-studio-tools button:hover, .native-studio-tools button[aria-expanded="true"] { background: var(--studio-selected, #eeedfc); }
+.native-studio-tools button:disabled { opacity: .4; cursor: not-allowed; }
+.native-canvas { position: relative; width: 100%; flex: 1 1 auto; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
 .native-canvas-host { position: absolute; inset: 0; width: 100%; height: 100%; }
 .native-canvas-host > div { width: 100%; height: 100%; }
 .native-canvas-transcript { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.native-canvas .excalidraw { --color-primary: #498b79; --color-primary-darker: #356b5d; --color-primary-light: #e5eee8; --color-primary-light-darker: #d6e7dc; }
-.native-canvas-notice { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; margin: 0; padding: 24px; background: #fffef8; font-size: 15px; }
-.native-canvas-notice button { padding: 10px 16px; border-radius: 8px; border: 1px solid #498b79; background: white; cursor: pointer; }
-.native-insert-panel {
-  position: absolute;
-  z-index: 25;
-  right: 16px;
-  top: 60px;
-  width: min(420px, calc(100% - 32px));
-  max-height: calc(100% - 76px);
-  overflow: auto;
-  padding: 20px;
-  border: 1px solid #d9e1da;
-  border-radius: 12px;
-  background: #fffffc;
-  box-shadow: 0 16px 44px #20382a1a;
-  animation: canvas-panel-in 160ms ease-out;
-}
+.native-canvas-notice { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; margin: 0; padding: 24px; background: var(--studio-surface, var(--panel, #fff)); color: var(--studio-ink, var(--ink, #1b1b1f)); font-size: 15px; text-align: center; }
+.native-canvas-notice button { padding: 10px 16px; border-radius: 8px; border: 1px solid #6965db; background: transparent; color: inherit; cursor: pointer; }
+.native-insert-panel { position: absolute; z-index: 25; right: 12px; top: 52px; width: min(400px, calc(100% - 24px)); max-height: calc(100% - 64px); overflow: auto; padding: 20px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-surface); box-shadow: var(--studio-shadow); animation: canvas-panel-in 140ms ease-out; }
 .native-insert-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.native-insert-heading h2 { margin: 0; font-size: 18px; }
-.native-insert-heading button { border: 0; background: none; font-size: 24px; min-width: 36px; min-height: 36px; cursor: pointer; }
-.native-insert-panel label { display: grid; gap: 8px; font-size: 13px; font-weight: 600; }
+.native-insert-heading h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.native-insert-heading button { border: 0; background: none; color: inherit; font-size: 24px; min-width: 36px; min-height: 36px; cursor: pointer; }
+.native-insert-panel label { display: grid; gap: 8px; font-size: 13px; font-weight: 500; }
 .native-insert-panel textarea { width: 100%; resize: vertical; min-height: 160px; font: 12px/1.5 ui-monospace, monospace; }
 .native-insert-panel select { width: 100%; min-height: 44px; }
-.native-insert-panel p { font-size: 13px; line-height: 1.5; color: #5e746c; }
-.native-editor-status { position: absolute; z-index: 30; bottom: 12px; left: 12px; right: 12px; padding: 12px 16px; background: #fff1dc; color: #684318; border-radius: 8px; }
-.native-asset-warning { position: absolute; z-index: 5; bottom: 38px; left: 12px; max-width: calc(100% - 24px); margin: 0; padding: 8px 12px; background: #fff1dc; color: #684318; font-size: 12px; }
-.slide-engine-stage:has(> .native-canvas) { padding: 78px 0 88px; background: #fffef8; }
+.native-insert-panel p { font-size: 13px; line-height: 1.5; color: var(--studio-muted); }
+.native-editor-status, .native-asset-warning { position: absolute; z-index: 30; bottom: 56px; left: 12px; right: 12px; padding: 12px 16px; background: var(--studio-surface, #fff); color: var(--studio-ink, #1b1b1f); border: 1px solid var(--studio-line, #ddd); border-radius: 8px; font-size: 13px; }
+.slide-engine-stage:has(> .native-canvas) { padding: 78px 0 88px; }
 .slide-engine-stage > .native-canvas { border: 0; box-shadow: none; }
-@keyframes canvas-panel-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes canvas-panel-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 1000px) {
+  .native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { grid-template-columns: 140px minmax(0, 1fr); }
+  .native-workspace .studio-save-status { display: none; }
+}
 @media (max-width: 700px) {
+  .native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { grid-template: "header" auto "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+  .native-workspace .studio-filmstrip-rail { display: none; }
+  .native-workspace .studio-top-actions { flex-wrap: wrap; gap: 8px; padding: 8px; }
+  .native-workspace-heading { order: -1; flex-basis: 100%; display: flex; gap: 8px; align-items: baseline; }
+  .native-workspace-heading strong { font-size: 13px; }
+  .native-workspace .studio-command-menu { margin-right: auto; }
+  .native-workspace .studio-top-actions :is(button, summary, a) { font-size: 12px; padding: 8px; min-height: 40px; }
+  .native-workspace .studio-bottom-bar { padding: 6px 8px; gap: 6px; }
+  .native-workspace .studio-bottom-bar :is(button, summary, a) { font-size: 12px; padding: 6px 8px; }
+  .native-workspace .studio-bottom-bar .studio-stepper { gap: 4px; }
+  .native-workspace .studio-stepper span { min-width: 36px; }
   .native-studio-title { display: none; }
   .native-studio-tools { padding-inline: 8px; }
-  .native-studio-tools button { min-height: 44px; }
-  .native-studio-editor { min-height: 420px; }
+  .native-studio-tools button { min-height: 40px; padding-inline: 10px; }
   .slide-engine-stage:has(> .native-canvas) { padding: 86px 0 146px; }
 }
-@media (prefers-reduced-motion: reduce) { .native-insert-panel { animation: none; } .native-studio-tools button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .native-workspace *, .native-insert-panel { animation: none !important; transition: none !important; } }

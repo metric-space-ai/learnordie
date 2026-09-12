@@ -45,6 +45,7 @@ type RuntimeWindow = Window & {
   EXCALIDRAW_ASSET_PATH?: string;
   __learnordieCanvasModule?: CanvasRuntime;
   __learnordieCanvasModuleError?: string;
+  __learnordieCanvasReady?: (attempt: number) => void;
 };
 
 export const CANVAS_ASSET_PATH = "/vendor/excalidraw/";
@@ -101,14 +102,23 @@ function loadModule(): Promise<CanvasRuntime> {
     delete browser.__learnordieCanvasModuleError;
     const script = document.createElement("script");
     script.type = "module";
-    script.src = `/learnordie-excalidraw-loader.mjs?attempt=${++attempt}`;
+    const currentAttempt = ++attempt;
+    script.src = `/learnordie-excalidraw-loader.mjs?attempt=${currentAttempt}`;
     const timer = window.setTimeout(() => fail(), LOAD_TIMEOUT_MS);
-    const clean = () => { window.clearTimeout(timer); script.onload = null; script.onerror = null; script.remove(); };
+    const clean = () => { window.clearTimeout(timer); script.onload = null; script.onerror = null; delete browser.__learnordieCanvasReady; script.remove(); };
     const fail = () => { clean(); reject(new Error(browser.__learnordieCanvasModuleError ?? "Die lokale Zeichen-Engine konnte nicht geladen werden. Bitte erneut versuchen oder die Seite neu laden.")); };
-    script.onload = () => {
+    const completed = () => {
       const loadedModule = browser.__learnordieCanvasModule;
       if (!loadedModule || [loadedModule.mountExcalidraw, loadedModule.createElement, loadedModule.convertToExcalidrawElements, loadedModule.exportToSvg].some((fn) => typeof fn !== "function")) return fail();
       clean(); resolve(loadedModule);
+    };
+    // Module load does not reliably wait for a dynamic import behind top-level
+    // await. The loader explicitly acknowledges evaluation, not just download.
+    browser.__learnordieCanvasReady = (loadedAttempt) => {
+      if (loadedAttempt === currentAttempt) completed();
+    };
+    script.onload = () => {
+      if (browser.__learnordieCanvasModule || browser.__learnordieCanvasModuleError) completed();
     };
     script.onerror = fail;
     document.head.append(script);

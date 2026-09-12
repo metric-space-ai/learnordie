@@ -138,7 +138,9 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   expect(box).not.toBeNull();
   const initialText = `Native Notiz ${randomUUID().slice(0, 8)}`;
   const revisedText = `${initialText} überarbeitet`;
-  await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "Text", exact: true }).click();
+  // Use the native text tool for arbitrary placement; the app's Text hinzufügen
+  // action inserts a ready-to-edit text element at the viewport center.
+  await editor.getByRole("radio", { name: "Text", exact: true }).click();
   await canvas.click({ position: { x: box!.width * 0.3, y: box!.height * 0.72 } });
   const input = page.locator("textarea.excalidraw-wysiwyg");
   await expect(input).toBeVisible();

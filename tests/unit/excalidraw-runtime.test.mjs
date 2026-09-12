@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runtimeUrl = new URL("../../src/lib/excalidraw-runtime.ts", import.meta.url);
 let sequence = 0;
 
-function harness({ failStyle = false, failScript = false, failFont = false } = {}) {
+function harness({ failStyle = false, failScript = false, failFont = false, earlyModuleLoad = false } = {}) {
   const counts = { scripts: 0, styles: 0, fonts: 0, mounts: 0, unmounts: 0 };
   const listeners = new Map();
   const nodes = new Map();
@@ -34,6 +34,13 @@ function harness({ failStyle = false, failScript = false, failFont = false } = {
         assert.match(node.src, /^\/learnordie-excalidraw-loader\.mjs\?/);
         queueMicrotask(() => {
           if (failScript) { failScript = false; node.onerror?.(); }
+          else if (earlyModuleLoad) {
+            node.onload?.();
+            setTimeout(() => {
+              window.__learnordieCanvasModule = mockRuntimeModule;
+              window.__learnordieCanvasReady?.(Number(new URL(node.src, window.location.origin).searchParams.get("attempt")));
+            }, 10);
+          }
           else { window.__learnordieCanvasModule = mockRuntimeModule; node.onload?.(); }
         });
       } else {
@@ -71,6 +78,15 @@ test("concurrent native runtime requests share modules, styles and required font
   assert.equal(runtime, await loadCanvasRuntime());
   assert.deepEqual(counts, { scripts: 1, styles: 1, fonts: 1, mounts: 0, unmounts: 0 });
   assert.equal(window.EXCALIDRAW_ASSET_PATH, "https://learnordie.example/vendor/excalidraw/");
+});
+
+test("first load waits for dynamic module evaluation after script load, without manual retry", async () => {
+  const { counts } = harness({ earlyModuleLoad: true });
+  const { loadCanvasRuntime } = await freshRuntime();
+  const runtime = await loadCanvasRuntime();
+  assert.equal(typeof runtime.mountExcalidraw, "function");
+  assert.equal(counts.scripts, 1);
+  assert.equal(window.__learnordieCanvasReady, undefined);
 });
 
 for (const failure of ["failStyle", "failScript", "failFont"]) {
