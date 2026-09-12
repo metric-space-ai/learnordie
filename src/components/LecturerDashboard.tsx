@@ -2575,6 +2575,7 @@ export function LecturerDashboard({
                 </button>
                 <button className="studio-command-link" type="button" disabled={modelDemoBusy} onClick={() => void addModelSlides()}>{modelDemoBusy ? "Originalvortrag wird geladen …" : "Originalvortrag: Der Modellbegriff"}</button>
                 <a className="studio-command-link" href="/api/lectures/model-demo/source" download>Vorlesungsunterlage herunterladen</a>
+                <a className="studio-command-link" href="/api/lectures/model-demo/source?view=read" target="_blank" rel="noopener noreferrer">Originalnotizen und Begleitskript lesen</a>
                 {modelDemoError && <p role="alert">{modelDemoError}</p>}
               </section>
               <section className="studio-menu-section" aria-label="Ansichten">
