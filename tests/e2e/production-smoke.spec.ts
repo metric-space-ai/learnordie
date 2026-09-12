@@ -2750,7 +2750,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(manifest.selfContained).toBe(true);
   expect(manifest.externalAssetCount).toBe(0);
   expect(manifest.slideEngine).toMatchObject({
-    renderer: "learnordie-slide-standalone-v1",
+    renderer: "learnordie-slide-standalone-v2",
     slideDocumentSchemaVersion: "learnordie.slide.v1"
   });
   expect(manifest.slideEngine?.slideDocumentId).toMatch(/^lecture:[^:]+:deck$/);
@@ -2816,7 +2816,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
 
   const html = entries.get("index.html")?.toString("utf8") ?? "";
   expect(html).toContain('id="learnbuddy-data"');
-  expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v1"');
+  expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v2"');
   expect(html).toContain('data-slide-document-version="learnordie.slide.v1"');
   expect(html).toContain('data-print-profile="browser-pdf-a4"');
   expect(html).toContain("Self-contained: ja, externe Assets: 0");

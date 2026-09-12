@@ -41,6 +41,14 @@ three independent live students. A build or source-level unit test is not this
 browser evidence. Existing offline export, agent-edit and fixture coverage must
 be assessed explicitly rather than silently declared compatible.
 
+Integrated candidate `dff7e5f` passed ESLint without errors or warnings, all55
+unit contracts and the Next.js/TypeScript build on an isolated preview. Native
+offline export now preserves vector/text/image content and sandboxed HTML,
+with explicitly static three.js snapshots; its actual offline browser cases
+remain unexecuted. See `docs/standalone-native-canvas-export.md` for limits.
+
 The previous engine's live smoke passed its core synchronization flows on
 preview58c5006; those results do not certify this replacement engine. Production
-merge/deployment remains paused pending the replacement's verification.
+merge/deployment remains paused pending the replacement's verification. The
+native browser task has been blocked by the shared host admission gate; do not
+substitute the unit/build results for native UI, persistence or classroom proof.
