@@ -85,11 +85,12 @@
     "locales/de-DE-XR44H4JA.js": "4b44a299ca6aa3188797a8aa9c0a3ce33c14a2c3aeaf8206576250afb99ceda6",
     "locales/en-B4ZKOASM.js": "cb30d37bab4e6cadb68158df99d4996009ca6a679d73e435c1430adb41e8303d",
     "NOTICE.md": "f0d49fa54a0a807ed51cb3c97aa7f4a2f5638577ab3bdf40d0391917a3e59f48",
-    "runtime.mjs": "2e54ac5fa4ecdf0cd2bd4b27d637705cb2a5356e8222a02c4b5031e8fb57e8ab",
+    "runtime.mjs": "39e7aafaeec261190c3b0964b81c1b76a95edca75aac8319243abc6491772e1c",
     "subset-shared.chunk.js": "8b2ab262b39d14791e4290136b533f0df8a8cab581c7cff57b389328da66d82b",
     "subset-worker.chunk.js": "1932827a7bd10ab0c9ad8182c4a7e8bc59b51d351a3659149fe8f0b7e8c95ede"
   },
   "modifications": [
+    "Expose native restoreElements so newly inserted embeds receive complete engine defaults",
     "Learnordie menu adapter names",
     "Font CDN fallback replaced by import.meta.url same-origin directory",
     "Missing side-effect-only subset config module replaced by documented local no-op",

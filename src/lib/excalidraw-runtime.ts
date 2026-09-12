@@ -36,6 +36,7 @@ export type CanvasMount = { update(props: object): void; unmount(): void };
 export type CanvasRuntime = {
   mountExcalidraw(host: HTMLElement, props: object): CanvasMount;
   convertToExcalidrawElements<T extends object = CanvasElement>(elements: readonly object[], options?: { regenerateIds?: boolean }): T[];
+  restoreElements<T extends object = CanvasElement>(elements: readonly object[], localElements: readonly object[] | null): T[];
   exportToSvg(options: { elements: readonly object[]; appState?: object; files?: object; [key: string]: unknown }): Promise<SVGSVGElement>;
   /** Creates VENDORED React nodes. Never call main-React hooks in these nodes. */
   createElement(type: unknown, props: object | null, ...children: unknown[]): unknown;
@@ -109,7 +110,7 @@ function loadModule(): Promise<CanvasRuntime> {
     const fail = () => { clean(); reject(new Error(browser.__learnordieCanvasModuleError ?? "Die lokale Zeichen-Engine konnte nicht geladen werden. Bitte erneut versuchen oder die Seite neu laden.")); };
     const completed = () => {
       const loadedModule = browser.__learnordieCanvasModule;
-      if (!loadedModule || [loadedModule.mountExcalidraw, loadedModule.createElement, loadedModule.convertToExcalidrawElements, loadedModule.exportToSvg].some((fn) => typeof fn !== "function")) return fail();
+      if (!loadedModule || [loadedModule.mountExcalidraw, loadedModule.createElement, loadedModule.convertToExcalidrawElements, loadedModule.restoreElements, loadedModule.exportToSvg].some((fn) => typeof fn !== "function")) return fail();
       clean(); resolve(loadedModule);
     };
     // Module load does not reliably wait for a dynamic import behind top-level
@@ -138,7 +139,11 @@ function withLocalEmbeds<T extends object>(element: T): T {
 function wrapRuntime(native: CanvasRuntime): CanvasRuntime {
   return {
     createElement: native.createElement,
-    convertToExcalidrawElements: <T extends object = CanvasElement>(elements: readonly object[], options?: { regenerateIds?: boolean }) => native.convertToExcalidrawElements<T>(elements, options).map(withLocalEmbeds),
+    // The skeleton converter passes embeddables through without native defaults.
+    // Restore before updateScene, otherwise missing opacity/version makes a new
+    // embed invisible until the editor remounts and restores the saved scene.
+    convertToExcalidrawElements: <T extends object = CanvasElement>(elements: readonly object[], options?: { regenerateIds?: boolean }) => native.restoreElements<T>(native.convertToExcalidrawElements(elements, options), null).map(withLocalEmbeds),
+    restoreElements: <T extends object = CanvasElement>(elements: readonly object[], localElements: readonly object[] | null) => native.restoreElements<T>(elements, localElements).map(withLocalEmbeds),
     // SVG remains static: never use the vendor's foreignObject/iframe export.
     exportToSvg: (options) => native.exportToSvg({ ...options, renderEmbeddables: false }),
     mountExcalidraw(host, initialProps) {

@@ -99,6 +99,7 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
         link: `https://learnordie.invalid/embed/${id}`, customData: { learnordie: embed }
       }])];
       api.current.updateScene({ elements, appState: { selectedElementIds: { [id]: true } }, captureUpdate: "IMMEDIATELY" });
+      api.current.setActiveTool({ type: "selection" });
       setPanel(null);
     } catch { setStatus("Element konnte nicht eingefügt werden. Bitte erneut versuchen."); }
     finally { setBusy(false); }

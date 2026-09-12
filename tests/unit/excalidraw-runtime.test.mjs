@@ -17,6 +17,7 @@ function harness({ failStyle = false, failScript = false, failFont = false, earl
   const mockRuntimeModule = {
     createElement: (type, props, ...children) => ({ type, props, children }),
     convertToExcalidrawElements: (elements) => elements.map((item, i) => ({ id: `element-${i}`, ...item })),
+    restoreElements: (elements) => elements.map((item) => ({ opacity: 100, version: 1, angle: 0, isDeleted: false, ...item })),
     exportToSvg: async (options) => { exportOptions = options; return {}; },
     mountExcalidraw: (_host, props) => {
       counts.mounts++; updates.push(props);
@@ -123,6 +124,10 @@ test("custom elements receive inert sentinel links and SVG never exports live if
   const runtime = await loadCanvasRuntime();
   const [element] = runtime.convertToExcalidrawElements([{ type: "embeddable", customData: { learnordie: { type: "html", html: "<p>Hello</p>" } } }]);
   assert.ok(isCanvasEmbedLink(element.link));
+  assert.equal(element.version, 1);
+  assert.equal(element.opacity, 100);
+  assert.equal(element.angle, 0);
+  assert.equal(element.isDeleted, false);
   for (const link of [null, "javascript:alert(1)", "https://learnordie.invalid.evil/embed/a", "https://learnordie.invalid/embed/a?redirect=evil"]) assert.equal(isCanvasEmbedLink(link), false);
   await runtime.exportToSvg({ elements: [element], renderEmbeddables: true });
   assert.equal(h.exportOptions.renderEmbeddables, false);

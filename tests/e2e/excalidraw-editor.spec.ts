@@ -240,6 +240,10 @@ test("HTML/CSS embeds persist but scripts, parent DOM access, forms and external
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "HTML", exact: true }).click();
   await page.getByRole("textbox", { name: "HTML und CSS", exact: true }).fill(html);
   await page.getByRole("button", { name: "HTML einfügen", exact: true }).click();
+  // The element must render in the editor immediately, not only after a
+  // preview remount repairs missing native defaults.
+  await expect(page.locator("iframe.learnordie-canvas-html")).toBeVisible();
+  await expect(page.frameLocator("iframe.learnordie-canvas-html").getByRole("heading", { name: "Native HTML Probe" })).toBeVisible();
   await page.getByRole("button", { name: "Vorschau", exact: true }).click();
   await viewCanvas(page);
   const assertHtml = async (target: Page) => {
@@ -285,6 +289,7 @@ test("three.js embeds are real WebGL, independently interactive and survive save
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "3D-Szene", exact: true }).click();
   await page.getByLabel("3D-Szene auswählen", { exact: true }).selectOption("modell.morph");
   await page.getByRole("button", { name: "3D-Szene einfügen", exact: true }).click();
+  await expect(page.locator('.learnordie-canvas-scene [data-scene-id="modell.morph"] canvas')).toBeVisible();
   await page.getByRole("button", { name: "Vorschau", exact: true }).click();
   await viewCanvas(page);
   const scene = page.locator('.learnordie-canvas-scene [data-scene-id="modell.morph"]');
