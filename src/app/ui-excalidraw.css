@@ -1,4 +1,4 @@
-/* Native workspace owns layout: header, rail, canvas, footer never overlap. */
+/* Native workspace: one header, two compact tool rows, canvas to the bottom. */
 .native-workspace {
   --studio-surface: #fff; --studio-paper: #f8f9fa; --studio-ink: #1b1b1f;
   --studio-muted: #696973; --studio-line: #e6e6ec; --studio-accent: #6965db;
@@ -148,3 +148,84 @@ html[data-theme="dark"] .native-workspace {
   .slide-engine-stage:has(> .native-canvas) { padding: 86px 0 146px; }
 }
 @media (prefers-reduced-motion: reduce) { .native-workspace *, .native-insert-panel { animation: none !important; transition: none !important; } }
+
+/* Studio chrome has a fixed budget, including at the native mobile breakpoint.
+   Keep the native actions, but dock them ABOVE the canvas, never in a footer. */
+.native-workspace .studio-top-actions {
+  display: flex; flex-wrap: nowrap; height: 48px; min-height: 48px;
+  gap: 6px; padding: 5px 8px;
+}
+.native-workspace-heading { order: 1; flex: 1 1 0; flex-basis: 0; display: block; margin: 0; overflow: hidden; }
+.native-workspace-heading span { display: none; }
+.native-workspace-heading strong { display: block; font-size: 13px; }
+.native-workspace .studio-top-actions > .studio-stepper { order: 2; display: flex; align-items: center; gap: 0; flex: 0 0 auto; }
+.native-workspace .studio-top-actions > .theme-toggle { order: 3; }
+.native-workspace .studio-save-island { order: 4; }
+.native-workspace .studio-view-menu { order: 5; position: relative; flex: 0 0 auto; }
+.native-workspace .studio-top-actions > .studio-present-link { order: 6; }
+.native-workspace .studio-command-menu { margin: 0; }
+.native-workspace .studio-top-actions :is(button, summary, a) { min-height: 36px; padding: 6px 9px; font-size: 13px; }
+.native-workspace .studio-top-actions > .theme-toggle,
+.native-workspace .studio-command-menu > summary,
+.native-workspace .studio-view-menu > summary { width: 36px; height: 36px; padding: 0; }
+.native-workspace .studio-top-actions > .theme-toggle span { display: none; }
+.native-workspace .studio-stepper button { width: 28px; padding: 0; font-size: 22px; border-color: transparent; }
+.native-workspace .studio-stepper select { width: 68px; height: 36px; min-height: 36px; padding: 4px; border: 0; border-radius: 6px; color: var(--studio-ink); background: var(--studio-surface); font: 12px/1.2 inherit; cursor: pointer; }
+.native-workspace .studio-stepper select:focus-visible { outline: 2px solid var(--studio-accent); }
+.native-workspace .studio-save-status { display: none; }
+.native-workspace .studio-save-inline { position: relative; }
+.native-workspace .studio-save-island:has(.is-unsaved) .studio-save-inline::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--studio-accent); }
+.native-workspace .studio-view-popover { position: absolute; top: 42px; right: 0; width: 220px; padding: 8px; display: grid; gap: 4px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
+.native-workspace .studio-view-popover :is(button, .studio-tool-menu) { width: 100%; }
+.native-workspace .studio-view-popover .studio-engine-toggle { display: flex; }
+.native-workspace .studio-view-popover .studio-tool-popover { position: static; width: 100%; padding: 4px 0 0; border: 0; box-shadow: none; transform: none; }
+.native-workspace .studio-plan-popover { position: fixed; top: 54px; bottom: auto; right: 8px; left: auto; width: min(480px, calc(100vw - 16px)); max-height: calc(100dvh - 64px); overflow: auto; background: var(--studio-surface); color: var(--studio-ink); border-color: var(--studio-line); transform: none; z-index: 110; }
+.native-workspace .studio-header-error { position: absolute; top: 48px; right: 8px; width: min(440px, calc(100vw - 16px)); padding: 12px; background: var(--studio-surface); border: 1px solid var(--studio-line); border-radius: 8px; }
+.native-workspace .studio-slide-stage { grid-template-rows: minmax(0, 1fr); }
+.native-workspace .studio-account-mini { display: none; }
+.native-workspace .studio-filmstrip-rail { padding: 10px 8px; }
+
+.native-studio-editor:has(.native-canvas-edit) { padding-top: 88px; }
+.native-studio-tools { position: absolute; top: 44px; left: 4px; z-index: 8; height: 44px; min-height: 44px; width: 144px; padding: 4px 0; gap: 0; overflow: visible; border: 0; }
+.native-studio-tools button, .native-studio-tools summary { min-height: 36px; padding: 6px 8px; font-size: 12px; }
+.native-insert-menu { position: relative; }
+.native-insert-menu summary { display: flex; align-items: center; cursor: pointer; list-style: none; border-radius: 6px; white-space: nowrap; }
+.native-insert-menu summary::-webkit-details-marker { display: none; }
+.native-insert-menu summary:hover { background: var(--studio-selected); }
+.native-insert-options { position: absolute; top: 40px; left: 0; width: 170px; display: grid; padding: 6px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
+.native-insert-options button { text-align: left; }
+.native-insert-panel { top: 92px; max-height: calc(100% - 100px); z-index: 30; }
+.native-canvas-edit, .native-canvas-edit .excalidraw, .native-canvas-edit .layer-ui__wrapper { overflow: visible; }
+.native-studio-editor:has(.native-canvas-edit)::before { content: ""; position: absolute; inset: 0 0 auto; height: 88px; background: var(--studio-surface); border-bottom: 1px solid var(--studio-line); }
+.native-canvas-edit .excalidraw { --editor-container-padding: 4px; }
+.native-canvas-edit .excalidraw .FixedSideContainer_side_top { top: -84px; left: 4px; right: 4px; bottom: 4px; }
+.native-canvas-edit .excalidraw .App-toolbar { box-shadow: none; }
+.native-canvas-edit .excalidraw .App-menu_top { grid-gap: 4px; }
+.native-canvas-edit .excalidraw .App-menu_top__left > .Island { margin-top: 44px; max-height: calc(100% - 88px); }
+.native-canvas-edit .excalidraw .App-menu_bottom { top: -40px; bottom: auto; left: 148px; right: 4px; width: auto; height: 36px; padding: 0; }
+.native-canvas-edit .excalidraw .App-bottom-bar { inset: -40px 4px auto 148px; height: 36px; padding: 0; margin: 0 !important; align-items: flex-start; }
+.native-canvas-edit .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; min-width: 0; max-height: calc(100dvh - 100px); box-shadow: none; }
+.native-canvas-edit .excalidraw .App-toolbar-content { padding: 0; justify-content: flex-end; gap: 2px; }
+.native-canvas-edit .excalidraw .App-toolbar-content .dropdown-menu--mobile { top: 40px; bottom: auto; }
+.native-canvas-edit .excalidraw .App-bottom-bar .panelColumn { overflow-y: auto; background: var(--studio-surface); border: 1px solid var(--studio-line); border-radius: 8px; }
+.native-canvas-edit .excalidraw .App-top-bar .Stack_vertical { gap: 0; }
+.native-canvas-edit .excalidraw .App-toolbar--mobile { padding: 0; }
+.native-canvas-edit .excalidraw .mobile-misc-tools-container { position: static; display: flex; flex-direction: row; }
+.native-canvas-edit .excalidraw .App-top-bar .App-toolbar-container { justify-content: center; gap: 4px; }
+.native-canvas-edit .excalidraw :is(.ToolIcon__icon, .dropdown-menu-button, .sidebar-trigger) { height: 36px; min-height: 36px; }
+.native-canvas-edit .excalidraw .App-toolbar-content .ToolIcon__icon { width: 32px; height: 36px; }
+.native-canvas-edit .excalidraw .App-toolbar-content .dropdown-menu-button { width: 32px; }
+@media (max-width: 1000px) {
+  .native-workspace .studio-save-inline > span, .native-workspace .studio-present-link > span { display: none; }
+  .native-workspace .studio-save-inline, .native-workspace .studio-top-actions > .studio-present-link { width: 36px; height: 36px; padding: 0; }
+}
+@media (max-width: 700px) {
+  .native-workspace .studio-top-actions { gap: 3px; padding-inline: 4px; }
+  .native-canvas-edit .excalidraw .App-toolbar-container .ToolIcon__icon,
+  .native-canvas-edit .excalidraw .App-toolbar-container .dropdown-menu-button,
+  .native-canvas-edit .excalidraw .mobile-misc-tools-container .sidebar-trigger { width: 28px; min-width: 28px; }
+  .native-canvas-edit .excalidraw .App-toolbar-container .Stack_horizontal { gap: 0; }
+  .native-canvas-edit .excalidraw .App-top-bar .App-toolbar-container { justify-content: flex-start; overflow-x: auto; max-width: 100%; }
+  .native-canvas-edit .excalidraw .App-top-bar > section { min-width: 0; width: 100%; }
+  .native-canvas-edit .excalidraw .App-top-bar .App-toolbar { flex-shrink: 0; }
+}

@@ -2496,8 +2496,15 @@ export function LecturerDashboard({
   return (
     <main className="app-shell lecturer-studio-shell native-workspace" data-csrf-token={csrfToken}>
         <section className={`lecturer-studio ${workspaceTool !== "presentation" ? "tool-open" : ""}`}>
-          <div className="studio-top-actions">
+          <header className="studio-top-actions" aria-label="Vorlesungseditor">
             <div className="native-workspace-heading"><span>learnordie</span><strong title={edit.title}>{edit.title}</strong></div>
+            {!showCreateForm && <nav className="studio-stepper" aria-label="Foliensteuerung">
+              <button type="button" onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)} disabled={activeStudioSlideIndex === 0} aria-label="Vorherige Folie" title="Vorherige Folie">‹</button>
+              <select aria-label="Folie auswählen" value={activeStudioSlideIndex} onChange={(event) => moveToStudioSlide(Number(event.target.value))}>
+                {studioSlides.map((slide, index) => <option key={slide.id} value={index}>{index + 1} / {studioSlides.length} · {slide.title}</option>)}
+              </select>
+              <button type="button" onClick={() => moveToStudioSlide(activeStudioSlideIndex + 1)} disabled={activeStudioSlideIndex >= studioSlides.length - 1} aria-label="Nächste Folie" title="Nächste Folie">›</button>
+            </nav>}
             <ThemeToggle />
             <div className="studio-save-island" aria-live="polite">
               <span className={`studio-save-status is-${saveStatus}`}>
@@ -2509,8 +2516,8 @@ export function LecturerDashboard({
                       ? "Ungespeichert"
                       : "Gespeichert"}
               </span>
-              <button className="plain-button studio-save-inline" disabled={saveStatus === "saving"} type="button" onClick={() => void persistLectureEdits()}>
-                Speichern
+              <button className="plain-button studio-save-inline" aria-label="Speichern" title="Speichern" disabled={saveStatus === "saving"} type="button" onClick={() => void persistLectureEdits()}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/></svg><span>Speichern</span>
               </button>
             </div>
           <details
@@ -2518,7 +2525,7 @@ export function LecturerDashboard({
             open={commandMenuOpen}
             onToggle={(event) => setCommandMenuOpen(event.currentTarget.open)}
           >
-            <summary aria-label="Studio-Menü" title="Vorlesungen und Einstellungen">Vorlesungen</summary>
+            <summary aria-label="Studio-Menü" title="Vorlesungen und Einstellungen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></summary>
             <div className="studio-command-popover">
               <section className="studio-menu-section" aria-label="Vorlesung wechseln">
                 <div className="studio-menu-heading">
@@ -2605,8 +2612,18 @@ export function LecturerDashboard({
               <a className="studio-command-link" href="/api/auth/logout">Abmelden</a>
             </div>
           </details>
-          <a className="primary-button studio-present-link" href={`/lecturer/live/${selected.publicToken}`}>Präsentieren</a>
-          </div>
+          {!showCreateForm && <details className="studio-view-menu">
+            <summary aria-label="Weitere Vorlesungsaktionen" title="Vorschau, Planung und Werkzeuge">•••</summary>
+            <div className="studio-view-popover">
+              <button aria-pressed={engineEditing} className="plain-button studio-engine-toggle" type="button" onClick={() => setEngineEditing((editing) => !editing)}>{engineEditing ? "Vorschau" : "Bearbeiten"}</button>
+              {renderPlanSummaryButton()}
+              {renderSlideToolMenu()}
+            </div>
+          </details>}
+          <a className="primary-button studio-present-link" aria-label="Präsentieren" title="Präsentieren" href={`/lecturer/live/${selected.publicToken}`}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 3h14v12H5zM12 15v6m-4 0 4-4 4 4"/></svg><span>Präsentieren</span></a>
+          {renderPlanEditor()}
+          {editError && <p role="alert" className="form-error deck-error studio-header-error">{editError}</p>}
+          </header>
           {renderFilmstripRail()}
 
           <section className={`studio-slide-stage ${workspaceTool === "questions" ? "question-active" : ""}`} aria-label="Präsentation bearbeiten">
@@ -2650,44 +2667,6 @@ export function LecturerDashboard({
                 </>
               ) : null}
             </div>
-
-            {!showCreateForm && (
-              <div className="studio-bottom-bar lb-enter-control" aria-label="Foliensteuerung">
-                <div className="studio-stepper">
-                  <button
-                    type="button"
-                    onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)}
-                    disabled={activeStudioSlideIndex === 0}
-                    aria-label="Vorherige Folie"
-                    title="Vorherige Folie"
-                  >
-                    ‹
-                  </button>
-                  <span>{activeStudioSlideIndex + 1} / {studioSlides.length || 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => moveToStudioSlide(activeStudioSlideIndex + 1)}
-                    disabled={activeStudioSlideIndex >= studioSlides.length - 1}
-                    aria-label="Nächste Folie"
-                    title="Nächste Folie"
-                  >
-                    ›
-                  </button>
-                </div>
-                {renderPlanSummaryButton()}
-                {renderPlanEditor()}
-                {renderSlideToolMenu()}
-                <button
-                  aria-pressed={engineEditing}
-                  className="plain-button studio-engine-toggle"
-                  type="button"
-                  onClick={() => setEngineEditing((editing) => !editing)}
-                >
-                  {engineEditing ? "Vorschau" : "Bearbeiten"}
-                </button>
-                {editError && <p role="alert" className="form-error deck-error">{editError}</p>}
-              </div>
-            )}
 
           </section>
         </section>
