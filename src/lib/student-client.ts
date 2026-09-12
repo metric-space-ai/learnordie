@@ -5,6 +5,7 @@
 // answer events, so readiness reflects real interactions. Server identity is held
 // in an httpOnly cookie set by POST /api/student/profile.
 
+import { suggestPseudonyms } from "./student-pseudonym";
 import type { StudentProfile } from "./types";
 
 const STUDENT_KEY = "lb_student_key";
@@ -35,7 +36,26 @@ export async function fetchCurrentProfile(): Promise<StudentProfile | null> {
   }
 }
 
-export async function saveProfile(pseudonym: string): Promise<StudentProfile | null> {
+export async function fetchPseudonymSuggestions(seriesId?: string): Promise<string[]> {
+  try {
+    const query = seriesId ? `?seriesId=${encodeURIComponent(seriesId)}` : "";
+    const response = await fetch(`/api/student/pseudonyms${query}`, { cache: "no-store" });
+    if (!response.ok) return suggestPseudonyms({ count: 3 });
+    const data = (await response.json()) as { suggestions?: string[] };
+    if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+      return data.suggestions.slice(0, 3);
+    }
+  } catch {
+    // fall through to local generation
+  }
+  return suggestPseudonyms({ count: 3 });
+}
+
+export type SaveProfileResult =
+  | { ok: true; profile: StudentProfile }
+  | { ok: false; error: string; suggestions?: string[] };
+
+export async function saveProfile(pseudonym: string): Promise<SaveProfileResult> {
   const anonymousKey = getOrCreateStudentKey();
   try {
     const response = await fetch("/api/student/profile", {
@@ -43,10 +63,52 @@ export async function saveProfile(pseudonym: string): Promise<StudentProfile | n
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ anonymousKey, pseudonym })
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { profile: StudentProfile };
-    return data.profile;
+    const data = (await response.json().catch(() => ({}))) as {
+      profile?: StudentProfile;
+      error?: string;
+      suggestions?: string[];
+    };
+    if (!response.ok || !data.profile) {
+      return {
+        ok: false,
+        error: data.error ?? "Profil konnte nicht gespeichert werden.",
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : undefined
+      };
+    }
+    return { ok: true, profile: data.profile };
   } catch {
-    return null;
+    return { ok: false, error: "Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen." };
+  }
+}
+
+export async function claimSeriesDisplayName(
+  seriesId: string,
+  displayName: string
+): Promise<SaveProfileResult & { displayName?: string }> {
+  try {
+    const response = await fetch("/api/student/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ seriesId, displayName })
+    });
+    const data = (await response.json().catch(() => ({}))) as {
+      claim?: { displayName?: string };
+      error?: string;
+      suggestions?: string[];
+    };
+    if (!response.ok || !data.claim?.displayName) {
+      return {
+        ok: false,
+        error: data.error ?? "Name konnte nicht gespeichert werden.",
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : undefined
+      };
+    }
+    const profile = await fetchCurrentProfile();
+    if (!profile) {
+      return { ok: false, error: "Profil konnte nicht geladen werden." };
+    }
+    return { ok: true, profile, displayName: data.claim.displayName };
+  } catch {
+    return { ok: false, error: "Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen." };
   }
 }

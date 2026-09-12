@@ -89,6 +89,17 @@ export function JoinCodeEditor({
     setBusy(false);
   }
 
+  async function copyCode() {
+    if (!share?.joinCode) return;
+    try {
+      await navigator.clipboard.writeText(share.joinCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("Kopieren nicht möglich.");
+    }
+  }
+
   async function copyLink() {
     if (!share?.joinPath) return;
     const url = `${window.location.origin}${share.joinPath}`;
@@ -108,8 +119,11 @@ export function JoinCodeEditor({
           <p className="join-code-label">Aktiver Code für Studierende</p>
           <p className="join-code-value">{share.joinCode}</p>
           <div className="join-code-actions">
+            <button type="button" className="plain-button small" onClick={copyCode}>
+              {copied ? "Kopiert ✓" : "Code kopieren"}
+            </button>
             <button type="button" className="plain-button small" onClick={copyLink}>
-              {copied ? "Link kopiert ✓" : "Link kopieren"}
+              Link kopieren
             </button>
             <button type="button" className="plain-button small" onClick={disableCode} disabled={busy}>
               Deaktivieren

@@ -42,7 +42,7 @@ export function LoginForm({
       }
       setSentWithoutLocalLink(true);
     } catch {
-      setError("Anmeldelink konnte nicht erstellt werden. Bitte erneut versuchen.");
+      setError("Netzwerkfehler. Die E-Mail bleibt stehen — bitte erneut versuchen.");
     } finally {
       setPending(false);
     }
@@ -64,10 +64,10 @@ export function LoginForm({
         />
       </label>
       <p className="login-flow-note">
-        Neu hier? Der gleiche Link erstellt dein Konto. Bestehende Konten werden damit angemeldet.
+        Neu hier? Derselbe Link legt das Konto an. Bestehende Konten werden damit angemeldet.
       </p>
       <button className="primary-button" type="submit" disabled={pending}>
-        {pending ? "Link wird gesendet ..." : "Einloggen oder Konto erstellen"}
+        {pending ? "Link wird gesendet …" : "Anmeldelink senden"}
       </button>
       <p className="login-support">
         Der Link ist 15 Minuten gültig. Nach der Bestätigung öffnet sich dein Dozentenbereich.

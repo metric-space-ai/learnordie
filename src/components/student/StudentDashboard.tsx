@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { joinCodeFromInput } from "@/lib/join-code";
-import { saveProfile } from "@/lib/student-client";
+import { PSEUDONYM_MAX_LENGTH } from "@/lib/student-pseudonym";
+import { claimSeriesDisplayName, saveProfile } from "@/lib/student-client";
 import type { StudentDashboard as StudentDashboardData, StudentDashboardSeries } from "@/lib/types";
 import { ReadinessPanel } from "./ReadinessPanel";
 
@@ -22,13 +23,60 @@ function formatDate(iso?: string) {
   return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
 }
 
-function SeriesCard({ series, onRemove }: { series: StudentDashboardSeries; onRemove: (id: string) => void }) {
+function continueHref(series: StudentDashboardSeries) {
+  const live = series.liveNow[0];
+  if (live) return `/l/${live.publicToken}`;
+  const learn = series.learn[0];
+  if (learn) return `/learn/${learn.publicToken}`;
+  return `/student?series=${encodeURIComponent(series.seriesId)}`;
+}
+
+function continueLabel(series: StudentDashboardSeries) {
+  if (series.liveNow[0]) return "Live starten";
+  if (series.learn[0]) return "Weiterlernen";
+  return "Vorlesung öffnen";
+}
+
+function SeriesCard({
+  series,
+  onRemove,
+  onRename
+}: {
+  series: StudentDashboardSeries;
+  onRemove: (id: string) => void;
+  onRename: (seriesId: string, displayName: string) => Promise<{ ok: boolean; error?: string; displayName?: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState(series.displayName ?? "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const href = continueHref(series);
+
+  async function saveName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await onRename(series.seriesId, nameInput.trim());
+      if (!result.ok) {
+        setError(result.error ?? "Name konnte nicht gespeichert werden.");
+        return;
+      }
+      setEditing(false);
+    } catch {
+      setError("Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <article className="student-series lb-enter-panel">
       <header className="student-series-head">
         <div>
           <h2>{series.seriesTitle}</h2>
           <p className="student-series-meta">
+            {series.displayName && <span>Name in dieser Vorlesung: {series.displayName}</span>}
             {series.joinCode && <span>Code {series.joinCode}</span>}
             {series.examDate && <span>Prüfung {formatDate(series.examDate)}</span>}
           </p>
@@ -37,6 +85,33 @@ function SeriesCard({ series, onRemove }: { series: StudentDashboardSeries; onRe
           Entfernen
         </button>
       </header>
+
+      <p className="student-continue">
+        <a className="primary-button" href={href} aria-label={continueLabel(series)}>
+          {continueLabel(series)}
+        </a>
+      </p>
+
+      {editing ? (
+        <form className="student-id-form" onSubmit={saveName}>
+          <label>
+            Name in dieser Vorlesung
+            <input
+              value={nameInput}
+              onChange={(event) => setNameInput(event.target.value)}
+              maxLength={PSEUDONYM_MAX_LENGTH}
+              aria-label="Name in dieser Vorlesung"
+            />
+          </label>
+          <button className="plain-button small" type="submit" disabled={busy}>Speichern</button>
+          <button className="plain-button small" type="button" onClick={() => setEditing(false)}>Abbrechen</button>
+        </form>
+      ) : (
+        <button className="plain-button small" type="button" onClick={() => setEditing(true)}>
+          Anzeigename ändern
+        </button>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
 
       {series.liveNow.length > 0 && (
         <section className="student-block live">
@@ -108,24 +183,51 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
   }
 
   async function removeEnrollment(enrollmentId: string) {
-    const response = await fetch(`/api/student/enrollments/${enrollmentId}`, { method: "DELETE" });
-    if (response.ok) {
+    try {
+      const response = await fetch(`/api/student/enrollments/${enrollmentId}`, { method: "DELETE" });
+      if (response.ok) {
+        setDashboard((current) => ({
+          ...current,
+          series: current.series.filter((series) => series.enrollmentId !== enrollmentId),
+          hasEnrollments: current.series.filter((series) => series.enrollmentId !== enrollmentId).length > 0
+        }));
+        return;
+      }
+      setError("Vorlesung konnte nicht entfernt werden. Bitte erneut versuchen.");
+    } catch {
+      setError("Netzwerkfehler. Bitte erneut versuchen.");
+    }
+  }
+
+  async function renameSeries(seriesId: string, displayName: string) {
+    const result = await claimSeriesDisplayName(seriesId, displayName);
+    if (result.ok) {
       setDashboard((current) => ({
         ...current,
-        series: current.series.filter((series) => series.enrollmentId !== enrollmentId),
-        hasEnrollments: current.series.filter((series) => series.enrollmentId !== enrollmentId).length > 0
+        profile: result.profile,
+        series: current.series.map((series) =>
+          series.seriesId === seriesId ? { ...series, displayName: result.displayName ?? displayName } : series
+        )
       }));
     }
+    return result;
   }
 
   async function savePseudonym(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const clean = pseudonymInput.trim();
     if (!clean) return;
-    const profile = await saveProfile(clean);
-    if (profile) {
-      setDashboard((current) => ({ ...current, profile }));
-      setEditing(false);
+    try {
+      const profile = await saveProfile(clean);
+      if (profile.ok) {
+        setDashboard((current) => ({ ...current, profile: profile.profile }));
+        setEditing(false);
+        setError("");
+        return;
+      }
+      setError(profile.error);
+    } catch {
+      setError("Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen.");
     }
   }
 
@@ -147,15 +249,15 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
               <input
                 value={pseudonymInput}
                 onChange={(event) => setPseudonymInput(event.target.value)}
-                aria-label="Pseudonym"
-                maxLength={80}
+                aria-label="Bevorzugter Name"
+                maxLength={PSEUDONYM_MAX_LENGTH}
                 autoFocus
               />
               <button className="plain-button small" type="submit">Speichern</button>
             </form>
           ) : (
             <>
-              <span className="student-id-label">Pseudonym</span>
+              <span className="student-id-label">Bevorzugter Name</span>
               <strong>{dashboard.profile.pseudonym}</strong>
               <button className="plain-button small" type="button" onClick={() => setEditing(true)}>Ändern</button>
             </>
@@ -192,7 +294,12 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
       ) : (
         <div className="student-series-grid">
           {dashboard.series.map((series) => (
-            <SeriesCard key={series.enrollmentId} series={series} onRemove={removeEnrollment} />
+            <SeriesCard
+              key={series.enrollmentId}
+              series={series}
+              onRemove={removeEnrollment}
+              onRename={renameSeries}
+            />
           ))}
         </div>
       )}

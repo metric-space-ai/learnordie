@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { PSEUDONYM_MAX_LENGTH, validateClaimablePseudonym } from "@/lib/student-pseudonym";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { readJsonBody } from "@/server/request-json";
 import { getStudentRepository } from "@/server/student-repository";
@@ -10,7 +11,7 @@ const MAX_PROFILE_BYTES = 4 * 1024;
 
 const profileSchema = z.object({
   anonymousKey: z.string().refine(isValidAnonymousKey, "Ungültiger Schlüssel."),
-  pseudonym: z.string().trim().min(1).max(80).optional(),
+  pseudonym: z.string().trim().min(1).max(PSEUDONYM_MAX_LENGTH).optional(),
   locale: z.string().trim().min(2).max(10).optional()
 });
 
@@ -27,6 +28,10 @@ export async function POST(request: Request) {
 
   const parsed = profileSchema.safeParse(bodyResult.body);
   if (!parsed.success) {
+    return NextResponse.json({ error: "Bitte ein gültiges Pseudonym wählen (kein Klarname)." }, { status: 400 });
+  }
+
+  if (parsed.data.pseudonym && !validateClaimablePseudonym(parsed.data.pseudonym)) {
     return NextResponse.json({ error: "Bitte ein gültiges Pseudonym wählen (kein Klarname)." }, { status: 400 });
   }
 

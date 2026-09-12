@@ -719,7 +719,7 @@ export type EnrollmentSource =
   | "direct_learn_link"
   | "lecturer_invite";
 
-export type EnrollmentStatus = "active" | "removed";
+export type EnrollmentStatus = "active" | "removed" | "anonymized";
 
 export type StudentEnrollment = {
   id: string;
@@ -730,6 +730,8 @@ export type StudentEnrollment = {
   joinCodeId?: string;
   source: EnrollmentSource;
   status: EnrollmentStatus;
+  displayName?: string;
+  displayNameNormalized?: string;
   addedAt: string;
   lastOpenedAt?: string;
 };
@@ -755,6 +757,7 @@ export type StudentDashboardSeries = {
   enrollmentId: string;
   seriesId: string;
   seriesTitle: string;
+  displayName?: string;
   language: string;
   examDate?: string;
   joinCode?: string;

@@ -13,6 +13,7 @@ export function ReadinessPanel({ readiness }: { readiness?: ReadinessSnapshot })
   if (!readiness) return null;
 
   const tone = BAND_TONE[readiness.band] ?? "start";
+  const empty = readiness.readinessScore === 0;
 
   return (
     <section className="readiness-panel" aria-label="Prüfungsvorbereitung">
@@ -21,19 +22,28 @@ export function ReadinessPanel({ readiness }: { readiness?: ReadinessSnapshot })
           <p className="readiness-eyebrow">Prüfungsvorbereitung</p>
           <p className="readiness-band" data-tone={tone}>{readiness.bandLabel}</p>
         </div>
-        <div className="readiness-score" data-tone={tone} aria-hidden="true">
-          <span>{readiness.readinessScore}</span>
-          <small>/100</small>
-        </div>
+        {!empty && (
+          <div className="readiness-score" data-tone={tone} aria-hidden="true">
+            <span>{readiness.readinessScore}</span>
+            <small>/100</small>
+          </div>
+        )}
       </header>
 
-      <div className="readiness-meter" role="img" aria-label={`Lernstand ${readiness.readinessScore} von 100`}>
-        <span className="readiness-meter-fill" data-tone={tone} style={{ width: `${readiness.readinessScore}%` }} />
-      </div>
-
-      <p className="readiness-note">
-        Das ist eine motivierende Selbsteinschätzung aus deinen Antworten — keine Prüfungsnote.
-      </p>
+      {empty ? (
+        <p className="readiness-note readiness-empty">
+          Noch keine Einschätzung — beantworte deine erste Frage. Das ist keine Note.
+        </p>
+      ) : (
+        <>
+          <div className="readiness-meter" role="img" aria-label={`Lernstand ${readiness.readinessScore} von 100`}>
+            <span className="readiness-meter-fill" data-tone={tone} style={{ width: `${readiness.readinessScore}%` }} />
+          </div>
+          <p className="readiness-note">
+            Das ist eine motivierende Selbsteinschätzung aus deinen Antworten — keine Prüfungsnote.
+          </p>
+        </>
+      )}
 
       {readiness.strengths.length > 0 && (
         <p className="readiness-strengths">

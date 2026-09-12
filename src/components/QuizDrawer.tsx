@@ -15,16 +15,20 @@ export function QuizDrawer({
   headerAction,
   origin = "control",
   motionState = "open",
+  mode = "live",
   onAnswered,
-  onExpired
+  onContinue,
+  onPeekSlide
 }: {
   questions: QuestionVariant[];
   initialLevel?: QuestionLevel;
   headerAction?: ReactNode;
   origin?: "control" | "hotspot" | "space";
   motionState?: PresenceState;
+  mode?: "live" | "learn";
   onAnswered?: (payload: { level: QuestionLevel; correct: boolean; question: QuestionVariant; selected: string }) => void;
-  onExpired?: () => void;
+  onContinue?: () => void;
+  onPeekSlide?: () => void;
 }) {
   const [level, setLevel] = useState<QuestionLevel>(initialLevel);
   const [seconds, setSeconds] = useState(60);
@@ -36,43 +40,82 @@ export function QuizDrawer({
     () => questions.find((item) => item.level === level) ?? questions[0],
     [level, questions]
   );
+  const drawerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const root = drawerRef.current;
+    if (!root) return;
+    const focusable = () =>
+      Array.from(root.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled])"));
+    const first = focusable()[0];
+    first?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const start = items[0]!;
+      const end = items[items.length - 1]!;
+      if (event.shiftKey && document.activeElement === start) {
+        event.preventDefault();
+        end.focus();
+      } else if (!event.shiftKey && document.activeElement === end) {
+        event.preventDefault();
+        start.focus();
+      }
+    }
+    root.addEventListener("keydown", onKey);
+    return () => root.removeEventListener("keydown", onKey);
+  }, [level, revealed]);
   useEffect(() => {
     if (revealed) return;
     const timer = window.setInterval(() => {
       setSeconds((current) => {
         if (current <= 1) {
-          if (!expiredRef.current) {
-            expiredRef.current = true;
-            window.setTimeout(() => onExpired?.(), 0);
-          }
+          expiredRef.current = true;
           return 0;
         }
-
         return current - 1;
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [onExpired, revealed]);
+  }, [revealed]);
 
   useEffect(() => {
     setLevel(initialLevel);
     setSelected(null);
     setRevealed(false);
     expiredRef.current = false;
+    setSeconds(60);
   }, [initialLevel]);
 
+  const timedOut = seconds === 0 && !revealed;
+  const answersLocked = revealed || (mode === "live" && timedOut);
+
   function choose(answerKey: string) {
-    if (revealed) return;
+    if (answersLocked) return;
     const option = question.answers.find((answer) => answer.key === answerKey);
     setSelected(answerKey);
     setRevealed(true);
     onAnswered?.({ level, correct: Boolean(option?.correct), question, selected: answerKey });
   }
 
+  const selectedIsCorrect = Boolean(question.answers.find((answer) => answer.key === selected)?.correct);
+  const timerCaption = revealed
+    ? selectedIsCorrect
+      ? `+${question.points} Punkte`
+      : "0 Punkte"
+    : timedOut
+      ? mode === "learn"
+        ? "Zeit vorbei — Antwort bleibt offen"
+        : "Zeit abgelaufen — keine Punkte, Begründung bleibt sichtbar"
+      : mode === "learn"
+        ? "Übungszeit"
+        : "bei 0: keine Punkte, Panel bleibt";
+
   return (
     <section
+      ref={drawerRef}
       className="question-drawer lb-enter-sheet"
-      data-answer-state={revealed ? "answered" : "open"}
+      data-answer-state={revealed ? "answered" : timedOut ? "expired" : "open"}
       data-level={level}
       data-origin={origin}
       data-state={motionState}
@@ -90,13 +133,22 @@ export function QuizDrawer({
                   setLevel(item);
                   setSelected(null);
                   setRevealed(false);
+                  expiredRef.current = false;
+                  setSeconds(60);
                 }}
               >
                 {item}
               </button>
             ))}
           </div>
-          {headerAction}
+          <div className="question-head-actions">
+            {onPeekSlide && (
+              <button className="plain-button question-peek" type="button" onClick={onPeekSlide}>
+                Folie ansehen
+              </button>
+            )}
+            {headerAction}
+          </div>
         </div>
         <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>{question.text}</p>
         <div className="answers">
@@ -108,7 +160,7 @@ export function QuizDrawer({
                 className={`answer lb-enter-row ${stateClass}`}
                 key={answer.key}
                 type="button"
-                disabled={revealed}
+                disabled={answersLocked}
                 style={{ "--lb-i": index + 1 } as MotionStyle}
                 onClick={() => choose(answer.key)}
               >
@@ -118,10 +170,29 @@ export function QuizDrawer({
             );
           })}
         </div>
+        {revealed && (
+          <div className="question-feedback" role="status">
+            <p className={selectedIsCorrect ? "feedback-ok" : "feedback-no"}>
+              {selectedIsCorrect ? "Richtig" : "Noch nicht richtig"}
+            </p>
+            {question.explanation && <p className="question-explanation">{question.explanation}</p>}
+            {onContinue && (
+              <button className="primary-button question-continue" type="button" onClick={onContinue}>
+                Weiterlernen
+              </button>
+            )}
+          </div>
+        )}
+        {timedOut && mode === "live" && !revealed && (
+          <div className="question-feedback" role="status">
+            <p className="feedback-no">Zeit abgelaufen — keine Punkte</p>
+            <p className="question-explanation">Die Frage bleibt offen zum Lesen. Eine verspätete Antwort wird nicht gewertet.</p>
+          </div>
+        )}
       </div>
       <aside className="timer lb-enter-control" aria-label="Timer">
         <strong>{String(seconds).padStart(2, "0")}</strong>
-        <span>{revealed ? (question.answers.find((answer) => answer.key === selected)?.correct ? `+${question.points} Punkte` : "0 Punkte") : "schließt"}</span>
+        <span>{timerCaption}</span>
       </aside>
     </section>
   );

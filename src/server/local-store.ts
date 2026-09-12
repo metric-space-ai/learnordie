@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { demoLecture } from "@/lib/demo-data";
+import { qaMechanicsLectures } from "@/lib/qa-fixture-mechanics";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
 import {
@@ -209,33 +210,47 @@ function applyLocalTenantBudgets(store: LocalStoreData, ownerEmail?: string) {
   }
 }
 
+function toSeededLecture(lecture: Lecture): Lecture {
+  const slides = clone(lecture.slides);
+  return {
+    ...clone(lecture),
+    slides,
+    slideDocument: buildLegacyLectureSlideDocument({
+      id: lecture.id,
+      title: lecture.title,
+      seriesTitle: lecture.seriesTitle,
+      language: lecture.language,
+      slides
+    }),
+    materials: [],
+    questionReviews: [],
+    materialProcessingRuns: [],
+    studentChatQuestions: [],
+    transcriptSegments: [],
+    assistantMessages: [],
+    standaloneExports: [],
+    standaloneExportJobs: []
+  };
+}
+
+function seedQaLectures(store: LocalStoreData): boolean {
+  let changed = false;
+  for (const lecture of qaMechanicsLectures) {
+    if (store.lectures.some((item) => item.publicToken === lecture.publicToken || item.id === lecture.id)) continue;
+    store.lectures.push(toSeededLecture(lecture));
+    changed = true;
+  }
+  return changed;
+}
+
 async function ensureStore() {
   await fs.mkdir(path.dirname(STORE_PATH), { recursive: true });
 
   try {
     await fs.access(STORE_PATH);
   } catch {
-    const demoSlides = clone(demoLecture.slides);
     const seed: LocalStoreData = {
-      lectures: [{
-        ...clone(demoLecture),
-        slides: demoSlides,
-        slideDocument: buildLegacyLectureSlideDocument({
-          id: demoLecture.id,
-          title: demoLecture.title,
-          seriesTitle: demoLecture.seriesTitle,
-          language: demoLecture.language,
-          slides: demoSlides
-        }),
-        materials: [],
-        questionReviews: [],
-        materialProcessingRuns: [],
-        studentChatQuestions: [],
-        transcriptSegments: [],
-        assistantMessages: [],
-        standaloneExports: [],
-        standaloneExportJobs: []
-      }]
+      lectures: [toSeededLecture(demoLecture), ...qaMechanicsLectures.map(toSeededLecture)]
     };
     await writeStore(seed);
   }
@@ -296,6 +311,9 @@ async function readStore() {
   });
   applyLocalSeriesBudgets(data);
   applyLocalTenantBudgets(data);
+  if (seedQaLectures(data)) {
+    await writeStore(data);
+  }
   return data;
 }
 

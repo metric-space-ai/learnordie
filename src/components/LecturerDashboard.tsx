@@ -58,6 +58,7 @@ const variantReviewStatusOptions: Array<{ value: QuestionVariantReviewStatus; la
 ];
 
 type WorkspaceTool = "presentation" | "evaluation" | "questions" | "materials" | "analytics" | "assistant";
+type SaveStatus = "saved" | "unsaved" | "saving" | "error";
 type PlanEditor = "status" | "live" | "exam" | "learn" | "budget" | "leaderboard" | null;
 type SourceComposer = "file" | "url" | "notes" | null;
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -498,6 +499,7 @@ export function LecturerDashboard({
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [engineEditorOpen, setEngineEditorOpen] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [reviewFocusId, setReviewFocusId] = useState("");
   const [reviewLevel, setReviewLevel] = useState<QuestionLevel>("2.0");
   const [studioSlideIndex, setStudioSlideIndex] = useState(0);
@@ -916,40 +918,48 @@ export function LecturerDashboard({
   async function persistLectureEdits() {
     if (!selected) return;
     setEditError("");
+    setSaveStatus("saving");
     const draft = visibleStageEditDraft(edit);
     setEdit(draft);
-    const response = await fetch(`/api/lectures/${selected.id}`, {
-      method: "PATCH",
-      headers: csrfJsonHeaders,
-      body: JSON.stringify(draft)
-    });
-    const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
-    if (!response.ok || !payload.lectures) {
-      setEditError(payload.error ?? "Vorlesung konnte nicht gespeichert werden.");
-      return;
-    }
-    setLectures(payload.lectures);
-    const updated = payload.lectures.find((lecture) => lecture.id === selected.id);
-    if (updated) {
-      setEdit({
-        title: updated.title,
-        seriesTitle: updated.seriesTitle,
-        liveAt: formatDateTime(updated.liveAt),
-        examDate: updated.examDate,
-        aiDailyLimit: String(updated.aiDailyLimit),
-        aiDailyTokenLimit: String(updated.aiDailyTokenLimit),
-        seriesAiDailyLimit: String(updated.seriesAiDailyLimit),
-        seriesAiDailyTokenLimit: String(updated.seriesAiDailyTokenLimit),
-        tenantAiDailyLimit: String(updated.tenantAiDailyLimit),
-        tenantAiDailyTokenLimit: String(updated.tenantAiDailyTokenLimit),
-        leaderboardEnabled: updated.leaderboardEnabled,
-        learnQuestionDensity: String(normalizeLearnQuestionDensity(updated.learnQuestionDensity)),
-        evaluationConfig: updated.evaluationConfig,
-        saveEvaluationAsSeriesTemplate: false,
-        status: updated.status,
-        slides: updated.slides,
-        slideDocument: updated.slideDocument
+    try {
+      const response = await fetch(`/api/lectures/${selected.id}`, {
+        method: "PATCH",
+        headers: csrfJsonHeaders,
+        body: JSON.stringify(draft)
       });
+      const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
+      if (!response.ok || !payload.lectures) {
+        setEditError(payload.error ?? "Vorlesung konnte nicht gespeichert werden.");
+        setSaveStatus("error");
+        return;
+      }
+      setLectures(payload.lectures);
+      const updated = payload.lectures.find((lecture) => lecture.id === selected.id);
+      if (updated) {
+        setEdit({
+          title: updated.title,
+          seriesTitle: updated.seriesTitle,
+          liveAt: formatDateTime(updated.liveAt),
+          examDate: updated.examDate,
+          aiDailyLimit: String(updated.aiDailyLimit),
+          aiDailyTokenLimit: String(updated.aiDailyTokenLimit),
+          seriesAiDailyLimit: String(updated.seriesAiDailyLimit),
+          seriesAiDailyTokenLimit: String(updated.seriesAiDailyTokenLimit),
+          tenantAiDailyLimit: String(updated.tenantAiDailyLimit),
+          tenantAiDailyTokenLimit: String(updated.tenantAiDailyTokenLimit),
+          leaderboardEnabled: updated.leaderboardEnabled,
+          learnQuestionDensity: String(normalizeLearnQuestionDensity(updated.learnQuestionDensity)),
+          evaluationConfig: updated.evaluationConfig,
+          saveEvaluationAsSeriesTemplate: false,
+          status: updated.status,
+          slides: updated.slides,
+          slideDocument: updated.slideDocument
+        });
+      }
+      setSaveStatus("saved");
+    } catch {
+      setEditError("Netzwerkfehler. Speichern erneut versuchen — der Entwurf bleibt stehen.");
+      setSaveStatus("error");
     }
   }
 
@@ -959,6 +969,7 @@ export function LecturerDashboard({
   }
 
   function updateSlideDraft(slideId: string, updater: (slide: Slide) => Slide) {
+    setSaveStatus("unsaved");
     setEdit((current) => ({
       ...current,
       slides: current.slides.map((slide) => (slide.id === slideId ? updater(slide) : slide))
@@ -2282,38 +2293,8 @@ export function LecturerDashboard({
     );
   }
 
-  function renderStudioHotspots() {
-    const questionCount = reviews.length || selected.questions.length;
-    const materialCount = selected.materials?.length ?? 0;
-    const analyticsCount = analytics?.participants ?? selected.studentChatQuestions?.length ?? 0;
-    const assistantCount = selected.assistantMessages?.length ?? 0;
-    const hotspots: Array<{ tool: WorkspaceTool; icon: string; label: string; count?: string }> = [
-      { tool: "assistant", icon: "assistant", label: "Assistent an dieser Folie", count: assistantCount > 0 ? String(assistantCount) : undefined },
-      { tool: "questions", icon: "question", label: "Fragen auf dieser Folie", count: String(questionCount) },
-      { tool: "materials", icon: "source", label: "Quellen für diese Folie", count: materialCount > 0 ? String(materialCount) : undefined },
-      { tool: "analytics", icon: "analytics", label: "Lernsignale zu dieser Folie", count: analyticsCount > 0 ? String(analyticsCount) : undefined },
-      { tool: "evaluation", icon: "eval", label: "Evaluation im Learn-Modus", count: edit.evaluationConfig?.enabled === false ? "aus" : undefined }
-    ];
-
-    return (
-      <div className="studio-hotspots" aria-label="Direktwerkzeuge auf der Folie">
-        {hotspots.map((item, index) => (
-          <button
-            aria-label={item.label}
-            aria-pressed={workspaceTool === item.tool}
-            className={`studio-hotspot lb-enter-hotspot ${workspaceTool === item.tool ? "active" : ""}`}
-            key={item.tool}
-            style={{ "--lb-i": index } as MotionStyle}
-            title={item.label}
-            type="button"
-            onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
-          >
-            <span className={`lb-icon lb-icon-${item.icon}`} aria-hidden="true" />
-            {item.count ? <small>{item.count}</small> : null}
-          </button>
-        ))}
-      </div>
-    );
+  function renderStudioHotspots(): null {
+    return null;
   }
 
   function renderFilmstripRail() {
@@ -2586,6 +2567,21 @@ export function LecturerDashboard({
   return (
     <main className="app-shell lecturer-studio-shell lb-motion-root" data-csrf-token={csrfToken}>
         <section className={`lecturer-studio ${workspaceTool !== "presentation" ? "tool-open" : ""}`}>
+          <div className="studio-top-actions">
+            <div className="studio-save-island" aria-live="polite">
+              <span className={`studio-save-status is-${saveStatus}`}>
+                {saveStatus === "saving"
+                  ? "Wird gespeichert"
+                  : saveStatus === "error"
+                    ? "Fehler"
+                    : saveStatus === "unsaved"
+                      ? "Ungespeichert"
+                      : "Gespeichert"}
+              </span>
+              <button className="primary-button studio-save-inline" type="button" onClick={() => void persistLectureEdits()}>
+                Speichern
+              </button>
+            </div>
           <details
             className="studio-command-menu"
             open={commandMenuOpen}
@@ -2651,6 +2647,15 @@ export function LecturerDashboard({
                   >
                     Evaluation
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommandMenuOpen(false);
+                      setEngineEditorOpen((open) => !open);
+                    }}
+                  >
+                    {engineEditorOpen ? "Technischen Editor schließen" : "Technischen Editor"}
+                  </button>
                   <a href={`/api/lecture/${selected.publicToken}/export`} download>Standalone HTML</a>
                   <a href={`/api/lecture/${selected.publicToken}/export?format=zip`} download>Archiv ZIP</a>
                 </nav>
@@ -2689,6 +2694,7 @@ export function LecturerDashboard({
               <a className="studio-command-link" href="/api/auth/logout">Logout</a>
             </div>
           </details>
+          </div>
           {renderFilmstripRail()}
 
           <section className={`studio-slide-stage ${workspaceTool === "questions" ? "question-active" : ""}`} aria-label="Präsentation bearbeiten">
@@ -2873,7 +2879,6 @@ export function LecturerDashboard({
                       onSlideDocumentChange={updateSlideDocumentFromEngine}
                     />
                   )}
-                  {renderStudioHotspots()}
                 </>
               ) : (
                 <div className="workspace-empty-inline">Noch keine Folien vorhanden.</div>
@@ -2904,15 +2909,6 @@ export function LecturerDashboard({
                 {renderPlanSummaryButton()}
                 {renderPlanEditor()}
                 {renderSlideToolMenu()}
-                <button
-                  aria-pressed={engineEditorOpen}
-                  className="plain-button studio-engine-toggle"
-                  type="button"
-                  onClick={() => setEngineEditorOpen((open) => !open)}
-                >
-                  Engine
-                </button>
-                <button className="primary-button studio-save-inline" type="button" onClick={persistLectureEdits}>Speichern</button>
                 {workspaceTool === "presentation" && editError && <p role="alert" className="form-error deck-error">{editError}</p>}
               </div>
             )}

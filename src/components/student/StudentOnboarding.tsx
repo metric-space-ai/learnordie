@@ -6,37 +6,46 @@ import { FormEvent, useState } from "react";
 
 import { joinCodeFromInput } from "@/lib/join-code";
 import { saveProfile } from "@/lib/student-client";
-import { suggestPseudonyms } from "@/lib/student-pseudonym";
+import { suggestionsWithoutRejected } from "@/lib/student-pseudonym";
 import { PseudonymChooser } from "./PseudonymChooser";
 
 export function StudentOnboarding() {
   const router = useRouter();
-  const [pseudonymInput, setPseudonymInput] = useState(() => suggestPseudonyms("student-onboarding")[0]);
+  const [pseudonymInput, setPseudonymInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [takenSuggestions, setTakenSuggestions] = useState<string[] | undefined>();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const pseudonym = pseudonymInput.trim();
-    if (!pseudonym) {
+    if (pseudonym.length < 2) {
       setError("Bitte ein Pseudonym wählen.");
       return;
     }
     setBusy(true);
     setError("");
-    const profile = await saveProfile(pseudonym);
-    if (!profile) {
-      setError("Profil konnte nicht gespeichert werden.");
+    try {
+      const result = await saveProfile(pseudonym);
+      if (!result.ok) {
+        setError(result.error);
+        if (result.suggestions?.length) {
+          setTakenSuggestions(suggestionsWithoutRejected(result.suggestions, pseudonym));
+        }
+        setBusy(false);
+        return;
+      }
+      const code = joinCodeFromInput(codeInput);
+      if (code) {
+        router.push(`/join/${encodeURIComponent(code)}`);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen.");
       setBusy(false);
-      return;
     }
-    const code = joinCodeFromInput(codeInput);
-    if (code) {
-      router.push(`/join/${encodeURIComponent(code)}`);
-      return;
-    }
-    router.refresh();
   }
 
   return (
@@ -56,9 +65,14 @@ export function StudentOnboarding() {
       <section className="student-emptystate lb-enter-panel">
         <p className="eyebrow">Lernen im Norden</p>
         <h1>Wähle ein Pseudonym</h1>
-        <p>Du brauchst kein Konto. Dein Pseudonym ist ein Anzeigename; deine Punkte hängen an einem anonymen Browser-Schlüssel.</p>
+        <p>Du brauchst kein Konto. Dein bevorzugter Name wird beim Beitritt in der Vorlesung eindeutig gemacht.</p>
         <form className="student-onboard-form" onSubmit={submit}>
-          <PseudonymChooser value={pseudonymInput} onChange={setPseudonymInput} seed="student-onboarding" disabled={busy} />
+          <PseudonymChooser
+            value={pseudonymInput}
+            onChange={setPseudonymInput}
+            disabled={busy}
+            suggestions={takenSuggestions}
+          />
           <label>
             Vorlesungscode (optional)
             <input

@@ -5,7 +5,6 @@ import type { CSSProperties } from "react";
 
 import { seriesIdFromTitle } from "@/lib/series";
 import { getOrCreateStudentKey, saveProfile } from "@/lib/student-client";
-import { suggestPseudonyms } from "@/lib/student-pseudonym";
 import type { LeaderboardEntry, Lecture } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
@@ -42,17 +41,21 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [identityMessage, setIdentityMessage] = useState("");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(`lb_pseudonym_${lecture.publicToken}`);
     const savedAnonymousKey = getOrCreateStudentKey();
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, savedAnonymousKey);
     setAnonymousKey(savedAnonymousKey);
-    if (saved) {
-      setPseudonym(saved);
-      setJoined(true);
-    } else {
-      setPseudonym(suggestPseudonyms(lecture.publicToken)[0]);
-    }
-  }, [lecture.publicToken]);
+    const seriesId = seriesIdFromTitle(lecture.seriesTitle);
+    fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesId)}`, { cache: "no-store" })
+      .then((response) => response.json() as Promise<{ claim: { displayName?: string } | null }>)
+      .then((data) => {
+        if (data.claim?.displayName) {
+          setPseudonym(data.claim.displayName);
+          setJoined(true);
+          window.localStorage.setItem(`lb_pseudonym_${lecture.publicToken}`, data.claim.displayName);
+        }
+      })
+      .catch(() => undefined);
+  }, [lecture.publicToken, lecture.seriesTitle]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -115,7 +118,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
 
   function join() {
     if (joining) return;
-    const clean = pseudonym.trim() || suggestPseudonyms(lecture.publicToken)[0];
+    const clean = pseudonym.trim();
+    if (!clean) return;
     getOrCreateStudentKey();
     window.localStorage.setItem(`lb_pseudonym_${lecture.publicToken}`, clean);
     setPseudonym(clean);
@@ -132,12 +136,13 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
 
   async function saveLiveIdentity() {
     if (identitySaving) return;
-    const clean = pseudonym.trim() || suggestPseudonyms(lecture.publicToken)[0];
+    const clean = pseudonym.trim();
+    if (!clean) return;
     setIdentitySaving(true);
     setIdentityMessage("");
     const profile = await saveProfile(clean);
-    if (!profile) {
-      setIdentityMessage("Konnte gerade nicht sichern. Live-Teilnahme bleibt aktiv.");
+    if (!profile.ok) {
+      setIdentityMessage(profile.error);
       setIdentitySaving(false);
       return;
     }
@@ -205,7 +210,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
             <PseudonymChooser
               value={pseudonym}
               onChange={setPseudonym}
-              seed={lecture.publicToken}
+              seriesId={seriesIdFromTitle(lecture.seriesTitle)}
               disabled={joining}
               label="Pseudonym für diese Runde"
             />
@@ -219,7 +224,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
 
   return (
     <main
-      className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
+      className={`slide-screen learn-shell lb-motion-root ${questionOpen ? "question-open" : ""}`}
       data-question-origin={questionOrigin}
     >
       <SlideEngineCanvas
@@ -295,6 +300,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
             questions={lecture.questions}
             origin={questionOrigin}
             motionState={motionState}
+            mode="live"
             onAnswered={({ question, correct, selected }) => {
               const selectedAnswer = question.answers.find((answer) => answer.key === selected);
               const correctAnswer = question.answers.find((answer) => answer.correct);
@@ -316,7 +322,6 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
                 await loadLeaderboard();
               })();
             }}
-            onExpired={() => setQuestionOpen(false)}
           />
         )}
       </Presence>

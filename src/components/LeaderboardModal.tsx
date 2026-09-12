@@ -34,7 +34,7 @@ export function LeaderboardModal({
             key={entry.rank}
             style={{ "--lb-i": index } as MotionStyle}
           >
-            <span>{entry.rank} · {entry.name}</span>
+            <span>{entry.rank} · {entry.name}{entry.self ? " · Du" : ""}</span>
             <strong>{entry.points}</strong>
           </div>
         ))}

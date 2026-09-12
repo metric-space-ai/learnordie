@@ -152,6 +152,7 @@ function printUsage() {
     "  npm run admin -- set-ai-budget --email email@example.test --questions 20 --tokens 12000",
     "  npm run admin -- retention-report [--years 5] [--lecture-token token]",
     "  npm run admin -- retention-cleanup [--years 5] [--lecture-token token] [--apply --confirm-retention-cleanup]",
+    "  npm run admin -- anonymize-enrollment --enrollment-id uuid",
     "  npm run admin -- worker-once --url http://localhost:3000 --secret secret [--limit 5]",
     "  npm run admin -- backup-sql --out backups/learnordie.sql",
     "  npm run admin -- restore-sql --file backups/learnordie.sql",
@@ -1192,6 +1193,24 @@ async function retentionReport(sql) {
   }, null, 2));
 }
 
+async function anonymizeEnrollment(sql) {
+  const enrollmentId = argValue("--enrollment-id", "").trim();
+  if (!enrollmentId) throw new Error("anonymize-enrollment requires --enrollment-id.");
+  const suffix = enrollmentId.replace(/[^a-zA-Z0-9]/g, "").slice(-3).toUpperCase() || "X";
+  const displayName = `Anonym · ${suffix}`.slice(0, 40);
+  const normalized = displayName.toLocaleLowerCase("de-DE");
+  const rows = await sql`
+    update student_enrollments
+    set status = 'anonymized',
+        display_name = ${displayName},
+        display_name_normalized = ${normalized}
+    where id = ${enrollmentId}::uuid
+    returning id, status, display_name
+  `;
+  if (rows.length === 0) throw new Error("Enrollment not found.");
+  console.log(JSON.stringify({ command: "anonymize-enrollment", enrollment: rows[0] }, null, 2));
+}
+
 async function retentionCleanup(sql) {
   const years = numericArg("--years", 5, 1, 50);
   const lectureToken = argValue("--lecture-token", "").trim();
@@ -1455,6 +1474,7 @@ async function main() {
     else if (command === "retention-cleanup") await retentionCleanup(sql);
     else if (command === "backup-sql") await backupSql();
     else if (command === "restore-sql") await restoreSql(sql);
+    else if (command === "anonymize-enrollment") await anonymizeEnrollment(sql);
     else if (command === "worker-once") await workerOnce();
     else if (command === "preflight") await runPreflight(sql);
     else if (command === "status") await status(sql);

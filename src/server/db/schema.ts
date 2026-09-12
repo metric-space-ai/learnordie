@@ -31,7 +31,7 @@ export const enrollmentSource = pgEnum("enrollment_source", [
   "direct_learn_link",
   "lecturer_invite"
 ]);
-export const enrollmentStatus = pgEnum("enrollment_status", ["active", "removed"]);
+export const enrollmentStatus = pgEnum("enrollment_status", ["active", "removed", "anonymized"]);
 export const agentThreadStatus = pgEnum("agent_thread_status", [
   "draft",
   "running",
@@ -404,6 +404,8 @@ export const studentEnrollments = pgTable(
     joinCodeId: uuid("join_code_id").references(() => joinCodes.id),
     source: enrollmentSource("source").notNull().default("code"),
     status: enrollmentStatus("status").notNull().default("active"),
+    displayName: text("display_name").notNull().default(""),
+    displayNameNormalized: text("display_name_normalized").notNull().default(""),
     addedAt: timestamp("added_at", { withTimezone: true }).defaultNow().notNull(),
     lastOpenedAt: timestamp("last_opened_at", { withTimezone: true })
   },
@@ -411,7 +413,10 @@ export const studentEnrollments = pgTable(
     // One active enrollment per (student, series).
     uniqueIndex("student_enrollments_active_series_idx")
       .on(table.studentProfileId, table.seriesId)
-      .where(sql`${table.status} = 'active'`)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("student_enrollments_active_name_idx")
+      .on(table.seriesId, table.displayNameNormalized)
+      .where(sql`${table.status} = 'active' AND ${table.displayNameNormalized} <> ''`)
   ]
 );
 

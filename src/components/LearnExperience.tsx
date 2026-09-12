@@ -89,6 +89,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   });
   const [evaluationOpen, setEvaluationOpen] = useState(false);
   const [evaluationSaved, setEvaluationSaved] = useState(false);
+  const [peekingSlide, setPeekingSlide] = useState(false);
   const [evaluation, setEvaluation] = useState({
     understanding: 4,
     pace: 4,
@@ -97,6 +98,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   });
   const hotspotButtonRefs = useRef(new Map<number, HTMLButtonElement>());
   const pendingHotspotSharedRef = useRef<{ index: number; level: QuestionLevel } | null>(null);
+  const moreRef = useRef<HTMLDetailsElement | null>(null);
+
+  function closeMore() {
+    if (moreRef.current) moreRef.current.open = false;
+  }
 
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
@@ -112,12 +118,30 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         setQuestionOrigin("space");
         setActiveHotspotIndex(null);
         setQuestionOpen((current) => !current);
+        closeMore();
+      }
+      if (event.key === "Escape") {
+        if (peekingSlide) {
+          event.preventDefault();
+          setPeekingSlide(false);
+          return;
+        }
+        if (questionOpen) {
+          event.preventDefault();
+          setQuestionOpen(false);
+          setPeekingSlide(false);
+          closeMore();
+        }
       }
     };
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [peekingSlide, questionOpen]);
+
+  useEffect(() => {
+    if (questionOpen || peekingSlide) closeMore();
+  }, [questionOpen, peekingSlide]);
 
   useEffect(() => {
     setDensity(normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
@@ -400,7 +424,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
 
   return (
     <main
-      className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""} ${inspectorOpen ? "inspector-open" : ""}`}
+      className={`slide-screen learn-shell lb-motion-root ${questionOpen ? "question-open" : ""} ${peekingSlide ? "slide-peek" : ""} ${inspectorOpen ? "inspector-open" : ""}`}
       data-question-origin={questionOrigin}
       style={originStyle}
     >
@@ -413,6 +437,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       />
       {questionOpen && questionOrigin === "hotspot" && <span className="question-origin-trace" aria-hidden="true" />}
       <div className="hotspots" aria-label="Fragen-Hotspots">
+        <span className="hotspot-row-label">Fragen</span>
         {hotspotLevels.slice(0, density).map((level, index) => (
           <button
             className={`hotspot lb-enter-hotspot ${hotspotClasses[index]}`}
@@ -441,7 +466,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           </button>
         ))}
       </div>
-      <div className="learn-bar lb-enter-control">
+      <div className="learn-bar island-control lb-enter-control">
         <label>
           Fragedichte
           <input
@@ -463,7 +488,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           Lern-HTML herunterladen
         </a>
       </div>
-      <div className="action-stack lb-enter-control">
+      <div className="action-stack island-control lb-enter-control">
         <button
           className="icon-action"
           type="button"
@@ -478,9 +503,50 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         >
           <span className="lb-icon lb-icon-question" aria-hidden="true" />
         </button>
+        <details ref={moreRef} className="learn-more">
+          <summary aria-label="Weitere Aktionen">Mehr</summary>
+          <div className="learn-more-panel" role="group" aria-label="Weitere Aktionen">
+            <a
+              className="plain-button small"
+              href={`/api/lecture/${lecture.publicToken}/export`}
+              download
+              onClick={() => void recordLearnEvent("standalone_export_downloaded", { mode: "learn" })}
+            >
+              Lern-HTML herunterladen
+            </a>
+            {lecture.leaderboardEnabled && (
+              <button
+                className="plain-button small"
+                type="button"
+                onClick={() => {
+                  setLeaderboardOpen(true);
+                  void loadLeaderboard();
+                }}
+              >
+                Rangliste
+              </button>
+            )}
+            {evaluationConfig.enabled && (
+              <button className="plain-button small" type="button" onClick={() => setEvaluationOpen(true)}>
+                {evaluationConfig.title}
+              </button>
+            )}
+            <label className="learn-more-density">
+              Fragedichte
+              <input
+                type="range"
+                min={MIN_LEARN_QUESTION_DENSITY}
+                max={MAX_LEARN_QUESTION_DENSITY}
+                value={density}
+                onChange={(event) => updateDensity(event.currentTarget.value)}
+              />
+              <strong>{density}</strong>
+            </label>
+          </div>
+        </details>
         {lecture.leaderboardEnabled && (
           <button
-            className="icon-action"
+            className="icon-action desktop-only-action"
             type="button"
             aria-label="Leaderboard anzeigen"
             onClick={() => {
@@ -492,7 +558,12 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           </button>
         )}
         {evaluationConfig.enabled && (
-          <button className="icon-action" type="button" aria-label={`${evaluationConfig.title} öffnen`} onClick={() => setEvaluationOpen(true)}>
+          <button
+            className="icon-action desktop-only-action"
+            type="button"
+            aria-label={`${evaluationConfig.title} öffnen`}
+            onClick={() => setEvaluationOpen(true)}
+          >
             <span className="lb-icon lb-icon-eval" aria-hidden="true" />
           </button>
         )}
@@ -504,6 +575,15 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             initialLevel={forcedLevel ?? "2.0"}
             origin={questionOrigin}
             motionState={motionState}
+            mode="learn"
+            onPeekSlide={() => {
+              closeMore();
+              setPeekingSlide(true);
+            }}
+            onContinue={() => {
+              setQuestionOpen(false);
+              setPeekingSlide(false);
+            }}
             headerAction={(
               <button className="plain-button question-ai-link lb-enter-control" type="button" onClick={openChat}>
                 KI fragen
@@ -528,10 +608,14 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 await loadLeaderboard();
               })();
             }}
-            onExpired={() => setQuestionOpen(false)}
           />
         )}
       </Presence>
+      {peekingSlide && questionOpen && (
+        <button className="plain-button slide-peek-return island-control" type="button" onClick={() => setPeekingSlide(false)}>
+          Zurück zur Frage
+        </button>
+      )}
       <Presence show={lecture.leaderboardEnabled && leaderboardOpen}>
         {(motionState) => (
           <LeaderboardModal

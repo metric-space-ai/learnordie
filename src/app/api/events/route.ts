@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { seriesIdFromTitle } from "@/lib/series";
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
+import { getStudentRepository } from "@/server/student-repository";
 
 const MAX_PUBLIC_EVENT_BYTES = 16_384;
 const questionLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
@@ -15,7 +17,7 @@ const schema = z.object({
   eventType: z.enum(publicEventTypes),
   payload: z.record(z.string(), z.unknown()).default({}),
   anonymousKey: z.string().min(8).max(160),
-  pseudonym: z.string().min(1).max(80).optional()
+  pseudonym: z.string().min(1).max(40).optional()
 });
 
 function text(value: unknown, max = 160) {
@@ -153,6 +155,25 @@ export async function POST(request: Request) {
   const lecture = await getLectureRepository().getLectureByToken(parsed.data.lectureToken);
   if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
 
+  const claimNeeded = parsed.data.eventType === "answer_selected" || parsed.data.eventType === "student_joined";
+  let claimName = parsed.data.pseudonym;
+  if (claimNeeded) {
+    const claim = await getStudentRepository().getClaimByAnonymousKey(
+      parsed.data.anonymousKey,
+      seriesIdFromTitle(lecture.seriesTitle)
+    );
+    if (!claim?.displayName || claim.status !== "active") {
+      return NextResponse.json(
+        {
+          error: "Bitte zuerst ein Pseudonym für diese Vorlesung wählen.",
+          code: "claim_required"
+        },
+        { status: 409 }
+      );
+    }
+    claimName = claim.displayName;
+  }
+
   const sanitized = sanitizePublicPayload(lecture, parsed.data.eventType, parsed.data.payload);
   if ("error" in sanitized) {
     return NextResponse.json({ error: sanitized.error }, { status: 400 });
@@ -160,6 +181,7 @@ export async function POST(request: Request) {
 
   const result = await getAnalyticsRepository().recordEvent({
     ...parsed.data,
+    pseudonym: claimName,
     payload: sanitized.payload
   });
   if (!result) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });

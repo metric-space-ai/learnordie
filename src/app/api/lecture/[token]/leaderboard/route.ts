@@ -25,7 +25,8 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
   const entries = await getAnalyticsRepository().getLectureLeaderboard({
     lectureId: lecture.id,
     lectureToken: lecture.publicToken,
-    currentAnonymousKey: currentAnonymousKey.value
+    currentAnonymousKey: currentAnonymousKey.value,
+    seriesTitle: lecture.seriesTitle
   });
 
   return NextResponse.json({ entries, enabled: true });
