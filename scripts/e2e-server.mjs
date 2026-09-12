@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { scryptSync } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -13,6 +14,14 @@ const port = process.env.E2E_PORT || "3070";
 const aiMockPort = process.env.E2E_AI_MOCK_PORT || "4070";
 const appUrl = process.env.E2E_BASE_URL || `http://${host}:${port}`;
 const ownerEmail = process.env.E2E_OWNER_EMAIL || "e2e@example.test";
+// Known credentials are confined to this isolated, resettable E2E server.
+const testAccountPassword = "e2e-only-test-password-not-for-production";
+const testAccountSalt = "f05d29175788acd8a4a8e4d65544f00f";
+const testAccountHash = `scrypt$${testAccountSalt}$${scryptSync(testAccountPassword, testAccountSalt, 64).toString("hex")}`;
+const testAccounts = ["qa-qr", "qa-other", "qa-rate", "qa-rate-retry"].map((name) => ({
+  email: `${name}@learnordie.test`, passwordHash: testAccountHash,
+  expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+}));
 const rootDir = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 let aiMockServer;
 
@@ -68,6 +77,7 @@ function e2eEnv(extra = {}) {
     DATABASE_URL: databaseUrl,
     NEXT_PUBLIC_APP_URL: appUrl,
     AUTH_SECRET: "learnordie-e2e-secret-with-more-than-32-characters",
+    LEARNBUDDY_TEST_ACCOUNTS: JSON.stringify(testAccounts),
     LEARNBUDDY_DEPLOYMENT_ENV: "local",
     LEARNBUDDY_REPOSITORY: "postgres",
     LEARNBUDDY_AUTO_SEED: "0",

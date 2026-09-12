@@ -18,6 +18,7 @@
 }
 
 .lecture-join-slide {
+  width: 100%;
   min-height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 44%);
@@ -33,6 +34,7 @@
 .lecture-join-copy .lecture-join-hint { font-size: clamp(14px, 1.2vw, 19px); margin-bottom: 24px; }
 .lecture-join-qr { width: 100%; max-width: min(52vh, 680px); justify-self: center; }
 .lecture-join-qr canvas { display: block; width: 100%; height: auto; background: white; }
+.slide-engine-stage[data-slide-id="lecture-join"] { padding: 0; overflow: auto; }
 @media (max-width: 700px) {
   .lecture-join-slide { grid-template-columns: 1fr; padding: 76px 20px 96px; gap: 16px; }
   .lecture-join-qr { grid-row: 1; max-width: min(42vh, 300px); }

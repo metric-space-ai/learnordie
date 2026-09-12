@@ -557,9 +557,11 @@ class LocalStudentRepository implements StudentRepository {
       const store = await readStudentStoreMigrated();
       const profile = store.profiles.find((item) => item.id === profileId);
       if (!profile) return null;
+      const group = (await this.loadSeriesIndex()).get(input.seriesId);
+      if (!group || (input.lectureId && !group.lectures.some((lecture) => lecture.id === input.lectureId))) return null;
       const enrollment = await this.createEnrollmentInternal(store, profileId, {
         seriesId: input.seriesId,
-        seriesTitle: input.seriesTitle,
+        seriesTitle: group.seriesTitle,
         lectureId: input.lectureId,
         source: input.source,
         displayName: input.displayName
@@ -666,6 +668,7 @@ class LocalStudentRepository implements StudentRepository {
   }
 
   async setLectureSeriesJoinCode(userId: string | undefined, seriesId: string, code: string): Promise<JoinCode> {
+    return withStudentStoreLock(async () => {
     const normalized = sanitizeJoinCode(code);
     if (!normalized) {
       throw new Error("Ungültiger Code. Erlaubt sind Buchstaben, Zahlen und Bindestriche.");
@@ -711,9 +714,11 @@ class LocalStudentRepository implements StudentRepository {
     store.joinCodes.push(joinCode);
     await writeStudentStore(store);
     return joinCode;
+    });
   }
 
   async disableJoinCode(userId: string | undefined, joinCodeId: string): Promise<JoinCode | null> {
+    return withStudentStoreLock(async () => {
     const store = await readStudentStore();
     const joinCode = store.joinCodes.find((item) => item.id === joinCodeId);
     if (!joinCode) return null;
@@ -721,6 +726,7 @@ class LocalStudentRepository implements StudentRepository {
     joinCode.updatedAt = nowIso();
     await writeStudentStore(store);
     return joinCode;
+    });
   }
 
   async getShareInfoForSeries(userId: string | undefined, seriesId: string): Promise<SeriesShareInfo | null> {
@@ -1075,6 +1081,12 @@ class PostgresStudentRepository implements StudentRepository {
     if (!seriesRow) return null;
     const seriesUuid = seriesRow.id;
     const seriesTitle = seriesRow.title;
+    if (target.lectureId) {
+      if (!isUuid(target.lectureId)) return null;
+      const [lecture] = await this.db.select({ id: lecturesTable.id }).from(lecturesTable)
+        .where(and(eq(lecturesTable.id, target.lectureId), eq(lecturesTable.seriesId, seriesUuid))).limit(1);
+      if (!lecture) return null;
+    }
     const profile = await this.getProfileById(profileId);
     if (!profile) return null;
     const name = preferredName(profile, target.displayName);
