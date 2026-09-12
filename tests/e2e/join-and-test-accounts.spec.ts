@@ -1,8 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createRequire } from "node:module";
 import jsQR from "jsqr";
 import { seriesIdFromTitle } from "../../src/lib/series";
 
 const password = "e2e-only-test-password-not-for-production";
+// PNG decoding is supplied by qrcode's locked pngjs dependency.
+const { PNG } = createRequire(import.meta.url)("pngjs") as {
+  PNG: { sync: { read(input: Buffer): { data: Buffer; width: number; height: number } } };
+};
 
 async function testLogin(page: Page, email: string) {
   await page.goto("/lecturer/login");
@@ -41,6 +46,8 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
   }).toBe(url);
   const qrBox = await intro.locator("canvas").boundingBox();
   expect(qrBox!.width).toBeGreaterThan(250);
+  const renderedQr = PNG.sync.read(await intro.locator("canvas").screenshot());
+  expect(jsQR(new Uint8ClampedArray(renderedQr.data), renderedQr.width, renderedQr.height)?.data).toBe(url);
   await testInfo.attach("qr-welcome-desktop", { body: await page.screenshot(), contentType: "image/png" });
   await page.getByRole("button", { name: "Präsentation starten" }).click();
   await expect(intro).toHaveCount(0);
@@ -53,6 +60,8 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
   await expect(intro).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(intro.locator("canvas")).toBeVisible();
+  const mobileQr = PNG.sync.read(await intro.locator("canvas").screenshot());
+  expect(jsQR(new Uint8ClampedArray(mobileQr.data), mobileQr.width, mobileQr.height)?.data).toBe(url);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await testInfo.attach("qr-welcome-mobile", { body: await page.screenshot(), contentType: "image/png" });
   await page.setViewportSize({ width: 1280, height: 720 });
