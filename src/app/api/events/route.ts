@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { seriesIdFromTitle } from "@/lib/series";
+import { seriesIdForLecture } from "@/lib/series";
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { isValidPublicLectureToken } from "@/server/public-params";
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
   if (claimNeeded) {
     const claim = await getStudentRepository().getClaimByAnonymousKey(
       parsed.data.anonymousKey,
-      seriesIdFromTitle(lecture.seriesTitle)
+      seriesIdForLecture(lecture)
     );
     if (!claim?.displayName || claim.status !== "active") {
       return NextResponse.json(

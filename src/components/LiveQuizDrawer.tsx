@@ -16,8 +16,21 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
   const [error, setError] = useState("");
   const [seconds, setSeconds] = useState(() => Math.max(0, Math.ceil((round.expiresAt - Date.now() - serverOffset) / 1000)));
   const pendingRef = useRef(false);
+  const rootRef = useRef<HTMLElement>(null);
+  const titleId = `live-question-${round.id}`;
+  // Once displayed, a round's local deadline cannot move backwards even if a
+  // later network sample is faster or the device's wall clock changes.
+  const deadlineRef = useRef(performance.now() + round.expiresAt - Date.now() - serverOffset);
   useEffect(() => {
-    const tick = () => setSeconds(Math.max(0, Math.ceil((round.expiresAt - Date.now() - serverOffset) / 1000)));
+    const root = rootRef.current;
+    if (!root) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    root.focus();
+    return () => { if (root.contains(document.activeElement)) previous?.focus(); };
+  }, []);
+  useEffect(() => {
+    deadlineRef.current = Math.min(deadlineRef.current, performance.now() + round.expiresAt - Date.now() - serverOffset);
+    const tick = () => setSeconds(Math.max(0, Math.ceil((deadlineRef.current - performance.now()) / 1000)));
     tick();
     const timer = setInterval(tick, 200);
     return () => clearInterval(timer);
@@ -25,7 +38,7 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
   const effectiveReceipt = saved ?? receipt;
   const question = round.questions.find((item) => item.level === (effectiveReceipt?.level ?? level)) ?? round.questions[0];
   async function answer(selected: string) {
-    if (!onAnswer || pendingRef.current || effectiveReceipt || Date.now() + serverOffset >= round.expiresAt) return;
+    if (!onAnswer || pendingRef.current || effectiveReceipt || performance.now() >= deadlineRef.current) return;
     pendingRef.current = true;
     setPending(true);
     setError("");
@@ -35,15 +48,15 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
   }
   // No exit-animation grace period in which an expired question remains answerable.
   if (seconds === 0 || !question) return null;
-  return <section className="question-drawer lb-enter-sheet" aria-label="Quizfrage" data-state={motionState} data-level={question.level} data-round-id={round.id} data-answer-state={effectiveReceipt ? "answered" : "open"}>
+  return <section ref={rootRef} tabIndex={-1} role="region" className="question-drawer live-question-drawer lb-enter-sheet" aria-label="Quizfrage" aria-describedby={titleId} data-state={motionState} data-origin="control" data-level={question.level} data-round-id={round.id} data-answer-state={effectiveReceipt ? "answered" : "open"}>
     <div className="drawer-main">
       <div className="question-head">
-        <div className="levels" aria-label="Niveau">
+        <div className="levels" role="group" aria-label="Niveau">
           {round.questions.map((item) => <button type="button" key={item.level} aria-pressed={question.level === item.level} disabled={pending || Boolean(effectiveReceipt)} onClick={() => setLevel(item.level)}>{item.level}</button>)}
         </div>
         {onClose && <button type="button" className="plain-button" onClick={onClose}>Frage schließen</button>}
       </div>
-      <p className="question">{question.text}</p>
+      <p className="question" id={titleId}>{question.text}</p>
       <div className="answers">
         {question.answers.map((option) => <button className={`answer ${effectiveReceipt?.selected === option.key ? (effectiveReceipt.correct ? "correct" : "wrong") : ""}`} key={option.key} type="button" disabled={!onAnswer || pending || Boolean(effectiveReceipt)} onClick={() => void answer(option.key)}>
           <span className="letter">{option.key}</span><span>{option.text}</span>

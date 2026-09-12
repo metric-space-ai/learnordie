@@ -478,7 +478,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         )}
       </Presence>
 
-      <div className="action-stack lb-enter-control">
+      <div className="action-stack live-controls lb-enter-control">
         <button className="live-back-link" type="button" disabled={live.busy} onClick={async () => {
           if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }
         }}>Beenden</button>

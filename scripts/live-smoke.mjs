@@ -6,7 +6,9 @@ const DEFAULT_LECTURE_TOKEN = "gleitlagerung-demo";
 const HELP_TEXT = `
 Usage: npm run smoke:live -- [options]
 
-Runs a public browser smoke against Health, Student Live, Learn and optional lecturer/AI paths.
+Runs a public browser smoke against Health, read-only Live viewing, Learn and optional lecturer/AI paths.
+Live answers/control are NOT exercised against an arbitrary classroom. Use smoke:live-load
+with an authenticated owner session and --own-test-lecture for real live rounds.
 
 Options:
   --url <app-url>                   Public app URL. Required unless LEARNBUDDY_LIVE_SMOKE_URL is set.
@@ -369,14 +371,16 @@ async function checkStudentLive(page, token, timeoutMs) {
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl(`/l/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.getByLabel("Pseudonym-Vorschläge").waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByLabel("Pseudonym-Vorschläge").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByLabel("Eigenes Pseudonym").fill(`Smoke ${Date.now().toString(36)}`);
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
   await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByLabel("Quizfrage").waitFor({ state: "visible", timeout: timeoutMs });
-  await page.locator(".question-drawer .answer").first().click();
-  await page.locator(".toast-inline").waitFor({ state: "visible", timeout: timeoutMs });
+  if (await visible(page.getByRole("button", { name: "Teilnehmen", exact: true }), 500)) throw new Error("Live viewing unexpectedly requires an identity gate.");
+  await page.locator(".slide-lecture-link").waitFor({ state: "visible", timeout: timeoutMs });
+  const response = await page.request.get(appUrl(`/api/lecture/${token}/live`));
+  if (!response.ok()) throw new Error("Authoritative live state unavailable; this is not a successful live smoke.");
+  const liveState = await response.json();
+  if (!["waiting", "active", "ended"].includes(liveState.status)) throw new Error("Invalid authoritative live status.");
+  await page.locator(`main[data-live-status='${liveState.status}']`).waitFor({ state: "visible", timeout: timeoutMs });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
+  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
 
   const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
@@ -386,10 +390,13 @@ async function checkStudentLive(page, token, timeoutMs) {
   }
 
   if (!failOnDiagnostics("student_live_browser", problems)) return;
-  pass("student_live_browser", "Student Live flow works in a fresh browser context.", {
+  pass("student_live_browser", "Fresh student entry, authoritative state and reload verified. Does not verify answering/presentation control; use owned live-session suite.", {
     lectureToken: token,
     slideEngine: "v1",
-    leaderboardChecked: leaderboardAvailable
+    leaderboardChecked: leaderboardAvailable,
+    liveStatus: liveState.status,
+    answersSubmitted: 0,
+    controlVerified: false
   });
 }
 

@@ -7,6 +7,7 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
   const [state, setState] = useState<LiveSessionView | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+  const [connectionError, setConnectionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const stateRef = useRef<LiveSessionView | null>(null);
@@ -14,29 +15,37 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
   const lastSuccess = useRef(0);
   const offset = useRef(0);
   const refresh = useCallback(() => setRefreshKey((value) => value + 1), []);
-  const accept = useCallback((incoming: LiveSessionView) => {
+  const accept = useCallback((incoming: LiveSessionView, requestStartedAt: number) => {
     const current = stateRef.current;
     if (current && (incoming.revision < current.revision || incoming.serverNow < current.serverNow)) return;
     stateRef.current = incoming;
-    offset.current = incoming.serverNow - Date.now();
+    // serverNow is sampled AFTER request start. Using the start, not response
+    // completion, is conservative: network/serialization delay can only close
+    // a question early, never add time. Five-second request timeout bounds this.
+    offset.current = incoming.serverNow - requestStartedAt;
     lastSuccess.current = Date.now();
     setState(incoming);
     setConnected(true);
+    setConnectionError("");
   }, []);
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let abort: AbortController | undefined;
     async function poll() {
+      const startedAt = Date.now();
       abort = new AbortController();
       const timeout = setTimeout(() => abort?.abort(), 5000);
       try {
         const response = await fetch(`/api/lecture/${encodeURIComponent(token)}/live${leaderboard ? "?leaderboard=1" : ""}`, { cache: "no-store", signal: abort.signal });
-        if (!response.ok) throw new Error("Live-Verbindung unterbrochen.");
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error ?? "Live-Verbindung unterbrochen.");
+        }
         const incoming = await response.json() as LiveSessionView;
-        if (!stopped) accept(incoming);
-      } catch {
-        if (!stopped) setConnected(false);
+        if (!stopped) accept(incoming, startedAt);
+      } catch (error) {
+        if (!stopped) { setConnected(false); setConnectionError(error instanceof Error && error.name !== "AbortError" ? error.message : "Live-Verbindung unterbrochen."); }
       } finally {
         clearTimeout(timeout);
         if (!stopped) timer = setTimeout(poll, document.hidden ? 4000 : 1500);
@@ -56,10 +65,11 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
     setBusy(true);
     setError("");
     try {
+      const startedAt = Date.now();
       const response = await fetch(`/api/lectures/${lecturer.id}/live-session`, { method: "POST", headers: { "content-type": "application/json", "x-learnbuddy-csrf": lecturer.csrfToken }, body: JSON.stringify({ ...command, revision: stateRef.current.revision }), signal: AbortSignal.timeout(6000) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Live-Befehl nicht gespeichert.");
-      accept(body as LiveSessionView);
+      accept(body as LiveSessionView, startedAt);
       return true;
     } catch (error) {
       setError(error instanceof Error ? error.message : "Live-Befehl nicht gespeichert.");
@@ -67,5 +77,5 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
       return false;
     } finally { busyRef.current = false; setBusy(false); }
   }, [lecturer?.id, lecturer?.csrfToken, accept, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { state, connected, error, busy, send, refresh, serverOffset: offset.current };
+  return { state, connected, error: error || connectionError, busy, send, refresh, serverOffset: offset.current };
 }

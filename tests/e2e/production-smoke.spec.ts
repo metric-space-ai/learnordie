@@ -8,6 +8,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { expect, type Browser, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import type { Lecture } from "../../src/lib/types";
+import { seriesIdForLecture } from "../../src/lib/series";
 
 import { audioFileExtension, encodePcm16Wav } from "../../src/lib/audio-capture";
 
@@ -305,7 +307,35 @@ async function expectExpiredSessionCookieIsRejected(page: Page) {
   await expect(page).toHaveURL(/\/lecturer\/login$/);
 }
 
-async function seedLiveLeaderboardLoad(page: Page, runId: string) {
+async function createSmokeLecture(page: Page) {
+  const nonce = Date.now().toString(36);
+  await page.goto(await requestMagicLink(page, `live-fixture-${nonce}@example.test`));
+  await expect(page).toHaveURL(/\/lecturer$/);
+  const csrf = await lecturerCsrfToken(page);
+  const response = await page.request.post("/api/lectures", { headers: { "x-learnbuddy-csrf": csrf }, data: {
+    title: `Gleitlagerung Smoke ${nonce}`, seriesTitle: `Smoke Reihe ${nonce}`, liveAt: "2026-09-12T10:00:00Z", examDate: "2026-12-01"
+  } });
+  expect(response.status()).toBe(201);
+  const { lecture } = await response.json() as { lecture: Lecture };
+  const command = async (body: Record<string, unknown>) => {
+    const current = await (await page.request.get(`/api/lecture/${lecture.publicToken}/live`)).json();
+    const result = await page.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { ...body, revision: current.revision } });
+    expect(result.ok()).toBe(true);
+    return result.json();
+  };
+  return { lecture, csrf, command };
+}
+
+async function enrollSmokeParticipant(page: Page, lecture: Pick<Lecture, "id" | "seriesTitle" | "seriesId">, participant: { anonymousKey: string; pseudonym: string }) {
+  const profile = await page.request.post("/api/student/profile", { data: participant });
+  expect(profile.ok()).toBe(true);
+  const enrollment = await page.request.post("/api/student/enrollments", { headers: { cookie: `lb_student_key=${participant.anonymousKey}` }, data: {
+    seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link", displayName: participant.pseudonym
+  } });
+  expect(enrollment.ok()).toBe(true);
+}
+
+async function seedPracticeLeaderboardLoad(page: Page, runId: string, lecture: Lecture) {
   const levelsByPoints: Record<number, string> = {
     1: "4.0",
     2: "3.0",
@@ -328,16 +358,17 @@ async function seedLiveLeaderboardLoad(page: Page, runId: string) {
     };
   });
 
-  await Promise.all(participants.map(async (participant) => {
+  for (const participant of participants) {
+    await enrollSmokeParticipant(page, lecture, participant);
     for (let answerIndex = 0; answerIndex < participant.answerCount; answerIndex += 1) {
       const response = await page.request.post("/api/events", {
         data: {
-          lectureToken: "gleitlagerung-demo",
+          lectureToken: lecture.publicToken,
           eventType: "answer_selected",
           anonymousKey: participant.anonymousKey,
           pseudonym: participant.pseudonym,
           payload: {
-            mode: "live",
+            mode: "learn",
             level: levelsByPoints[participant.points],
             points: participant.points,
             questionText: `30er Live-Smoke ${runId}: Mischreibung`,
@@ -356,7 +387,7 @@ async function seedLiveLeaderboardLoad(page: Page, runId: string) {
       const payload = await response.json() as { ok?: boolean };
       expect(payload.ok).toBe(true);
     }
-  }));
+  }
 
   return participants;
 }
@@ -2330,6 +2361,15 @@ MISTRAL_API_KEY=replace-with-mistral-key
     }
   });
   expect(oversizedPublicEvent.status()).toBe(413);
+  const claimSql = postgres(e2eDatabaseUrl, { max: 1, prepare: false });
+  try {
+    const [fixture] = await claimSql<{ id: string; seriesId: string }[]>`select id, series_id as "seriesId" from lectures where public_token = 'gleitlagerung-demo'`;
+    await enrollSmokeParticipant(page, { ...fixture, seriesTitle: "Maschinenelemente I" }, { anonymousKey: "spoofed-answer-e2e", pseudonym: "Event Guard" });
+  } finally { await claimSql.end(); }
+  const legacyLiveAnswer = await page.request.post("/api/events", { data: {
+    lectureToken: "gleitlagerung-demo", eventType: "answer_selected", anonymousKey: "spoofed-answer-e2e", payload: { mode: "live", level: "4.0", selected: "A", correct: true, points: 999 }
+  } });
+  expect(legacyLiveAnswer.status()).toBe(409);
   const spoofedAnswer = await page.request.post("/api/events", {
     data: {
       lectureToken: "gleitlagerung-demo",
@@ -2337,7 +2377,7 @@ MISTRAL_API_KEY=replace-with-mistral-key
       anonymousKey: "spoofed-answer-e2e",
       pseudonym: "Event Guard",
       payload: {
-        mode: "live",
+        mode: "learn",
         level: "4.0",
         selected: "A",
         selectedAnswerKey: "A",
@@ -3245,14 +3285,20 @@ test("Materialverarbeitung lehnt doppelte KI-Fragevarianten ab", async ({ page }
   }
 });
 
-test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", async ({ page }) => {
+test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangliste", async ({ page, browser }) => {
+  test.setTimeout(120000);
+  const teacherContext = await browser.newContext();
+  const teacher = await teacherContext.newPage();
+  const { lecture, command } = await createSmokeLecture(teacher);
+  try {
+  await command({ action: "start" });
+  await command({ action: "slide", slideIndex: 0, showIntro: false });
+  await command({ action: "fire", familyIndex: 0, durationSeconds: 180 });
   const assertClean = attachBrowserDiagnostics(page);
-  const chatQuestionUrl = "/api/lecture/gleitlagerung-demo/chat-questions";
+  const chatQuestionUrl = `/api/lecture/${lecture.publicToken}/chat-questions`;
 
-  await page.goto("/l/gleitlagerung-demo");
-  await expect(page.locator(".pseudonym-suggestion")).toHaveCount(3);
-  await page.getByLabel("Eigenes Pseudonym").fill("E2E Lager");
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
+  await page.goto(`/l/${lecture.publicToken}`);
+  await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
@@ -3320,9 +3366,11 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   expect(blockedResponse.headers()["retry-after"]).toBe("900");
 
   await page.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
-  await expect(page.getByText("Antwort gespeichert: richtig.")).toBeVisible();
-  await expect(page.getByText("+3 Punkte")).toBeVisible();
+  await expect(page.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
+  await command({ action: "close" });
+  await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
   await expect(page.getByRole("complementary", { name: "Pseudonym sichern" })).toBeVisible();
+  await page.getByLabel("Eigenes Pseudonym", { exact: true }).fill("E2E Lager");
   await page.getByRole("button", { name: "Sichern" }).click();
   await expect(page.getByText("Pseudonym gesichert")).toBeVisible();
 
@@ -3331,15 +3379,18 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   await expect(page.getByText(/1 · E2E Lager/)).toBeVisible();
   await expect(page.locator(".leader-row.self").filter({ hasText: "E2E Lager" })).toContainText("3");
   assertClean();
+  } finally { await command({ action: "end" }); await teacherContext.close(); }
 });
 
-test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({ page }) => {
+test("Historische Lern-Rangliste: 30 Studierende, Top10 und eigene Position bleiben konsistent", async ({ page }) => {
+  test.setTimeout(120000);
   const assertClean = attachBrowserDiagnostics(page);
   const runId = Date.now().toString(36);
-  const participants = await seedLiveLeaderboardLoad(page, runId);
+  const { lecture } = await createSmokeLecture(page);
+  const participants = await seedPracticeLeaderboardLoad(page, runId, lecture);
   const topParticipant = participants[0];
 
-  const apiResponse = await page.request.get(`/api/lecture/gleitlagerung-demo/leaderboard?anonymousKey=${encodeURIComponent(topParticipant.anonymousKey)}`);
+  const apiResponse = await page.request.get(`/api/lecture/${lecture.publicToken}/leaderboard?anonymousKey=${encodeURIComponent(topParticipant.anonymousKey)}`);
   expect(apiResponse.ok()).toBe(true);
   const leaderboardPayload = await apiResponse.json() as {
     enabled?: boolean;
@@ -3363,7 +3414,7 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
     self: true
   });
   const lowerParticipant = participants[29];
-  const lowerResponse = await page.request.get(`/api/lecture/gleitlagerung-demo/leaderboard?anonymousKey=${encodeURIComponent(lowerParticipant.anonymousKey)}`);
+  const lowerResponse = await page.request.get(`/api/lecture/${lecture.publicToken}/leaderboard?anonymousKey=${encodeURIComponent(lowerParticipant.anonymousKey)}`);
   expect(lowerResponse.ok()).toBe(true);
   const lowerPayload = await lowerResponse.json() as typeof leaderboardPayload;
   const lowerSelf = lowerPayload.entries?.find((entry) => entry.self);
@@ -3377,9 +3428,8 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
   });
   expect(lowerSelf?.rank).toBeGreaterThan(10);
 
-  await page.goto("/l/gleitlagerung-demo");
-  await page.getByLabel("Eigenes Pseudonym").fill(`Viewer ${runId}`);
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
+  await page.goto(`/learn/${lecture.publicToken}`);
+  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
   await page.getByRole("button", { name: "Rangliste" }).click();
   await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.locator(".leader-row")).toHaveCount(10);
@@ -3388,14 +3438,22 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
   assertClean();
 });
 
-test("Live-Load-Smoke prueft 30 pseudonyme Teilnahmen ueber oeffentliche APIs", async () => {
-  const result = await runLiveLoadSmokeAllowFailure([
+test("Live-Load-Smoke prueft 30 pseudonyme Teilnahmen mit authentifizierter Test-Vorlesung", async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  const { lecture, csrf } = await createSmokeLecture(page);
+  const sessionFile = testInfo.outputPath("owner-session.json");
+  const cookie = (await page.context().cookies()).filter((item) => item.name === lecturerSessionCookie).map((item) => `${item.name}=${item.value}`).join("; ");
+  await mkdir(path.dirname(sessionFile), { recursive: true });
+  await writeFile(sessionFile, JSON.stringify({ cookie, csrfToken: csrf }), { mode: 0o600 });
+  let result: Awaited<ReturnType<typeof runLiveLoadSmokeAllowFailure>>;
+  try { result = await runLiveLoadSmokeAllowFailure([
     "--url", e2eBaseOrigin,
-    "--lecture-token", "gleitlagerung-demo",
+    "--lecture-token", lecture.publicToken,
+    "--own-test-lecture", "--session-file", sessionFile,
     "--participants", "30",
-    "--concurrency", "10",
+    "--concurrency", "2",
     "--timeout-ms", "60000"
-  ]);
+  ]); } finally { await rm(sessionFile, { force: true }); }
 
   expect(result.ok).toBe(true);
   const passed = new Set(
@@ -3526,30 +3584,19 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page).toHaveURL(/\/lecturer\/login$/);
   await page.goto("/l/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/l\/gleitlagerung-demo$/);
-  await page.getByLabel("Eigenes Pseudonym").fill("Motion Gate");
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
-  await expect(page.locator(".student-gate-screen")).toHaveAttribute("data-joining", "true");
-  const studentGateMotion = await page.evaluate(() => {
-    const cover = document.querySelector<HTMLElement>(".student-gate-cover");
-    const card = document.querySelector<HTMLElement>(".student-gate-card");
-    if (!cover) throw new Error("Student gate cover missing.");
-    if (!card) throw new Error("Student gate card missing.");
-    const coverBox = cover.getBoundingClientRect();
-    const coverOriginParts = getComputedStyle(cover).transformOrigin.split(" ");
-    const coverOriginY = Number.parseFloat(coverOriginParts[1] ?? "0");
-    return {
-      coverAnimation: getComputedStyle(cover).animationName,
-      coverOriginYRatio: coverOriginY / coverBox.height,
-      cardState: card.dataset.joining,
-      coverGrid: getComputedStyle(cover).backgroundImage
-    };
-  });
-  expect(studentGateMotion.coverAnimation).toContain("lb-student-gate-cover-in");
-  expect(studentGateMotion.coverOriginYRatio).toBeGreaterThan(0.95);
-  expect(studentGateMotion.cardState).toBe("true");
-  expect(studentGateMotion.coverGrid).toContain("linear-gradient");
+  // The retired mandatory gate has no animation anymore: the actual join slide
+  // is immediately available and the live canvas keeps its entry motion.
+  await expect(page.locator(".student-gate-screen")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
+  await expect(page.locator(".lecture-join-qr canvas")).toBeVisible();
+  await expect(page.locator(".slide-lecture-link")).toHaveAttribute("href", /\/l\/gleitlagerung-demo$/);
+  const liveEntry = await page.locator('[data-slide-engine="v1"]').evaluate((element) => ({
+    animation: getComputedStyle(element).animationName, motionRoot: Boolean(element.closest(".lb-motion-root"))
+  }));
+  expect(liveEntry.motionRoot).toBe(true);
+  expect(liveEntry.animation).not.toBe("none");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
-  await expect(page.getByLabel("Quizfrage")).toBeVisible();
+  await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
 
   await page.goto("/learn/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);

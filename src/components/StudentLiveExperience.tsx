@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { seriesIdFromTitle } from "@/lib/series";
+import { seriesIdForLecture } from "@/lib/series";
 import { claimSeriesDisplayName, ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
 import type { LiveAnswerReceipt } from "@/lib/live-session";
 import type { Lecture, QuestionLevel } from "@/lib/types";
@@ -27,12 +27,13 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [identityMessage, setIdentityMessage] = useState("");
   const live = useLiveSession(lecture.publicToken, leaderboardOpen);
   const round = live.connected ? live.state?.round : null;
-  const enrollment = () => ensureStudentEnrollment({ seriesId: seriesIdFromTitle(lecture.seriesTitle), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
+  const enrollment = () => ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
+  useEffect(() => { if (live.state?.receipt) setAnsweredOnce(true); }, [live.state?.receipt]);
 
   useEffect(() => {
     let stopped = false;
-    ensureStudentEnrollment({ seriesId: seriesIdFromTitle(lecture.seriesTitle), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" })
-      .then(() => fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesIdFromTitle(lecture.seriesTitle))}`, { cache: "no-store" }))
+    ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" })
+      .then(() => fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesIdForLecture(lecture))}`, { cache: "no-store" }))
       .then((response) => response.json())
       .then((data) => { if (!stopped && data.claim?.displayName) setPseudonym(data.claim.displayName); })
       .catch(() => undefined);
@@ -57,7 +58,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     setIdentityMessage("");
     try {
       await enrollment();
-      const result = await claimSeriesDisplayName(seriesIdFromTitle(lecture.seriesTitle), pseudonym.trim());
+      const result = await claimSeriesDisplayName(seriesIdForLecture(lecture), pseudonym.trim());
       if (!result.ok) { setIdentityMessage(result.error); return; }
       setPseudonym(result.displayName ?? pseudonym.trim());
       window.localStorage.setItem(`lb_pseudonym_${lecture.publicToken}`, result.displayName ?? pseudonym.trim());
@@ -88,11 +89,11 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       current={Math.min(live.state?.slideIndex ?? 0, Math.max(0, lecture.slides.length - 1))} navigationDisabled
       onNext={followPresenter} onPrevious={followPresenter} slideDocument={lecture.slideDocument} slides={lecture.slides} />
     {(!live.connected || live.state?.status !== "active") && <aside className="student-connection-notice" role="status">
-      {!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Die Live-Sitzung ist beendet." : "Warte auf den Start durch die Lehrperson."}
+      {!live.connected ? (live.error || "Live-Verbindung wird hergestellt …") : live.state?.status === "ended" ? "Die Live-Sitzung ist beendet." : "Warte auf den Start durch die Lehrperson."}
       {live.state?.status === "ended" && <a href={`/learn/${lecture.publicToken}`}>Jetzt selbstständig lernen</a>}
       {!live.connected && <button type="button" onClick={live.refresh}>Erneut verbinden</button>}
     </aside>}
-    <div className="action-stack lb-enter-control">
+    <div className="action-stack live-controls lb-enter-control">
       {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" onClick={() => setLeaderboardOpen(true)}>Rangliste</button>}
       <button className="icon-action action-text" type="button" onClick={() => setChatOpen((current) => !current)}>Frage stellen</button>
     </div>
@@ -103,10 +104,10 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       {chatFeedback && <p role="status">{chatFeedback}</p>}
     </aside>}</Presence>
     {round && <LiveQuizDrawer key={round.id} round={round} serverOffset={live.serverOffset} receipt={live.state?.receipt ?? null} onAnswer={answer} />}
-    {(answeredOnce || live.state?.receipt) && <aside className="identity-save-nudge lb-enter-panel" aria-label="Pseudonym sichern">
+    {!round && (answeredOnce || live.state?.receipt) && <aside className="identity-save-nudge live-identity-nudge lb-enter-panel" aria-label="Pseudonym sichern">
       <strong>{identitySaved ? "Pseudonym gesichert" : "Pseudonym später wählen?"}</strong>
       {identitySaved ? <a className="plain-button small" href="/student">Meine Vorlesungen</a> : <>
-        <PseudonymChooser value={pseudonym} onChange={setPseudonym} seriesId={seriesIdFromTitle(lecture.seriesTitle)} disabled={identitySaving} label="Eigenes Pseudonym" />
+        <PseudonymChooser value={pseudonym} onChange={setPseudonym} seriesId={seriesIdForLecture(lecture)} disabled={identitySaving} label="Eigenes Pseudonym" />
         <button className="plain-button small" type="button" onClick={() => void saveLiveIdentity()} disabled={identitySaving}>{identitySaving ? "Sichert …" : "Sichern"}</button>
         {identityMessage && <p role="status">{identityMessage}</p>}
       </>}

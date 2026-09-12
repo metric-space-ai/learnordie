@@ -13,11 +13,12 @@ export class LiveSessionError extends Error {
 }
 type Transaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 async function databaseNow(db: Transaction | ReturnType<typeof getDb>) {
-  const [row] = await db.select({ now: sql<number>`extract(epoch from clock_timestamp()) * 1000` });
+  const [row] = await db.execute<{ now: string }>(sql`select extract(epoch from clock_timestamp()) * 1000 as now`);
   return Number(row.now);
 }
 
 export async function liveLecture(token: string, ownerEmail?: string) {
+  if (!process.env.DATABASE_URL) throw new LiveSessionError(503, "Live-Synchronisierung benötigt PostgreSQL (DATABASE_URL). Der lokale Lernmodus bleibt verfügbar.");
   const [row] = await getDb().select({ id: lectures.id, seriesId: lectures.seriesId, leaderboardEnabled: lectures.leaderboardEnabled })
     .from(lectures).leftJoin(lectureSeries, eq(lectures.seriesId, lectureSeries.id))
     .leftJoin(users, eq(lectureSeries.ownerId, users.id))
@@ -117,7 +118,8 @@ export async function readLiveSession(lecture: Awaited<ReturnType<typeof liveLec
       lastAt: sql<Date>`max(${liveAnswers.createdAt})` }).from(liveAnswers).where(eq(liveAnswers.sessionId, session.sessionId))
       .groupBy(liveAnswers.studentProfileId).orderBy(desc(sql`sum(${liveAnswers.points})`), asc(sql`max(${liveAnswers.createdAt})`), asc(liveAnswers.studentProfileId)).limit(10);
     view.leaderboard = await Promise.all(rows.map(async (row, index) => {
-      const [claim] = await db.select().from(studentEnrollments).where(and(eq(studentEnrollments.studentProfileId, row.profileId), eq(studentEnrollments.seriesId, lecture.seriesId!))).limit(1);
+      const [claim] = lecture.seriesId ? await db.select().from(studentEnrollments).where(and(eq(studentEnrollments.studentProfileId, row.profileId), eq(studentEnrollments.seriesId, lecture.seriesId)))
+        .orderBy(desc(sql`${studentEnrollments.status} = 'active'`), desc(studentEnrollments.addedAt), asc(studentEnrollments.id)).limit(1) : [];
       return { rank: index + 1, name: rankingDisplayName(claim ? { id: claim.id, studentProfileId: row.profileId, seriesId: claim.seriesId ?? "", seriesTitle: "", source: claim.source, status: claim.status, displayName: claim.displayName, addedAt: claim.addedAt.toISOString() } : null, row.profileId), points: row.points, correct: row.correct, answers: row.answers, self: row.profileId === profile?.id };
     }));
   }

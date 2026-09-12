@@ -85,8 +85,14 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
       expect(question.answers.every((option) => !("correct" in option))).toBe(true);
     }
     const third = await open();
+    await third.setViewportSize({ width: 390, height: 844 });
     await third.goto(liveUrl);
     await expect(third.getByLabel("Quizfrage", { exact: true })).toBeVisible();
+    const drawerBox = await third.getByLabel("Quizfrage", { exact: true }).boundingBox();
+    expect(drawerBox!.x).toBeGreaterThanOrEqual(0);
+    expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(390);
+    await third.keyboard.press("Tab");
+    await expect(third.locator(".levels button").first()).toBeFocused();
     expect((await state(third)).round!.expiresAt).toBe(initial.round!.expiresAt);
     await third.reload();
     await expect(third.getByLabel("Quizfrage", { exact: true })).toBeVisible();
