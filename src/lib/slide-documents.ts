@@ -1,9 +1,5 @@
-import {
-  legacySlidesToSlideDocument,
-  slideDocumentToLegacySlides,
-  validateSlideDocument,
-  type SlideDocument
-} from "@learnordie/slide-engine";
+import { legacySlidesToSlideDocument, slideDocumentToLegacySlides } from "@learnordie/slide-engine/legacy";
+import { validateSlideDocument, type SlideDocument } from "@learnordie/slide-engine/schema";
 import { canvasTextForBlock } from "../../packages/slide-engine/src/excalidraw/scene";
 
 import type { Slide } from "./types";

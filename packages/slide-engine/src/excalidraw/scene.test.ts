@@ -6,6 +6,7 @@ import { parseSlideDocument, type SlideBlock } from "../schema";
 import { allBlockTypesSlideDocument } from "../fixtures";
 import { canvasSceneSchema, isSafeCanvasImage, type CanvasElement } from "./canvas-schema";
 import { canvasSceneForSlide, updateSlideCanvas } from "./scene";
+import { hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument, normalizeLectureSlideDocument } from "../../../../src/lib/slide-documents";
 
 function fixture() {
   return legacySlidesToSlideDocument([{ id: "slide-one", title: "Die Welle", eyebrow: "Einführung", topic: "Lager", copy: ["Originaltext mit Umlauten äöü"], diagram: "bearing" }]);
@@ -158,4 +159,17 @@ test("dense blocks retain full editable original text rather than truncating mig
   assert.equal(scene.elements.filter((e) => e.type === "text").length, 25);
   assert.ok(scene.elements.every((e) => e.y + e.height <= 900));
   assert.equal(scene.elements.find((e) => e.customData?.sourceBlockId === "copy-23")?.originalText, "Long content. ".repeat(80));
+});
+
+test("legacy no-op saves preserve native scenes; edits and invalid native fallback fail explicitly", () => {
+  const document = fixture();
+  const native = updateSlideCanvas(document, "slide-one", canvasSceneForSlide(document.slides[0], document.assets));
+  const projection = slideDocumentToLegacySlides(native);
+  assert.equal(hasEngineOnlyBlocks(native), true);
+  assert.deepEqual(mergeLegacySlideEditsIntoDocument(native, projection), native);
+  assert.throws(() => mergeLegacySlideEditsIntoDocument(native, [{ ...projection[0], copy: ["Overwrite"] }]), /canvas_authoritative/);
+  assert.throws(() => mergeLegacySlideEditsIntoDocument(native, []), /canvas_authoritative/);
+  const invalid = structuredClone(native);
+  invalid.slides[0].canvas!.width = 0;
+  assert.throws(() => normalizeLectureSlideDocument(invalid, { id: "fixture", title: "Fallback", slides: projection }), /refusing destructive legacy fallback/);
 });

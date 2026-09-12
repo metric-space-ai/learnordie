@@ -130,7 +130,7 @@ function blockElements(block: SlideBlock, x: number, y: number, width: number, f
       const range = maximum - minimum || 1;
       const cellWidth = width / numbers.length;
       const baseline = y + 55 + maximum / range * 260;
-      const points = numbers.map((value, i) => [cellWidth * (i + 0.5), 55 + (maximum - value) / range * 260]);
+      const points: Array<[number, number]> = numbers.map((value, i) => [cellWidth * (i + 0.5), 55 + (maximum - value) / range * 260]);
       const result: CanvasElement[] = [textElement(id("title"), block.title ?? "Diagramm", x, y, width, 30, block.id)];
       result.push({ ...base(id("axis"), "line", x, baseline, width, 0, block.id), points: [[0, 0], [width, 0]], lastCommittedPoint: null, startBinding: null, endBinding: null, startArrowhead: null, endArrowhead: null });
       if (block.chartType === "line") result.push({ ...base(id("curve"), "line", x, y, width, 315, block.id), strokeColor: ACCENT, points, lastCommittedPoint: null, startBinding: null, endBinding: null, startArrowhead: null, endArrowhead: null });
@@ -193,7 +193,7 @@ export function canvasSceneForSlide(slide: SlideNode, assets: SlideAssetRef[] = 
     item.y = bodyTop + (item.y - bodyTop) * scale;
     item.width *= scale; item.height *= scale;
     if (typeof item.fontSize === "number") item.fontSize *= scale;
-    if (Array.isArray(item.points)) item.points = (item.points as number[][]).map((point) => point.map((n) => n * scale));
+    if (item.points) item.points = item.points.map(([px, py]) => [px * scale, py * scale]);
   }
   return canvasSceneSchema.parse({ version: CANVAS_VERSION, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, backgroundColor: PAPER, elements: [...elements, ...body], files });
 }
