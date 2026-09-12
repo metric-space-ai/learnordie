@@ -9,6 +9,36 @@ import { suggestPseudonyms } from "./student-pseudonym";
 import type { StudentProfile } from "./types";
 
 const STUDENT_KEY = "lb_student_key";
+const enrollmentRequests = new Map<string, Promise<void>>();
+
+/** Reading slides never requires a name form; persist the browser identity lazily. */
+export function ensureStudentEnrollment(input: {
+  seriesId: string; seriesTitle: string; lectureId: string;
+  source: "direct_live_link" | "direct_learn_link";
+}): Promise<void> {
+  const key = `${getOrCreateStudentKey()}:${input.seriesId}`;
+  const existing = enrollmentRequests.get(key);
+  if (existing) return existing;
+  const operation = (async () => {
+    const profile = await saveProfile();
+    if (!profile.ok) throw new Error(profile.error);
+    let displayName: string | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await fetch("/api/student/enrollments", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...input, displayName })
+      });
+      const data = await response.json() as { code?: string; suggestions?: string[]; error?: string };
+      if (response.ok) return;
+      if (data.code !== "pseudonym_taken" || !data.suggestions?.[0]) throw new Error(data.error ?? "Teilnahme konnte nicht gespeichert werden.");
+      displayName = data.suggestions[0];
+    }
+    throw new Error("Teilnahme konnte nicht gespeichert werden. Bitte erneut versuchen.");
+  })();
+  enrollmentRequests.set(key, operation);
+  operation.catch(() => enrollmentRequests.delete(key));
+  return operation;
+}
 
 export function getOrCreateStudentKey(): string {
   if (typeof window === "undefined") return "";
@@ -55,7 +85,7 @@ export type SaveProfileResult =
   | { ok: true; profile: StudentProfile }
   | { ok: false; error: string; suggestions?: string[] };
 
-export async function saveProfile(pseudonym: string): Promise<SaveProfileResult> {
+export async function saveProfile(pseudonym?: string): Promise<SaveProfileResult> {
   const anonymousKey = getOrCreateStudentKey();
   try {
     const response = await fetch("/api/student/profile", {

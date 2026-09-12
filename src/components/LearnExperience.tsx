@@ -4,7 +4,9 @@ import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import { MAX_LEARN_QUESTION_DENSITY, MIN_LEARN_QUESTION_DENSITY, normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import { seriesIdFromTitle } from "@/lib/series";
+import { ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
 import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
 import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
@@ -68,8 +70,8 @@ function formatChatBudget(remaining: number, limit: number) {
 export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const evaluationConfig = lecture.evaluationConfig;
   const [slide, setSlide] = useState(0);
-  // Die Fragedichte legt die Lehrperson im Studio fest; Studierende sehen nur die Hotspots.
-  const density = normalizeLearnQuestionDensity(lecture.learnQuestionDensity);
+  const [density, setDensity] = useState(() => normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
+  function updateDensity(value: string) { setDensity(normalizeLearnQuestionDensity(value)); }
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
   const [activeHotspotIndex, setActiveHotspotIndex] = useState<number | null>(null);
@@ -209,16 +211,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       } as ScreenMotionStyle);
 
   function getAnonymousKey() {
-    // Prefer the browser-wide student key so answers link to the student profile
-    // and feed readiness. Anonymous visitors keep a per-browser learn key.
-    const studentKey = window.localStorage.getItem("lb_student_key");
-    if (studentKey) return studentKey;
-    const key = "learnbuddy_anonymous_key";
-    const existing = window.localStorage.getItem(key);
-    if (existing) return existing;
-    const created = `learn_${crypto.randomUUID()}`;
-    window.localStorage.setItem(key, created);
-    return created;
+    return getOrCreateStudentKey();
   }
 
   function getLearnPseudonym() {
@@ -240,6 +233,9 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   }
 
   async function recordLearnEvent(eventType: string, payload: Record<string, unknown>) {
+    try {
+      await ensureStudentEnrollment({ seriesId: seriesIdFromTitle(lecture.seriesTitle), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link" });
+    } catch { return; }
     await fetch("/api/events", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -426,6 +422,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       style={originStyle}
     >
       <SlideEngineCanvas
+        lectureToken={lecture.publicToken}
         current={slide}
         onNext={next}
         onPrevious={previous}

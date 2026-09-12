@@ -34,6 +34,7 @@ const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
   const [slide, setSlide] = useState(0);
+  const [showJoinIntro, setShowJoinIntro] = useState(true);
   const [questionOpen, setQuestionOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
@@ -59,8 +60,16 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const autoLoopRunningRef = useRef(false);
   const slideRef = useRef(slide);
 
-  const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
-  const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
+  const previous = useCallback(() => {
+    setQuestionOpen(false);
+    if (slide === 0) setShowJoinIntro(true);
+    else setSlide((current) => current - 1);
+  }, [slide]);
+  const next = useCallback(() => {
+    setQuestionOpen(false);
+    if (showJoinIntro) setShowJoinIntro(false);
+    else setSlide((current) => Math.min(current + 1, lecture.slides.length - 1));
+  }, [showJoinIntro, lecture.slides.length]);
 
   function stopListening() {
     autoSegmentingRef.current = false;
@@ -262,13 +271,14 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (target && (target.isContentEditable || target.closest("input, textarea, select, button, a, summary"))) return;
       if ((event.key === "f" || event.key === "F") && !event.metaKey && !event.ctrlKey && !event.altKey) {
         toggleFullscreen();
         return;
       }
       if (event.code === "Space") {
         event.preventDefault();
+        if (showJoinIntro) { next(); return; }
         setQuestionOrigin("space");
         setQuestionOpen((current) => !current);
       }
@@ -276,7 +286,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [showJoinIntro, next]);
 
   useEffect(() => () => {
     autoSegmentingRef.current = false;
@@ -344,6 +354,9 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       data-question-origin={questionOrigin}
     >
       <SlideEngineCanvas
+        lectureToken={lecture.publicToken}
+        lectureTitle={lecture.title}
+        showJoinIntro={showJoinIntro}
         current={slide}
         onNext={next}
         onPrevious={previous}
@@ -470,6 +483,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           type="button"
           title="Quiz (Leertaste)"
           aria-label="Quiz (Leertaste)"
+          disabled={showJoinIntro}
           aria-pressed={questionOpen}
           onClick={() => {
             setQuestionOrigin("control");

@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/review-lockfile.yml
+      - package.json
 permissions:
   contents: read
 jobs:

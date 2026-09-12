@@ -1,5 +1,45 @@
 /* UI overhaul: ui-present */
 
+.slide-lecture-link {
+  position: absolute;
+  z-index: 12;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  max-width: min(70%, 900px);
+  padding: 7px 11px;
+  border-radius: 6px;
+  background: #fff;
+  color: #122c3b;
+  font-size: clamp(12px, 1.4vw, 22px);
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  box-shadow: 0 1px 8px #0002;
+}
+
+.lecture-join-slide {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 44%);
+  align-items: center;
+  gap: clamp(20px, 4vw, 80px);
+  padding: clamp(72px, 7vw, 120px) 7% 90px;
+  background: #f7fafb;
+  color: #122c3b;
+}
+.lecture-join-copy h1 { font-size: clamp(24px, 3.6vw, 60px); line-height: 1.1; margin: 12px 0 24px; }
+.lecture-join-copy p { font-size: clamp(16px, 1.6vw, 25px); }
+.lecture-join-url { display: block; margin: 20px 0; font-size: clamp(19px, 2.2vw, 36px); font-weight: 800; color: inherit; overflow-wrap: anywhere; }
+.lecture-join-copy .lecture-join-hint { font-size: clamp(14px, 1.2vw, 19px); margin-bottom: 24px; }
+.lecture-join-qr { width: 100%; max-width: min(52vh, 680px); justify-self: center; }
+.lecture-join-qr canvas { display: block; width: 100%; height: auto; background: white; }
+@media (max-width: 700px) {
+  .lecture-join-slide { grid-template-columns: 1fr; padding: 76px 20px 96px; gap: 16px; }
+  .lecture-join-qr { grid-row: 1; max-width: min(42vh, 300px); }
+  .lecture-join-copy h1 { margin: 8px 0 12px; }
+  .lecture-join-copy .eyebrow { display: none; }
+}
+
 /* Presentation view: "Beenden" text button in the action stack, same chrome as the icon buttons. */
 .action-stack .live-back-link {
   display: inline-flex;

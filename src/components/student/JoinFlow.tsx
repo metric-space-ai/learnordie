@@ -111,14 +111,14 @@ export function JoinFlow({ code, target, hasProfile: _hasProfile, hasClaim = fal
     );
   }
 
-  async function enroll() {
+  async function enroll(displayName = pseudonymInput.trim() || undefined) {
     setBusy(true);
     setError("");
     try {
       const response = await fetch("/api/student/enrollments", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ joinCodeId: target!.joinCode.id, source: "code", displayName: pseudonymInput.trim() || undefined })
+        body: JSON.stringify({ joinCodeId: target!.joinCode.id, source: "code", displayName })
       });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string; suggestions?: string[] };
@@ -163,6 +163,15 @@ export function JoinFlow({ code, target, hasProfile: _hasProfile, hasClaim = fal
     }
   }
 
+  async function joinWithoutName() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const result = await saveProfile();
+    if (!result.ok) { setError(result.error); setBusy(false); return; }
+    await enroll(result.profile.pseudonym);
+  }
+
   const targetLabel = target.scope === "lecture" && target.lectureTitle ? target.lectureTitle : target.seriesTitle;
 
   return (
@@ -187,17 +196,21 @@ export function JoinFlow({ code, target, hasProfile: _hasProfile, hasClaim = fal
             <p className="join-note">Angemeldet als <strong>{pseudonym}</strong>.</p>
             <p className="join-hint">Punkte hängen an diesem Browser. Der Anzeigename ist in dieser Vorlesung eindeutig.</p>
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="primary-button" type="button" onClick={enroll} disabled={busy}>
+            <button className="primary-button" type="button" onClick={() => enroll()} disabled={busy}>
               {busy ? "Wird hinzugefügt …" : "Zu meinen Vorlesungen hinzufügen"}
             </button>
           </>
         ) : (
           <form className="join-form" onSubmit={submitPseudonym}>
+            <button className="primary-button" type="button" onClick={joinWithoutName} disabled={busy}>
+              {busy ? "Trete bei …" : "Direkt teilnehmen"}
+            </button>
+            <p className="join-hint">Ohne Konto. Dein Pseudonym kannst du auch später sichern.</p>
             <PseudonymChooser
               value={pseudonymInput}
               onChange={setPseudonymInput}
               disabled={busy}
-              label="Wähle ein freies Pseudonym"
+              label="Pseudonym (optional)"
               seriesId={target.seriesId}
               suggestions={takenSuggestions}
             />

@@ -17,7 +17,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { normalizeJoinCode, sanitizeJoinCode } from "@/lib/join-code";
 import { QA_MECHANICS_JOIN_CODE, QA_MECHANICS_SERIES_TITLE } from "@/lib/qa-fixture-mechanics";
 import { lectureStudentView } from "@/lib/lecture-status";
-import { validateClaimablePseudonym } from "@/lib/student-pseudonym";
+import { suggestPseudonyms, validateClaimablePseudonym } from "@/lib/student-pseudonym";
 import {
   anonymizeClaim,
   applyClaim,
@@ -330,7 +330,7 @@ class LocalStudentRepository implements StudentRepository {
         return existing;
       }
 
-      const name = validateClaimablePseudonym(input.pseudonym ?? "") ?? "Teilnehmer";
+      const name = validateClaimablePseudonym(input.pseudonym ?? "") ?? suggestPseudonyms({ count: 1 })[0] ?? "Teilnehmer";
       const profile: StudentProfile = {
         id: `student_${crypto.randomUUID()}`,
         anonymousKey: input.anonymousKey,
@@ -781,7 +781,7 @@ class PostgresStudentRepository implements StudentRepository {
       .insert(studentProfiles)
       .values({
         anonymousKey: input.anonymousKey,
-        pseudonym: nextName ?? "Teilnehmer",
+        pseudonym: nextName ?? suggestPseudonyms({ count: 1 })[0] ?? "Teilnehmer",
         locale: input.locale ?? "de"
       })
       .onConflictDoUpdate({

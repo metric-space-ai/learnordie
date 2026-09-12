@@ -12,20 +12,30 @@ import {
 } from "@learnordie/slide-engine";
 import type { SlideAsset } from "@learnordie/slide-engine/components";
 import { Diagram } from "./Diagram";
+import { LectureJoinSlide } from "./LectureJoinSlide";
 
 export function SlideEngineCanvas({
   slides,
   slideDocument: storedSlideDocument,
   current,
+  lectureToken,
+  lectureTitle,
+  showJoinIntro = false,
   onPrevious,
   onNext
 }: {
   slides: Slide[];
   slideDocument?: SlideDocument;
   current: number;
+  lectureToken?: string;
+  lectureTitle?: string;
+  showJoinIntro?: boolean;
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const [origin, setOrigin] = useState("");
+  useEffect(() => { setOrigin(window.location.origin); }, []);
+  const lectureUrl = lectureToken ? `${origin}/l/${encodeURIComponent(lectureToken)}` : "";
   const currentSlide = slides[current];
   const previousCurrent = useRef(current);
   const [direction, setDirection] = useState<"initial" | "next" | "previous">("initial");
@@ -50,6 +60,8 @@ export function SlideEngineCanvas({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
       if (event.key === "ArrowLeft") onPrevious();
       if (event.key === "ArrowRight") onNext();
     };
@@ -64,19 +76,22 @@ export function SlideEngineCanvas({
         className="slide-engine-stage lb-enter-stage"
         data-direction={direction}
         data-slide-engine="v1"
-        data-slide-id={currentSlide.id}
+        data-slide-id={showJoinIntro ? "lecture-join" : currentSlide.id}
       >
-        <DeckRenderer
+        {lectureUrl && <a className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`}>{lectureUrl}</a>}
+        {showJoinIntro && lectureUrl ? (
+          <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={onNext} />
+        ) : <DeckRenderer
           className="slide-engine-deck"
           currentSlideId={currentSlide.id}
           document={activeSlideDocument}
           renderAsset={renderLegacyDiagramAsset}
           renderMode="current"
-        />
+        />}
       </article>
       <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
         <button type="button" onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
-        <span className="slide-count">{current + 1} / {slides.length}</span>
+        <span className="slide-count">{showJoinIntro ? "Beitreten" : `${current + 1} / ${slides.length}`}</span>
         <button type="button" onClick={onNext} aria-label="Nächste Folie">›</button>
       </nav>
     </>

@@ -187,63 +187,30 @@ function canPersistMagicTokens() {
 async function evaluateStoredMagicLinkBucket(hash: string) {
   const config = magicLinkRateLimitConfig();
   const now = new Date();
-  const windowStartedAt = new Date(now.getTime());
-  const [existing] = await getDb()
-    .select()
-    .from(magicLoginRateLimits)
-    .where(eq(magicLoginRateLimits.bucketHash, hash))
-    .limit(1);
-
-  if (!existing) {
-    const inserted = await getDb()
+  const blockedUntil = await getDb().transaction(async (tx) => {
+    await tx
       .insert(magicLoginRateLimits)
       .values({
         bucketHash: hash,
-        windowStartedAt,
-        attemptCount: 1,
+        windowStartedAt: now,
+        attemptCount: 0,
         updatedAt: now
       })
-      .onConflictDoNothing({ target: magicLoginRateLimits.bucketHash })
-      .returning({ id: magicLoginRateLimits.id });
-    if (inserted.length === 1) {
-      return;
-    }
-    await evaluateStoredMagicLinkBucket(hash);
-    return;
-  }
-
-  if (existing.blockedUntil && existing.blockedUntil.getTime() > now.getTime()) {
-    throw new MagicLinkRateLimitError(retryAfterSeconds(existing.blockedUntil));
-  }
-
-  const windowEndsAt = existing.windowStartedAt.getTime() + config.windowMs;
-  if (windowEndsAt <= now.getTime()) {
-    await getDb()
-      .update(magicLoginRateLimits)
-      .set({
-        windowStartedAt,
-        attemptCount: 1,
-        blockedUntil: null,
-        updatedAt: now
-      })
-      .where(eq(magicLoginRateLimits.bucketHash, hash));
-    return;
-  }
-
-  const nextAttemptCount = existing.attemptCount + 1;
-  const blockedUntil = nextAttemptCount > config.limit ? new Date(now.getTime() + config.blockMs) : null;
-  await getDb()
-    .update(magicLoginRateLimits)
-    .set({
-      attemptCount: nextAttemptCount,
-      blockedUntil,
-      updatedAt: now
-    })
-    .where(eq(magicLoginRateLimits.bucketHash, hash));
-
-  if (blockedUntil) {
-    throw new MagicLinkRateLimitError(retryAfterSeconds(blockedUntil));
-  }
+      .onConflictDoNothing({ target: magicLoginRateLimits.bucketHash });
+    const [existing] = await tx.select().from(magicLoginRateLimits)
+      .where(eq(magicLoginRateLimits.bucketHash, hash)).for("update");
+    if (existing.blockedUntil && existing.blockedUntil > now) return existing.blockedUntil;
+    const expired = existing.windowStartedAt.getTime() + config.windowMs <= now.getTime();
+    const attemptCount = expired ? 1 : existing.attemptCount + 1;
+    const until = attemptCount > config.limit ? new Date(now.getTime() + config.blockMs) : null;
+    await tx.update(magicLoginRateLimits).set({
+      windowStartedAt: expired ? now : existing.windowStartedAt,
+      attemptCount, blockedUntil: until, updatedAt: now
+    }).where(eq(magicLoginRateLimits.bucketHash, hash));
+    return until;
+  });
+  // Throw after commit so an exhausted bucket remains blocked on all instances.
+  if (blockedUntil) throw new MagicLinkRateLimitError(retryAfterSeconds(blockedUntil));
 }
 
 function evaluateDevMagicLinkBucket(hash: string) {

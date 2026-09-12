@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { seriesIdFromTitle } from "@/lib/series";
-import { getOrCreateStudentKey, saveProfile } from "@/lib/student-client";
+import { claimSeriesDisplayName, ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
 import type { LeaderboardEntry, Lecture } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
@@ -22,7 +22,7 @@ function prefersReducedMotion() {
 
 export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [pseudonym, setPseudonym] = useState("");
-  const [joined, setJoined] = useState(false);
+  const [joined, setJoined] = useState(true);
   const [joining, setJoining] = useState(false);
   const [slide, setSlide] = useState(0);
   const [questionOpen, setQuestionOpen] = useState(true);
@@ -47,7 +47,8 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, savedAnonymousKey);
     setAnonymousKey(savedAnonymousKey);
     const seriesId = seriesIdFromTitle(lecture.seriesTitle);
-    fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesId)}`, { cache: "no-store" })
+    ensureStudentEnrollment({ seriesId, seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" })
+      .then(() => fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesId)}`, { cache: "no-store" }))
       .then((response) => response.json() as Promise<{ claim: { displayName?: string } | null }>)
       .then((data) => {
         if (data.claim?.displayName) {
@@ -57,7 +58,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         }
       })
       .catch(() => undefined);
-  }, [lecture.publicToken, lecture.seriesTitle]);
+  }, [lecture.id, lecture.publicToken, lecture.seriesTitle]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -113,6 +114,12 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
 
   async function recordEvent(eventType: string, payload: Record<string, unknown>, alias = pseudonym) {
+    try {
+      await ensureStudentEnrollment({ seriesId: seriesIdFromTitle(lecture.seriesTitle), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
+    } catch {
+      setFeedback("Dein Ergebnis konnte nicht gespeichert werden. Bitte Verbindung prüfen.");
+      return;
+    }
     const key = anonymousKey || getOrCreateStudentKey();
     window.localStorage.setItem("lb_student_key", key);
     window.localStorage.setItem(`lb_anonymous_${lecture.publicToken}`, key);
@@ -125,7 +132,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
         lectureToken: lecture.publicToken,
         eventType,
         anonymousKey: key,
-        pseudonym: alias,
+        pseudonym: alias || undefined,
         payload
       })
     }).catch(() => {
@@ -175,29 +182,17 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     if (!clean) return;
     setIdentitySaving(true);
     setIdentityMessage("");
-    const profile = await saveProfile(clean);
-    if (!profile.ok) {
-      setIdentityMessage(profile.error);
-      setIdentitySaving(false);
-      return;
-    }
-
     try {
-      await fetch("/api/student/enrollments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          seriesId: seriesIdFromTitle(lecture.seriesTitle),
-          seriesTitle: lecture.seriesTitle,
-          lectureId: lecture.id,
-          source: "direct_live_link"
-        })
-      });
+      const seriesId = seriesIdFromTitle(lecture.seriesTitle);
+      await ensureStudentEnrollment({ seriesId, seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
+      const result = await claimSeriesDisplayName(seriesId, clean);
+      if (!result.ok) { setIdentityMessage(result.error); return; }
+      setPseudonym(result.displayName ?? clean);
+      window.localStorage.setItem(`lb_pseudonym_${lecture.publicToken}`, result.displayName ?? clean);
       setIdentitySaved(true);
       setIdentityMessage("Pseudonym gesichert.");
     } catch {
-      setIdentitySaved(true);
-      setIdentityMessage("Pseudonym gesichert.");
+      setIdentityMessage("Name konnte nicht gespeichert werden. Bitte erneut versuchen.");
     } finally {
       setIdentitySaving(false);
     }
@@ -261,6 +256,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       data-question-origin={questionOrigin}
     >
       <SlideEngineCanvas
+        lectureToken={lecture.publicToken}
         current={slide}
         onNext={next}
         onPrevious={previous}
