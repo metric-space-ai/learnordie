@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LiveAnswerReceipt, LiveSessionView } from "@/lib/live-session";
 import type { QuestionLevel } from "@/lib/types";
 import type { PresenceState } from "./Presence";
@@ -38,7 +38,7 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
   }, [round.expiresAt, serverOffset]);
   const effectiveReceipt = saved ?? receipt;
   const question = round.questions.find((item) => item.level === (effectiveReceipt?.level ?? level)) ?? round.questions[0];
-  async function answer(selected: string) {
+  const answer = useCallback(async (selected: string) => {
     if (!onAnswer || pendingRef.current || effectiveReceipt || deadlineRef.current === null || performance.now() >= deadlineRef.current) return;
     pendingRef.current = true;
     setPending(true);
@@ -46,7 +46,7 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
     try { setSaved(await onAnswer(question.level, selected)); }
     catch (error) { setError(error instanceof Error ? error.message : "Antwort nicht gespeichert. Erneut versuchen."); }
     finally { pendingRef.current = false; setPending(false); }
-  }
+  }, [onAnswer, effectiveReceipt, question]);
   // No exit-animation grace period in which an expired question remains answerable.
   if (seconds === 0 || !question) return null;
   return <section ref={rootRef} tabIndex={-1} role="region" className="question-drawer live-question-drawer lb-enter-sheet" aria-label="Quizfrage" aria-describedby={titleId} data-state={motionState} data-origin="control" data-level={question.level} data-round-id={round.id} data-answer-state={effectiveReceipt ? "answered" : "open"}>
