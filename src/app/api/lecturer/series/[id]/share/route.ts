@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { seriesIdFromTitle } from "@/lib/series";
 import { getLecturerSession } from "@/server/auth";
-import { getLectureRepository } from "@/server/repository";
 import { isValidSeriesId } from "@/server/route-params";
 import { getStudentRepository } from "@/server/student-repository";
 
@@ -15,11 +13,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: "Vorlesungsreihe nicht gefunden." }, { status: 404 });
   }
 
-  const lectures = await getLectureRepository().listLectures(session.email);
-  if (!lectures.some((lecture) => seriesIdFromTitle(lecture.seriesTitle) === id)) {
+  const share = await getStudentRepository().getShareInfoForSeries(session.email, id);
+  if (!share) {
     return NextResponse.json({ error: "Vorlesungsreihe nicht gefunden." }, { status: 404 });
   }
 
-  const share = await getStudentRepository().getShareInfoForSeries(session.email, id);
   return NextResponse.json({ share });
 }

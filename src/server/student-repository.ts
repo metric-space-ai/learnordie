@@ -17,6 +17,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { normalizeJoinCode, sanitizeJoinCode } from "@/lib/join-code";
 import { QA_MECHANICS_JOIN_CODE, QA_MECHANICS_SERIES_TITLE } from "@/lib/qa-fixture-mechanics";
 import { lectureStudentView } from "@/lib/lecture-status";
+import { seriesIdForLecture } from "@/lib/series";
 import { suggestPseudonyms, validateClaimablePseudonym } from "@/lib/student-pseudonym";
 import {
   anonymizeClaim,
@@ -135,10 +136,18 @@ type SeriesGroup = {
   lectures: Lecture[];
 };
 
+function ownsLocalSeries(email: string | undefined, group: SeriesGroup | undefined): boolean {
+  if (!email || !group?.lectures.length) return false;
+  const owner = email.trim().toLowerCase();
+  // Local ownerless fixtures remain shared. A mixed-owner legacy slug is never
+  // sufficient authority to mutate or reveal another teacher's join code.
+  return group.lectures.every((lecture) => !lecture.ownerEmail || lecture.ownerEmail.toLowerCase() === owner);
+}
+
 function groupLecturesBySeries(lectures: Lecture[]): Map<string, SeriesGroup> {
   const map = new Map<string, SeriesGroup>();
   for (const lecture of lectures) {
-    const seriesId = slugify(lecture.seriesTitle);
+    const seriesId = seriesIdForLecture(lecture);
     const group = map.get(seriesId) ?? {
       seriesId,
       seriesTitle: lecture.seriesTitle,
@@ -445,7 +454,7 @@ class LocalStudentRepository implements StudentRepository {
       return {
         joinCode,
         scope: "lecture",
-        seriesId: slugify(lecture.seriesTitle),
+        seriesId: seriesIdForLecture(lecture),
         seriesTitle: lecture.seriesTitle,
         lectureId: lecture.id,
         lectureToken: lecture.publicToken,
@@ -528,7 +537,7 @@ class LocalStudentRepository implements StudentRepository {
       if (joinCode.scope === "lecture" && joinCode.lectureId) {
         const lecture = lectures.find((item) => item.id === joinCode.lectureId);
         if (!lecture) return null;
-        seriesId = slugify(lecture.seriesTitle);
+        seriesId = seriesIdForLecture(lecture);
         seriesTitle = lecture.seriesTitle;
         lectureId = lecture.id;
       } else if (seriesId) {
@@ -676,7 +685,7 @@ class LocalStudentRepository implements StudentRepository {
     const store = await readStudentStore();
     const seriesIndex = await this.loadSeriesIndex();
     const group = seriesIndex.get(seriesId);
-    if (!group) throw new Error("Vorlesungsreihe nicht gefunden.");
+    if (!ownsLocalSeries(userId, group)) throw new Error("Vorlesungsreihe nicht gefunden.");
 
     // Conflict: the code is enabled and bound to a different series.
     const conflict = store.joinCodes.find(
@@ -722,6 +731,11 @@ class LocalStudentRepository implements StudentRepository {
     const store = await readStudentStore();
     const joinCode = store.joinCodes.find((item) => item.id === joinCodeId);
     if (!joinCode) return null;
+    const seriesIndex = await this.loadSeriesIndex();
+    const group = joinCode.scope === "lecture"
+      ? [...seriesIndex.values()].find((item) => item.lectures.some((lecture) => lecture.id === joinCode.lectureId))
+      : seriesIndex.get(joinCode.seriesId ?? "");
+    if (!ownsLocalSeries(userId, group)) return null;
     joinCode.enabled = false;
     joinCode.updatedAt = nowIso();
     await writeStudentStore(store);
@@ -733,7 +747,7 @@ class LocalStudentRepository implements StudentRepository {
     const store = await readStudentStore();
     const seriesIndex = await this.loadSeriesIndex();
     const group = seriesIndex.get(seriesId);
-    if (!group) return null;
+    if (!group || !ownsLocalSeries(userId, group)) return null;
     const joinCode = store.joinCodes.find(
       (item) => item.enabled && item.scope === "series" && item.seriesId === seriesId
     );
@@ -768,16 +782,24 @@ class PostgresStudentRepository implements StudentRepository {
     return this.claimsReady;
   }
 
-  // The API surface uses the slug (`seriesIdFromTitle`) as the canonical seriesId in
-  // BOTH local and Postgres modes. Internally Postgres keys by lecture_series.id (UUID),
-  // so resolve a slug-or-UUID identifier to the actual series row at the DB boundary.
+  // UUIDs are canonical. Keep old slug links only when globally unambiguous,
+  // including for owners: scoping first would let one legacy URL mean two series.
   private async resolveSeriesRow(idOrSlug: string): Promise<typeof lectureSeries.$inferSelect | null> {
     if (UUID_PATTERN.test(idOrSlug)) {
       const [row] = await this.db.select().from(lectureSeries).where(eq(lectureSeries.id, idOrSlug)).limit(1);
       return row ?? null;
     }
     const rows = await this.db.select().from(lectureSeries);
-    return rows.find((row) => slugify(row.title) === idOrSlug) ?? null;
+    const matches = rows.filter((row) => slugify(row.title) === idOrSlug);
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  private async resolveOwnedSeriesRow(email: string | undefined, idOrSlug: string) {
+    if (!email) return null;
+    const series = await this.resolveSeriesRow(idOrSlug);
+    if (!series?.ownerId) return null;
+    const userId = await this.resolveUserId(email);
+    return userId && series.ownerId === userId ? series : null;
   }
 
   async getOrCreateStudentProfile(input: GetOrCreateStudentProfileInput): Promise<StudentProfile> {
@@ -836,7 +858,7 @@ class PostgresStudentRepository implements StudentRepository {
     const mapped: StudentEnrollment[] = rows
       .filter((row) => row.seriesId === series.id)
       .map((row) => this.mapEnrollment(row, series.title));
-    return suggestionsForSeries(mapped, slugify(series.title), count, exceptProfileId, extraExclude);
+    return suggestionsForSeries(mapped, series.id, count, exceptProfileId, extraExclude);
   }
 
   async getActiveClaim(profileId: string, seriesId: string): Promise<StudentEnrollment | null> {
@@ -874,7 +896,7 @@ class PostgresStudentRepository implements StudentRepository {
       .from(studentEnrollments)
       .where(and(eq(studentEnrollments.studentProfileId, profile.id), eq(studentEnrollments.seriesId, series.id)));
     const mapped = rows.map((row) => this.mapEnrollment(row, series.title));
-    return findRankingEnrollment(mapped, profile.id, slugify(series.title)) ?? null;
+    return findRankingEnrollment(mapped, profile.id, series.id) ?? null;
   }
 
   async claimDisplayName(profileId: string, seriesId: string, displayName: string): Promise<StudentEnrollment> {
@@ -912,7 +934,7 @@ class PostgresStudentRepository implements StudentRepository {
       ? (await this.db.select().from(lectureSeries).where(eq(lectureSeries.id, row.seriesId)).limit(1))[0]
       : undefined;
     const mapped = this.mapEnrollment(row, series?.title ?? "");
-    const siblings = series ? await this.activeClaimsForSeries(slugify(series.title)) : [];
+    const siblings = series ? await this.activeClaimsForSeries(series.id) : [];
     anonymizeClaim(mapped, siblings);
     const [updated] = await this.db
       .update(studentEnrollments)
@@ -995,11 +1017,11 @@ class PostgresStudentRepository implements StudentRepository {
         .leftJoin(lectureSeries, eq(lecturesTable.seriesId, lectureSeries.id))
         .where(eq(lecturesTable.id, row.lectureId))
         .limit(1);
-      if (!lecture) return null;
+      if (!lecture?.seriesId) return null;
       return {
         joinCode,
         scope: "lecture",
-        seriesId: slugify(lecture.seriesTitle ?? lecture.title),
+        seriesId: lecture.seriesId,
         seriesTitle: lecture.seriesTitle ?? lecture.title,
         lectureId: lecture.id,
         lectureToken: lecture.publicToken,
@@ -1014,7 +1036,7 @@ class PostgresStudentRepository implements StudentRepository {
     return {
       joinCode,
       scope: "series",
-      seriesId: slugify(series.title),
+      seriesId: series.id,
       seriesTitle: series.title
     };
   }
@@ -1130,7 +1152,7 @@ class PostgresStudentRepository implements StudentRepository {
     const draft: StudentEnrollment = {
       id: "draft",
       studentProfileId: profileId,
-      seriesId: slugify(seriesTitle),
+      seriesId: seriesUuid,
       seriesTitle,
       source: target.source,
       status: "active",
@@ -1155,7 +1177,7 @@ class PostgresStudentRepository implements StudentRepository {
     });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw new PseudonymTakenError(name ?? target.displayName ?? profile.pseudonym, slugify(seriesTitle));
+        throw new PseudonymTakenError(name ?? target.displayName ?? profile.pseudonym, seriesUuid);
       }
       throw error;
     }
@@ -1207,6 +1229,8 @@ class PostgresStudentRepository implements StudentRepository {
 
   private async composeSeriesViews(profile: StudentProfile, onlySeriesId: string | undefined): Promise<StudentDashboardSeries[]> {
     await this.ensureClaimsMigrated();
+    const requestedSeries = onlySeriesId ? await this.resolveSeriesRow(onlySeriesId) : null;
+    if (onlySeriesId && !requestedSeries) return [];
     const now = new Date();
     const enrollmentRows = await this.db
       .select()
@@ -1216,8 +1240,12 @@ class PostgresStudentRepository implements StudentRepository {
     const events = await getAnalyticsRepository().listEvents();
     const lectures = await getLectureRepository().listLectures();
     const byPgSeries = new Map<string, Lecture[]>();
-    // We need to map enrollment.seriesId (lecture_series.id) to lectures. Lectures
-    // expose seriesTitle only, so group by slug AND look the title up via the series row.
+    for (const lecture of lectures) {
+      if (!lecture.seriesId) continue;
+      const group = byPgSeries.get(lecture.seriesId) ?? [];
+      group.push(lecture);
+      byPgSeries.set(lecture.seriesId, group);
+    }
     const views: StudentDashboardSeries[] = [];
     const seriesRows = await this.db.select().from(lectureSeries);
     const seriesById = new Map(seriesRows.map((row) => [row.id, row]));
@@ -1227,14 +1255,10 @@ class PostgresStudentRepository implements StudentRepository {
       if (!seriesUuid) continue;
       const seriesRow = seriesById.get(seriesUuid);
       if (!seriesRow) continue;
-      // Expose the slug as the canonical seriesId (consistent with local mode + routes).
-      const seriesSlug = slugify(seriesRow.title);
-      if (onlySeriesId && seriesSlug !== onlySeriesId && seriesUuid !== onlySeriesId) continue;
-      const groupLectures = byPgSeries.get(seriesUuid)
-        ?? lectures.filter((lecture) => slugify(lecture.seriesTitle) === seriesSlug);
-      byPgSeries.set(seriesUuid, groupLectures);
+      if (requestedSeries && seriesUuid !== requestedSeries.id) continue;
+      const groupLectures = byPgSeries.get(seriesUuid) ?? [];
       const group: SeriesGroup = {
-        seriesId: seriesSlug,
+        seriesId: seriesUuid,
         seriesTitle: seriesRow.title,
         language: seriesRow.language,
         examDate: seriesRow.examDate?.toISOString(),
@@ -1244,7 +1268,7 @@ class PostgresStudentRepository implements StudentRepository {
       const enrollment = this.mapEnrollment(enrollmentRow, seriesRow.title);
       const readiness = computeReadinessSnapshot({
         profile,
-        seriesId: seriesSlug,
+        seriesId: seriesUuid,
         seriesTitle: seriesRow.title,
         lectures: groupLectures.map((lecture) => {
           const view = lectureStudentView(lecture, now);
@@ -1273,7 +1297,7 @@ class PostgresStudentRepository implements StudentRepository {
   async setLectureSeriesJoinCode(userId: string | undefined, seriesId: string, code: string): Promise<JoinCode> {
     const normalized = sanitizeJoinCode(code);
     if (!normalized) throw new Error("Ungültiger Code. Erlaubt sind Buchstaben, Zahlen und Bindestriche.");
-    const series = await this.resolveSeriesRow(seriesId);
+    const series = await this.resolveOwnedSeriesRow(userId, seriesId);
     if (!series) throw new Error("Vorlesungsreihe nicht gefunden.");
     const seriesUuid = series.id;
 
@@ -1306,7 +1330,17 @@ class PostgresStudentRepository implements StudentRepository {
     return this.mapJoinCode(created);
   }
 
-  async disableJoinCode(_userId: string | undefined, joinCodeId: string): Promise<JoinCode | null> {
+  async disableJoinCode(userId: string | undefined, joinCodeId: string): Promise<JoinCode | null> {
+    if (!UUID_PATTERN.test(joinCodeId)) return null;
+    const [existing] = await this.db.select().from(joinCodes).where(eq(joinCodes.id, joinCodeId)).limit(1);
+    if (!existing) return null;
+    let seriesId = existing.seriesId;
+    if (existing.scope === "lecture" && existing.lectureId) {
+      const [lecture] = await this.db.select({ seriesId: lecturesTable.seriesId }).from(lecturesTable)
+        .where(eq(lecturesTable.id, existing.lectureId)).limit(1);
+      seriesId = lecture?.seriesId ?? null;
+    }
+    if (!seriesId || !(await this.resolveOwnedSeriesRow(userId, seriesId))) return null;
     const [row] = await this.db
       .update(joinCodes)
       .set({ enabled: false, updatedAt: new Date() })
@@ -1315,8 +1349,8 @@ class PostgresStudentRepository implements StudentRepository {
     return row ? this.mapJoinCode(row) : null;
   }
 
-  async getShareInfoForSeries(_userId: string | undefined, seriesId: string): Promise<SeriesShareInfo | null> {
-    const series = await this.resolveSeriesRow(seriesId);
+  async getShareInfoForSeries(userId: string | undefined, seriesId: string): Promise<SeriesShareInfo | null> {
+    const series = await this.resolveOwnedSeriesRow(userId, seriesId);
     if (!series) return null;
     const [codeRow] = await this.db
       .select()
@@ -1324,7 +1358,7 @@ class PostgresStudentRepository implements StudentRepository {
       .where(and(eq(joinCodes.enabled, true), eq(joinCodes.scope, "series"), eq(joinCodes.seriesId, series.id)))
       .limit(1);
     return {
-      seriesId: slugify(series.title),
+      seriesId: series.id,
       seriesTitle: series.title,
       joinCode: codeRow?.code,
       joinPath: codeRow ? `/join/${encodeURIComponent(codeRow.code)}` : undefined,
@@ -1376,8 +1410,7 @@ class PostgresStudentRepository implements StudentRepository {
     return {
       id: row.id,
       studentProfileId: row.studentProfileId,
-      // Expose the slug as the canonical seriesId, consistent with local mode + routes.
-      seriesId: seriesTitle ? slugify(seriesTitle) : (row.seriesId ?? ""),
+      seriesId: row.seriesId ?? "",
       seriesTitle,
       lectureId: row.lectureId ?? undefined,
       joinCodeId: row.joinCodeId ?? undefined,

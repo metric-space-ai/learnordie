@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import { ensureStudentEnrollment } from "@/lib/student-client";
-import { seriesIdFromTitle } from "@/lib/series";
+import { seriesIdForLecture } from "@/lib/series";
 import type { Lecture } from "@/lib/types";
 
 // Kept as the page-level identity boundary, but never gates slide access.
@@ -13,11 +13,11 @@ export function SeriesClaimGate({ lecture, source, children }: {
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
-    ensureStudentEnrollment({ seriesId: seriesIdFromTitle(lecture.seriesTitle), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source })
+    ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source })
       .then(() => { if (active) setError(""); })
       .catch(() => { if (active) setError("Dein Lernstand konnte noch nicht gespeichert werden."); });
     return () => { active = false; };
-  }, [lecture.id, lecture.seriesTitle, source, retry]);
+  }, [lecture.id, lecture.seriesId, lecture.seriesTitle, source, retry]);
   return <>{children}{error && <aside className="student-connection-notice" role="status">
     {error} <button type="button" onClick={() => setRetry((value) => value + 1)}>Erneut versuchen</button>
   </aside>}</>;

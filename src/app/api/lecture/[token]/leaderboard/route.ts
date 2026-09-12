@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { seriesIdForLecture } from "@/lib/series";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { isValidPublicLectureToken, parsePublicAnonymousKey } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
@@ -26,6 +27,7 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
     lectureId: lecture.id,
     lectureToken: lecture.publicToken,
     currentAnonymousKey: currentAnonymousKey.value,
+    seriesId: seriesIdForLecture(lecture),
     seriesTitle: lecture.seriesTitle
   });
 
