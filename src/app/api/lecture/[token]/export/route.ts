@@ -15,6 +15,7 @@ import { isValidPublicLectureToken } from "@/server/public-params";
 import { getStorageProvider } from "@/server/providers/storage";
 import { getLectureRepository } from "@/server/repository";
 import { createZipArchive } from "@/server/zip";
+import { buildStandaloneCanvasRuntime, encodeStandaloneDownload } from "@/server/standalone-canvas-runtime";
 
 const EXPORT_SCHEMA_VERSION = "standalone-html-v2";
 const ARCHIVE_SCHEMA_VERSION = "standalone-archive-v1";
@@ -294,6 +295,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     language: lecture.language,
     slides: lecture.slides
   });
+  const hasNativeCanvas = slideDocument.slides.some((slide) => Boolean(slide.canvas));
+  let nativeCanvasRuntime: Awaited<ReturnType<typeof buildStandaloneCanvasRuntime>> | undefined;
+  if (hasNativeCanvas) {
+    try { nativeCanvasRuntime = await buildStandaloneCanvasRuntime(); }
+    catch {
+      return Response.json({ error: "Der Offline-Export der nativen Canvas-Folien ist derzeit nicht verfügbar. Die lokale Zeichen-Engine oder ihre Schriften fehlen. Es wird keine veraltete Block-Fassung exportiert." }, { status: 503 });
+    }
+  }
   const audioSources: StandaloneAudioSource[] = audioAssets.map((asset) => ({
     path: asset.path,
     originalName: asset.originalName,
@@ -311,7 +320,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       slideEngine: {
         renderer: SLIDE_STANDALONE_RENDERER_VERSION,
         slideDocumentSchemaVersion: slideDocument.schemaVersion,
-        slideDocumentId: slideDocument.id
+        slideDocumentId: slideDocument.id,
+        nativeCanvas: nativeCanvasRuntime ? {
+          mode: "native-svg-with-isolated-html-and-static-3d",
+          runtimeSha256: nativeCanvasRuntime.sha256,
+          vendorSha256: nativeCanvasRuntime.vendorSha256,
+          bundledFontFiles: nativeCanvasRuntime.fontFiles,
+          interactive3d: false,
+          authorScripts: false,
+          originalCanvasDataPreserved: true
+        } : undefined
       },
       exportedAt,
       lectureToken: lecture.publicToken,
@@ -349,6 +367,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const assets = [
     { path: "assets/styles.css", role: "style", mediaType: "text/css", bytes: Buffer.byteLength(styles), sha256: sha256(styles), embeddedAs: "style-tag" },
     { path: "assets/standalone.js", role: "interaction", mediaType: "text/javascript", bytes: Buffer.byteLength(script), sha256: sha256(script), embeddedAs: "script-tag" },
+    ...(nativeCanvasRuntime ? [
+      { path: "assets/native-canvas.mjs", role: "native-canvas-renderer-with-fonts", mediaType: "text/javascript", bytes: Buffer.byteLength(nativeCanvasRuntime.source), sha256: nativeCanvasRuntime.sha256, embeddedAs: "inline-module" },
+      { path: "assets/native-canvas-LICENSES.txt", role: "license", mediaType: "text/plain", bytes: Buffer.byteLength(nativeCanvasRuntime.licenses), sha256: sha256(nativeCanvasRuntime.licenses), embeddedAs: "license-details" },
+    ] : []),
     ...audioAssets.map((asset) => ({
       path: asset.path,
       role: asset.source === "upload" ? "dozenten-audio" : "audio-fallback",
@@ -392,6 +414,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   });
 
   const html = renderStandaloneSlideDocumentHtml({
+    nativeCanvasRuntime,
     assetUrlMode: "inline-only",
     audioSources,
     dataJson: data,
@@ -479,6 +502,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       },
       { path: "assets/styles.css", role: "style", mediaType: "text/css", bytes: Buffer.byteLength(styles), sha256: sha256(styles), embeddedAs: "archive-entry" },
       { path: "assets/standalone.js", role: "interaction", mediaType: "text/javascript", bytes: Buffer.byteLength(script), sha256: sha256(script), embeddedAs: "archive-entry" },
+      ...(nativeCanvasRuntime ? [
+        { path: "index.html#native-canvas", role: "native-canvas-renderer-with-fonts", mediaType: "text/javascript", bytes: Buffer.byteLength(nativeCanvasRuntime.source), sha256: nativeCanvasRuntime.sha256, embeddedAs: "inline-module-in-root-document" },
+        { path: "assets/native-canvas-LICENSES.txt", role: "license", mediaType: "text/plain", bytes: Buffer.byteLength(nativeCanvasRuntime.licenses), sha256: sha256(nativeCanvasRuntime.licenses), embeddedAs: "archive-entry-and-license-details" },
+      ] : []),
       ...audioAssets.map((asset) => ({
         path: asset.path,
         role: asset.source === "upload" ? "dozenten-audio" : "audio-fallback",
@@ -519,10 +546,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       { name: "learnbuddy-data.json", data: archiveDataJson },
       { name: "assets/styles.css", data: styles },
       { name: "assets/standalone.js", data: script },
+      ...(nativeCanvasRuntime ? [
+        { name: "assets/native-canvas-LICENSES.txt", data: nativeCanvasRuntime.licenses },
+      ] : []),
       ...audioAssets.map((asset) => ({ name: asset.path, data: asset.bytes })),
       ...audioSegments.map((segment) => ({ name: segment.path, data: segment.bytes }))
     ]);
     const archiveSha256 = sha256(zip);
+    const archiveDownload = hasNativeCanvas ? encodeStandaloneDownload(zip, request.headers.get("accept-encoding")) : undefined;
+    if (archiveDownload?.tooLarge) {
+      return Response.json({ error: "Der vollständige Canvas-Offline-Export überschreitet 4 MiB. Bitte die Vorlesung in kleinere Einheiten aufteilen oder große Bild-/Audiodateien reduzieren. Es wurden keine Inhalte weggelassen." }, { status: 413 });
+    }
     if (recordOwnerEmail) {
       await repository.recordStandaloneExport({
         lectureId: lecture.id,
@@ -532,9 +566,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       }, recordOwnerEmail);
     }
 
-    return new Response(zip, {
+    return new Response(archiveDownload?.body ?? zip, {
       headers: {
         "content-type": "application/zip",
+        ...(archiveDownload?.encoding ? { "content-encoding": archiveDownload.encoding } : {}),
+        ...(hasNativeCanvas ? { vary: "Accept-Encoding" } : {}),
         "content-disposition": `attachment; filename="${lecture.publicToken}-${archiveVersion}.zip"`,
         "x-learnbuddy-export-version": archiveVersion,
         "x-learnbuddy-sha256": archiveSha256,
@@ -543,6 +579,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     });
   }
 
+  const htmlDownload = hasNativeCanvas ? encodeStandaloneDownload(html, request.headers.get("accept-encoding")) : undefined;
+  if (htmlDownload?.tooLarge) {
+    return Response.json({ error: "Der vollständige Canvas-Offline-Export überschreitet 4 MiB. Bitte die Vorlesung in kleinere Einheiten aufteilen oder große Bild-/Audiodateien reduzieren. Es wurden keine Inhalte weggelassen." }, { status: 413 });
+  }
   if (recordOwnerEmail) {
     await repository.recordStandaloneExport({
       lectureId: lecture.id,
@@ -552,9 +592,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     }, recordOwnerEmail);
   }
 
-  return new Response(html, {
+  return new Response(htmlDownload?.body ?? html, {
     headers: {
       "content-type": "text/html; charset=utf-8",
+      ...(htmlDownload?.encoding ? { "content-encoding": htmlDownload.encoding } : {}),
+      ...(hasNativeCanvas ? { vary: "Accept-Encoding" } : {}),
       "content-disposition": `attachment; filename="${lecture.publicToken}-${version}.html"`,
       "x-learnbuddy-export-version": version,
       "x-learnbuddy-sha256": responseSha256,
