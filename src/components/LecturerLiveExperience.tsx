@@ -497,7 +497,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }
         }}>Beenden</button>
         {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" onClick={() => setLeaderboardOpen(true)}>Rangliste</button>}
-        {!showJoinIntro && <>
+        {!showJoinIntro && families.length > 0 && <>
           <label>Frage<select aria-label="Fragenfamilie" value={Math.min(familyIndex, Math.max(0, families.length - 1))} onChange={(event) => setFamilyIndex(Number(event.target.value))}>
             {families.map((family, index) => <option key={family[0]?.familyId ?? index} value={index}>Frage {index + 1}</option>)}
           </select></label>
