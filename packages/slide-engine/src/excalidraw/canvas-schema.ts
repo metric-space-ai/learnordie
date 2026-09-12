@@ -49,7 +49,7 @@ export const canvasElementSchema = z.object({
   text: z.string().max(65536).optional(), originalText: z.string().max(65536).optional(),
   fileId: id.nullable().optional(),
   link: z.string().max(2048).nullable().optional(),
-  customData: z.object({ sourceBlockId: id.optional(), learnordie: canvasEmbedSchema.optional() }).catchall(z.unknown()).optional()
+  customData: z.object({ sourceBlockId: id.optional(), sourceAssetId: id.optional(), assetPlaceholder: z.boolean().optional(), learnordie: canvasEmbedSchema.optional() }).catchall(z.unknown()).optional()
 }).catchall(z.unknown()).superRefine((element, ctx) => {
   if (!boundedJson(element) || JSON.stringify(element).length > 262144) ctx.addIssue({ code: "custom", message: "Element exceeds bounded native JSON limits." });
   if (element.type === "text" && typeof element.text !== "string") ctx.addIssue({ code: "custom", message: "Native text requires text." });

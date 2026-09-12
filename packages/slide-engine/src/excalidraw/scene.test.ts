@@ -126,6 +126,22 @@ test("invalid dimensions, duplicate IDs, remote/missing images and unbounded nat
   for (const input of invalid) assert.equal(canvasSceneSchema.safeParse(input).success, false);
 });
 
+test("unhydrated remote assets reserve image geometry and explicit stable hydration metadata", () => {
+  const document = fixture();
+  document.assets[0].id = "remote-image";
+  document.assets[0].url = "https://example.org/lecture.png";
+  const figure = document.slides[0].blocks.find((block) => block.type === "figure")!;
+  figure.assetId = "remote-image";
+  const scene = canvasSceneForSlide(document.slides[0], document.assets);
+  const placeholder = scene.elements.find((e) => e.customData?.sourceAssetId === "remote-image")!;
+  assert.equal(placeholder.customData?.sourceBlockId, figure.id);
+  assert.equal(placeholder.customData?.assetPlaceholder, true);
+  assert.equal(placeholder.type, "rectangle");
+  assert.ok(placeholder.height > 100);
+  assert.equal(Object.keys(scene.files).length, 0);
+  assert.ok(scene.elements.some((e) => e.originalText?.includes("Bildimport ausstehend")));
+});
+
 test("HTML bounds are enforced independently from runtime sandbox and sanitization", () => {
   const scene = canvasSceneForSlide(fixture().slides[0]);
   const embed = { ...scene.elements[0], type: "embeddable", customData: { learnordie: { type: "html", title: "HTML", html: "<p>Safe text</p>" } } };

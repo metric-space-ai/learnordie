@@ -37,8 +37,14 @@ the error and direct the user to the native editor. Parent owns that UI wiring.
 - Raster file data is limited to matching PNG/JPEG/WebP/GIF data-URL signatures,
   4 MiB each, 100 files / 8 MiB total; this is not a full image decoder validation.
   SVG and remote URLs are not imported into executable/image scene data. Existing
-  unconverted assets retain an editable description and their original reference.
-  Importing such visuals needs a separately controlled rasterization/import path.
+  unconverted assets retain a visibly labeled pending-import placeholder with
+  image geometry and `customData: { sourceAssetId, sourceBlockId, assetPlaceholder:
+  true }`. Exactly one element per figure is marked for hydration. Parent can
+  replace that rectangle with a native image and add an approved raster to files;
+  the separate `<block-id>:caption` text starts with `Bildimport ausstehend` and
+  should be refreshed when hydration succeeds. No fetch occurs in conversion.
+  Remote asset compatibility is incomplete until the controlled client importer
+  is integrated; SVG needs a separate trusted rasterization path, never active HTML.
 - Up to 2,000 elements / 2 MiB native JSON, bounded finite coordinates and numeric
   properties, 64 KiB per text/HTML value, bounded nesting; duplicate IDs and missing
   image files are rejected. Document width/height are positive, finite, ≤10,000.

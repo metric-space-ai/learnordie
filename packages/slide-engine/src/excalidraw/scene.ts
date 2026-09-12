@@ -97,9 +97,14 @@ function blockElements(block: SlideBlock, x: number, y: number, width: number, f
       ];
       return [textElement(id("formula"), "So = (η · n / p) · (r / c)²", x, y + 70, width, 36, block.id), caption];
     }
-    // Remote images are not fetched during conversion. Preserve a visible,
-    // editable description and asset reference in the original blocks/assets.
-    return [textElement(id("asset"), [readable(block), asset?.description, asset?.url && "Bildquelle im Quellenverzeichnis"].filter(Boolean).join("\n"), x, y, width, 27, block.id)];
+    // Pure conversion never fetches remote content. Reserve native image geometry
+    // and a stable asset ID so the client can hydrate approved rasters to files.
+    // A visible pending-import caption avoids silently substituting description.
+    const height = Math.min(400, width * 0.6);
+    return [
+      { ...base(id("asset"), "rectangle", x, y, width, height, block.id), strokeStyle: "dashed", backgroundColor: "#f1eee4", fillStyle: "solid", customData: { sourceBlockId: block.id, sourceAssetId: block.assetId!, assetPlaceholder: true } },
+      textElement(id("caption"), ["Bildimport ausstehend", readable(block), asset?.description].filter(Boolean).join("\n"), x, y + height + 12, width, 25, block.id)
+    ];
   }
   if (block.type === "table") {
     const result: CanvasElement[] = [];
