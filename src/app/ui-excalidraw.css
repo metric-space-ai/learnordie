@@ -172,10 +172,12 @@ html[data-theme="dark"] .native-workspace {
 .native-workspace .studio-stepper button { width: 28px; padding: 0; font-size: 22px; border-color: transparent; }
 .native-workspace .studio-stepper select { width: 68px; height: 36px; min-height: 36px; padding: 4px; border: 0; border-radius: 6px; color: var(--studio-ink); background: var(--studio-surface); font-family: inherit; font-size: 12px; line-height: 1.2; cursor: pointer; }
 .native-workspace .studio-stepper select:focus-visible { outline: 2px solid var(--studio-accent); }
-.native-workspace .studio-save-status { display: none; }
+.native-workspace .studio-top-actions .studio-save-status { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .native-workspace .studio-save-inline { position: relative; }
 .native-workspace .studio-save-island:has(.is-unsaved) .studio-save-inline::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--studio-accent); }
-.native-workspace .studio-view-popover { position: absolute; top: 42px; right: 0; width: 220px; padding: 8px; display: grid; gap: 4px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
+.native-workspace .studio-view-popover { position: absolute; top: 42px; right: 0; width: 220px; max-height: calc(100dvh - 64px); overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
+.native-workspace .studio-view-popover > * { grid-area: auto; flex: 0 0 auto; }
+.native-workspace .studio-tool-menu[data-open="true"] .studio-tool-trigger { color: var(--studio-ink); background: var(--studio-selected); border-color: var(--studio-line); }
 .native-workspace .studio-view-popover :is(button, .studio-tool-menu) { width: 100%; }
 .native-workspace .studio-view-popover .studio-engine-toggle { display: flex; }
 .native-workspace .studio-view-popover .studio-tool-popover { position: static; width: 100%; padding: 4px 0 0; border: 0; box-shadow: none; transform: none; }
