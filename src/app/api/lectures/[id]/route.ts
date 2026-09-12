@@ -9,7 +9,9 @@ import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 import { slideDocumentSchema } from "@learnordie/slide-engine";
 
-const MAX_UPDATE_LECTURE_BYTES = 2 * 1024 * 1024;
+// Native scenes may include bounded raster files. Stay below the hosting
+// request limit; larger documents must not be partially saved or truncated.
+const MAX_UPDATE_LECTURE_BYTES = 4 * 1024 * 1024;
 
 const evaluationConfigSchema = z.object({
   enabled: z.boolean(),

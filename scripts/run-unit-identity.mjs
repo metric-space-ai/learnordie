@@ -14,7 +14,9 @@ const child = spawn(
     "--test-concurrency=2",
     "src/lib/student-pseudonym.test.ts",
     "src/server/student-claims.test.ts",
-    "src/server/test-accounts.test.ts"
+    "src/server/test-accounts.test.ts",
+    "src/server/request-json.test.ts",
+    "packages/slide-engine/src/excalidraw/scene.test.ts"
   ],
   { stdio: "inherit", cwd: root }
 );
