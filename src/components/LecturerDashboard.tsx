@@ -2186,7 +2186,11 @@ export function LecturerDashboard({
                     key={item.tool}
                     style={{ "--lb-i": index } as MotionStyle}
                     type="button"
-                    onClick={(event) => openWorkspaceTool(item.tool, event.currentTarget)}
+                    onClick={(event) => {
+                      const menu = event.currentTarget.closest("details");
+                      if (menu) menu.open = false;
+                      openWorkspaceTool(item.tool, event.currentTarget);
+                    }}
                   >
                     <strong>{item.detail}</strong>
                     {item.count ? <small>{item.count}</small> : null}
@@ -2205,7 +2209,11 @@ export function LecturerDashboard({
       <button
         className={`studio-plan-summary-button ${planEditor ? "active" : ""}`}
         type="button"
-        onClick={() => setPlanEditor((current) => (current ? null : "status"))}
+        onClick={(event) => {
+          const menu = event.currentTarget.closest("details");
+          if (menu) menu.open = false;
+          setPlanEditor((current) => (current ? null : "status"));
+        }}
         title="Status"
       >
         <strong>{formatLectureStatus(edit.status)}</strong>
@@ -2501,7 +2509,7 @@ export function LecturerDashboard({
             {!showCreateForm && <nav className="studio-stepper" aria-label="Foliensteuerung">
               <button type="button" onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)} disabled={activeStudioSlideIndex === 0} aria-label="Vorherige Folie" title="Vorherige Folie">‹</button>
               <select aria-label="Folie auswählen" value={activeStudioSlideIndex} onChange={(event) => moveToStudioSlide(Number(event.target.value))}>
-                {studioSlides.map((slide, index) => <option key={slide.id} value={index}>{index + 1} / {studioSlides.length} · {slide.title}</option>)}
+                {studioSlides.map((slide, index) => <option key={slide.id} value={index}>{index + 1} / {studioSlides.length}{index !== activeStudioSlideIndex ? ` · ${slide.title}` : ""}</option>)}
               </select>
               <button type="button" onClick={() => moveToStudioSlide(activeStudioSlideIndex + 1)} disabled={activeStudioSlideIndex >= studioSlides.length - 1} aria-label="Nächste Folie" title="Nächste Folie">›</button>
             </nav>}
@@ -2615,7 +2623,7 @@ export function LecturerDashboard({
           {!showCreateForm && <details className="studio-view-menu">
             <summary aria-label="Weitere Vorlesungsaktionen" title="Vorschau, Planung und Werkzeuge">•••</summary>
             <div className="studio-view-popover">
-              <button aria-pressed={engineEditing} className="plain-button studio-engine-toggle" type="button" onClick={() => setEngineEditing((editing) => !editing)}>{engineEditing ? "Vorschau" : "Bearbeiten"}</button>
+              <button aria-pressed={engineEditing} className="plain-button studio-engine-toggle" type="button" onClick={(event) => { const menu = event.currentTarget.closest("details"); if (menu) menu.open = false; setEngineEditing((editing) => !editing); }}>{engineEditing ? "Vorschau" : "Bearbeiten"}</button>
               {renderPlanSummaryButton()}
               {renderSlideToolMenu()}
             </div>
