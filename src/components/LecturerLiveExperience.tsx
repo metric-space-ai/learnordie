@@ -11,6 +11,7 @@ import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
 import { LiveQuizDrawer } from "./LiveQuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
+import { ThemeToggle } from "./theme/ThemeToggle";
 
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
 type QuestionOrigin = "control" | "hotspot" | "space";
@@ -36,6 +37,7 @@ const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const controlsRef = useRef<HTMLDetailsElement>(null);
   const live = useLiveSession(lecture.publicToken, leaderboardOpen, { id: lecture.id, csrfToken });
   const sendLive = live.send;
   const liveStatus = live.state?.status;
@@ -373,7 +375,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
   return (
     <main
-      className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
+      className={`slide-screen presentation-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
+      onKeyDown={(event) => { if (event.key === "Escape" && controlsRef.current?.open) { controlsRef.current.open = false; controlsRef.current.querySelector("summary")?.focus(); } }}
       data-question-origin={questionOrigin}
       data-csrf-token={csrfToken}
       data-live-status={live.state?.status ?? "connecting"}
@@ -382,6 +385,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         lectureToken={lecture.publicToken}
         lectureTitle={lecture.title}
         showJoinIntro={showJoinIntro}
+        showNavigation={false}
         navigationDisabled={live.busy || !live.connected || live.state?.status !== "active"}
         current={slide}
         onNext={next}
@@ -389,11 +393,6 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         slideDocument={lecture.slideDocument}
         slides={lecture.slides}
       />
-
-      {(!live.connected || live.error || live.state?.status !== "active") && <aside className="student-connection-notice" role="status">
-        {live.error || (!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Live-Sitzung beendet." : "Live-Sitzung wird vorbereitet …")}
-        {live.connected && live.state?.status !== "active" && <button type="button" disabled={live.busy} onClick={() => void live.send({ action: "start" })}>Neue Live-Sitzung starten</button>}
-      </aside>}
 
       <Presence show={transcriptVisible}>
         {(motionState) => (
@@ -480,7 +479,20 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         )}
       </Presence>
 
-      <div className="action-stack live-controls lb-enter-control">
+      <details className="presentation-controls" ref={controlsRef}>
+      <summary aria-label="Präsentationssteuerung" title="Präsentationssteuerung öffnen">⋯</summary>
+      <div className="presentation-control-panel" aria-label="Präsentationssteuerung">
+      {(!live.connected || live.error || live.state?.status !== "active") && <aside className="presentation-connection-notice" role="status">
+        {live.error || (!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Live-Sitzung beendet." : "Live-Sitzung wird vorbereitet …")}
+        {live.connected && live.state?.status !== "active" && <button type="button" disabled={live.busy} onClick={() => void live.send({ action: "start" })}>Neue Live-Sitzung starten</button>}
+      </aside>}
+      <nav className="presentation-navigation" aria-label="Foliennavigation">
+        <button type="button" disabled={live.busy || !live.connected || live.state?.status !== "active"} onClick={previous} aria-label="Vorherige Folie">‹</button>
+        <span>{showJoinIntro ? "Beitreten" : `${slide + 1} / ${lecture.slides.length}`}</span>
+        <button type="button" disabled={live.busy || !live.connected || live.state?.status !== "active"} onClick={next} aria-label="Nächste Folie">›</button>
+        <ThemeToggle />
+      </nav>
+      <div className="live-controls">
         <button className="live-back-link" type="button" disabled={live.busy} onClick={async () => {
           if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }
         }}>Beenden</button>
@@ -535,6 +547,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           <span className="lb-icon lb-icon-question" aria-hidden="true" />
         </button>
       </div>
+      </div>
+      </details>
 
       {questionOpen && live.state?.round && <LiveQuizDrawer key={live.state.round.id} round={live.state.round} serverOffset={live.serverOffset} receipt={null} onClose={() => void live.send({ action: "close" })} />}
       <Presence show={lecture.leaderboardEnabled && leaderboardOpen}>{(motionState) => <LeaderboardModal entries={live.state?.leaderboard ?? []} loading={!live.connected || !live.state?.leaderboard} motionState={motionState} onClose={() => setLeaderboardOpen(false)} />}</Presence>

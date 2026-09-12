@@ -1,4 +1,4 @@
-/* Native workspace: one header, two compact tool rows, canvas to the bottom. */
+/* Native workspace: one header, one tool row, canvas to the bottom. */
 .native-workspace {
   --studio-surface: #fff; --studio-paper: #f8f9fa; --studio-ink: #1b1b1f;
   --studio-muted: #696973; --studio-line: #e6e6ec; --studio-accent: #6965db;
@@ -101,6 +101,7 @@ html[data-theme="dark"] .native-workspace {
 .native-canvas-host > div { width: 100%; height: 100%; }
 .native-canvas .excalidraw .HintViewer { display: none; }
 .native-canvas-view .excalidraw :is(.layer-ui__wrapper, .App-bottom-bar, .FixedSideContainer) { display: none; }
+.native-canvas .excalidraw-hyperlinkContainer:has(a[href^="https://learnordie.invalid/embed/"]) { display: none; }
 /* Excalidraw inverts its drawing canvas, but three.js renders its own colors. */
 .native-canvas .excalidraw.theme--dark .learnordie-canvas-scene canvas { filter: none; }
 .learnordie-canvas-scene .lb-scene3d {
@@ -187,8 +188,8 @@ html[data-theme="dark"] .native-workspace {
 .native-workspace .studio-account-mini { display: none; }
 .native-workspace .studio-filmstrip-rail { padding: 10px 8px; }
 
-.native-studio-editor:has(.native-canvas-edit) { padding-top: 88px; }
-.native-studio-tools { position: absolute; top: 44px; left: 4px; z-index: 8; height: 44px; min-height: 44px; width: 144px; padding: 4px 0; gap: 0; overflow: visible; border: 0; }
+.native-studio-editor:has(.native-canvas-edit) { padding-top: 48px; }
+.native-studio-tools { position: absolute; top: 0; left: 4px; z-index: 8; height: 48px; min-height: 48px; width: 168px; padding: 4px 0; gap: 0; overflow: visible; border: 0; }
 .native-studio-tools button, .native-studio-tools summary { min-height: 36px; padding: 6px 8px; font-size: 12px; }
 .native-insert-menu { position: relative; }
 .native-insert-menu summary { display: flex; align-items: center; cursor: pointer; list-style: none; border-radius: 6px; white-space: nowrap; }
@@ -196,17 +197,18 @@ html[data-theme="dark"] .native-workspace {
 .native-insert-menu summary:hover { background: var(--studio-selected); }
 .native-insert-options { position: absolute; top: 40px; left: 0; width: 170px; display: grid; padding: 6px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
 .native-insert-options button { text-align: left; }
-.native-insert-panel { top: 92px; max-height: calc(100% - 100px); z-index: 30; }
+.native-insert-panel { top: 52px; max-height: calc(100% - 60px); z-index: 30; }
 .native-canvas-edit, .native-canvas-edit .excalidraw, .native-canvas-edit .layer-ui__wrapper { overflow: visible; }
-.native-studio-editor:has(.native-canvas-edit)::before { content: ""; position: absolute; inset: 0 0 auto; height: 88px; background: var(--studio-surface); border-bottom: 1px solid var(--studio-line); }
+.native-studio-editor:has(.native-canvas-edit)::before { content: ""; position: absolute; inset: 0 0 auto; height: 48px; background: var(--studio-surface); border-bottom: 1px solid var(--studio-line); }
 .native-canvas-edit .excalidraw { --editor-container-padding: 4px; }
-.native-canvas-edit .excalidraw .FixedSideContainer_side_top { top: -84px; left: 4px; right: 4px; bottom: 4px; }
+.native-canvas-edit .excalidraw .FixedSideContainer_side_top { top: -44px; left: 176px; right: 4px; bottom: 4px; }
 .native-canvas-edit .excalidraw .App-toolbar { box-shadow: none; }
 .native-canvas-edit .excalidraw .App-menu_top { grid-gap: 4px; }
-.native-canvas-edit .excalidraw .App-menu_top__left .selected-shape-actions { margin-top: 28px; }
-.native-canvas-edit .excalidraw .selected-shape-actions .Island { max-height: calc(100dvh - 148px); }
-.native-canvas-edit .excalidraw .App-menu_bottom { top: -40px; bottom: auto; left: 148px; right: 4px; width: auto; height: 36px; padding: 0; }
-.native-canvas-edit .excalidraw .App-bottom-bar { inset: -40px 4px auto 148px; height: 36px; padding: 0; margin: 0 !important; align-items: flex-start; }
+.native-canvas-edit .excalidraw .App-menu_top__left .selected-shape-actions { position: absolute; top: 48px; left: -172px; margin: 0; }
+.native-canvas-edit .excalidraw .selected-shape-actions .Island { max-height: calc(100dvh - 108px); }
+.native-canvas-edit .excalidraw .App-menu_bottom { top: 4px; bottom: auto; left: 4px; right: 4px; width: auto; height: 40px; padding: 4px; background: var(--studio-surface); border-radius: 8px; }
+.native-canvas-edit .excalidraw .App-bottom-bar { inset: 4px 4px auto; height: 40px; padding: 4px; margin: 0 !important; align-items: flex-start; }
+.native-studio-editor[data-actions-open="false"] .excalidraw :is(.App-menu_bottom, .App-bottom-bar) { display: none; }
 .native-canvas-edit .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; min-width: 0; max-height: calc(100dvh - 100px); box-shadow: none; }
 .native-canvas-edit .excalidraw .App-toolbar-content { padding: 0; justify-content: flex-end; gap: 2px; }
 .native-canvas-edit .excalidraw .App-toolbar-content .dropdown-menu--mobile { top: 40px; bottom: auto; }
@@ -233,5 +235,25 @@ html[data-theme="dark"] .native-workspace {
   .native-canvas-edit .excalidraw .App-top-bar > section { min-width: 0; width: 100%; }
   .native-canvas-edit .excalidraw .App-top-bar .App-toolbar { flex-shrink: 0; }
   /* A fixed popover escapes the horizontal tool scroller without clipping. */
-  .native-canvas-edit .excalidraw .App-toolbar__extra-tools-dropdown { position: fixed; top: 140px; left: 8px; right: auto; bottom: auto; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 148px); overflow-y: auto; }
+  .native-canvas-edit .excalidraw .App-toolbar__extra-tools-dropdown { position: fixed; top: 100px; left: 8px; right: auto; bottom: auto; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 108px); overflow-y: auto; }
 }
+
+/* A closed rail consumes no canvas width. On small screens it is a drawer. */
+.native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { position: relative; grid-template: "header" 48px "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+.native-workspace .studio-filmstrip-rail { display: none; }
+.native-workspace[data-filmstrip-open="true"] .studio-filmstrip-rail { display: block; }
+.native-workspace .studio-top-actions > .studio-filmstrip-toggle { order: 0; flex: 0 0 32px; width: 32px; padding: 0; }
+.native-workspace .studio-filmstrip-list { gap: 4px; }
+.native-workspace .studio-filmstrip-list button { display: flex; align-items: center; gap: 8px; min-height: 48px; width: 100%; padding: 8px; text-align: left; }
+.native-workspace .studio-filmstrip-list button span { flex: 0 0 24px; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; font-size: 11px; }
+.native-workspace .studio-filmstrip-list strong { min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 1101px) {
+  .native-workspace[data-filmstrip-open="true"] .lecturer-studio { grid-template: "header header" 48px "film stage" minmax(0, 1fr) / 180px minmax(0, 1fr); }
+}
+@media (max-width: 1100px) {
+  .native-workspace[data-filmstrip-open="true"] .studio-filmstrip-rail { position: absolute; top: 48px; bottom: 0; left: 0; z-index: 50; width: min(260px, 80vw); box-shadow: var(--studio-shadow); }
+}
+.native-canvas-edit .excalidraw .App-menu_top { grid-template-columns: 36px minmax(0, 1fr) auto; }
+.native-canvas-edit .excalidraw .App-menu_top > section { min-width: 0; }
+.native-canvas-edit .excalidraw .App-menu_top > section > .Stack { overflow-x: auto; }
+.native-canvas-edit .excalidraw .App-top-bar { width: 100%; min-width: 0; }

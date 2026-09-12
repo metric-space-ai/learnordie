@@ -155,6 +155,10 @@ function wrapRuntime(native: CanvasRuntime): CanvasRuntime {
         aiEnabled: false,
         isCollaborating: false,
         validateEmbeddable: isCanvasEmbedLink,
+        // Internal embed IDs identify our renderers, not navigable web pages.
+        onLinkOpen: (element: CanvasElement, event: Event) => {
+          if (isCanvasEmbedLink(element.link)) event.preventDefault();
+        },
         renderEmbeddable: (element: CanvasElement, state: CanvasAppState) =>
           props.renderEmbeddable?.(element, state) ?? native.createElement("div", { role: "note" }, "Diese Einbettung wird nicht unterstützt."),
       });

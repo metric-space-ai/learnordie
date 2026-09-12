@@ -518,6 +518,7 @@ export function LecturerDashboard({
   const [materialUploading, setMaterialUploading] = useState(false);
   const sourceFileRef = useRef<File | null>(null);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  const [filmstripOpen, setFilmstripOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [engineEditing, setEngineEditing] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -2250,7 +2251,7 @@ export function LecturerDashboard({
 
   function renderFilmstripRail() {
     return (
-      <aside className="studio-filmstrip-rail" aria-label="Folien">
+      <aside id="studio-filmstrip" className="studio-filmstrip-rail" aria-label="Folien">
         <div className="studio-account-mini">
           <strong>{edit.title}</strong>
         </div>
@@ -2270,7 +2271,7 @@ export function LecturerDashboard({
               }}
               title={slide.title}
               type="button"
-              onClick={(event) => moveToStudioSlide(index, event.currentTarget)}
+              onClick={(event) => { moveToStudioSlide(index, event.currentTarget); if (window.matchMedia("(max-width: 1100px)").matches) setFilmstripOpen(false); }}
             >
               <span>{index + 1}</span>
               <strong>{slide.title}</strong>
@@ -2502,9 +2503,10 @@ export function LecturerDashboard({
   }
 
   return (
-    <main className="app-shell lecturer-studio-shell native-workspace" data-csrf-token={csrfToken}>
+    <main className="app-shell lecturer-studio-shell native-workspace" data-filmstrip-open={filmstripOpen} data-csrf-token={csrfToken}>
         <section className={`lecturer-studio ${workspaceTool !== "presentation" ? "tool-open" : ""}`}>
           <header className="studio-top-actions" aria-label="Vorlesungseditor">
+            <button className="studio-filmstrip-toggle" type="button" aria-label="Folienübersicht" title="Folienübersicht" aria-controls="studio-filmstrip" aria-expanded={filmstripOpen} onClick={() => setFilmstripOpen((open) => !open)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6M3 15h6"/></svg></button>
             <div className="native-workspace-heading"><span>learnordie</span><strong title={edit.title}>{edit.title}</strong></div>
             {!showCreateForm && <nav className="studio-stepper" aria-label="Foliensteuerung">
               <button type="button" onClick={() => moveToStudioSlide(activeStudioSlideIndex - 1)} disabled={activeStudioSlideIndex === 0} aria-label="Vorherige Folie" title="Vorherige Folie">‹</button>
@@ -2571,7 +2573,8 @@ export function LecturerDashboard({
                 >
                   Neue Vorlesung
                 </button>
-                <button className="studio-command-link" type="button" disabled={modelDemoBusy} onClick={() => void addModelSlides()}>{modelDemoBusy ? "Modell-Slides werden geladen …" : "Modell-Slides hinzufügen"}</button>
+                <button className="studio-command-link" type="button" disabled={modelDemoBusy} onClick={() => void addModelSlides()}>{modelDemoBusy ? "Originalvortrag wird geladen …" : "Originalvortrag: Der Modellbegriff"}</button>
+                <a className="studio-command-link" href="/api/lectures/model-demo/source" download>Vorlesungsunterlage herunterladen</a>
                 {modelDemoError && <p role="alert">{modelDemoError}</p>}
               </section>
               <section className="studio-menu-section" aria-label="Ansichten">

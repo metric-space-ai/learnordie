@@ -36,6 +36,7 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [editingElementId, setEditingElementId] = useState<string | null>(null);
 
   function openEmbedPanel(kind: "html" | "scene3d") {
@@ -105,7 +106,7 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
     finally { setBusy(false); }
   }
 
-  return <section className="native-studio-editor" aria-label="Folie mit Excalidraw bearbeiten">
+  return <section className="native-studio-editor" data-actions-open={actionsOpen} aria-label="Folie mit Excalidraw bearbeiten">
     {!readOnly && <div className="native-studio-tools" role="toolbar" aria-label="Folienelemente">
       <details className="native-insert-menu">
       <summary aria-label="Element einfügen">＋ Einfügen</summary>
@@ -117,6 +118,7 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
       </div>
       </details>
       <button type="button" title="Folie einpassen" aria-label="Einpassen" disabled={!canvasReady} onClick={() => api.current?.scrollToContent(undefined, { fitToContent: true, viewportZoomFactor: 0.92, animate: true })}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button>
+      <button type="button" aria-label="Zeichenaktionen" title="Eigenschaften, Rückgängig und weitere Zeichenaktionen" aria-expanded={actionsOpen} onClick={() => setActionsOpen((open) => !open)}>⋯</button>
     </div>}
     <ExcalidrawCanvas key={`${lectureId}:${current.id}`} slideId={current.id} title={current.title} scene={scene} assets={document.assets} readOnly={readOnly} onReady={(value) => { api.current = value; setCanvasReady(Boolean(value)); }} onChange={changed} />
     {!readOnly && panel && <aside className="native-insert-panel" aria-label={panel === "html" ? "HTML einbetten" : "3D-Szene einfügen"}>
