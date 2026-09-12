@@ -128,7 +128,7 @@ html[data-theme="dark"] .native-workspace {
 @keyframes canvas-panel-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @media (max-width: 1000px) {
   .native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { grid-template-columns: 140px minmax(0, 1fr); }
-  .native-workspace .studio-save-status { display: none; }
+.native-workspace .studio-top-actions .studio-save-status { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 @media (max-width: 700px) {
   .native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { grid-template: "header" auto "stage" minmax(0, 1fr) / minmax(0, 1fr); }
@@ -209,7 +209,8 @@ html[data-theme="dark"] .native-workspace {
 .native-canvas-edit .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; min-width: 0; max-height: calc(100dvh - 100px); box-shadow: none; }
 .native-canvas-edit .excalidraw .App-toolbar-content { padding: 0; justify-content: flex-end; gap: 2px; }
 .native-canvas-edit .excalidraw .App-toolbar-content .dropdown-menu--mobile { top: 40px; bottom: auto; }
-.native-canvas-edit .excalidraw .App-bottom-bar .panelColumn { width: min(280px, calc(100vw - 16px)); flex: 0 1 auto; align-self: flex-end; max-height: calc(100dvh - 144px); overflow-y: auto; background: var(--studio-surface); border: 1px solid var(--studio-line); border-radius: 8px; }
+.native-canvas-edit .excalidraw .App-bottom-bar .App-mobile-menu { position: absolute; top: 40px; right: 0; width: min(280px, calc(100vw - 16px)); max-height: calc(100dvh - 144px); overflow-y: auto; }
+.native-canvas-edit .excalidraw .App-bottom-bar .panelColumn { width: 100%; background: var(--studio-surface); border: 1px solid var(--studio-line); border-radius: 8px; }
 .native-canvas-edit .excalidraw .App-top-bar .Stack_vertical { gap: 0; }
 .native-canvas-edit .excalidraw .App-toolbar--mobile { padding: 0; }
 .native-canvas-edit .excalidraw .mobile-misc-tools-container { position: static; display: flex; flex-direction: row; }
@@ -231,5 +232,5 @@ html[data-theme="dark"] .native-workspace {
   .native-canvas-edit .excalidraw .App-top-bar > section { min-width: 0; width: 100%; }
   .native-canvas-edit .excalidraw .App-top-bar .App-toolbar { flex-shrink: 0; }
   /* A fixed popover escapes the horizontal tool scroller without clipping. */
-  .native-canvas-edit .excalidraw .App-toolbar__extra-tools-dropdown { position: fixed; top: 92px; left: 8px; right: auto; bottom: auto; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 100px); overflow-y: auto; }
+  .native-canvas-edit .excalidraw .App-toolbar__extra-tools-dropdown { position: fixed; top: 140px; left: 8px; right: auto; bottom: auto; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 148px); overflow-y: auto; }
 }
