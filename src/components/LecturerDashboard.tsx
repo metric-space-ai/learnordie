@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
 import { defaultEvaluationConfig } from "@/lib/evaluation";
@@ -84,6 +84,12 @@ const emptyCreateDraft = {
   liveAt: "",
   examDate: ""
 };
+
+// The server runs in UTC; dates are deliberately local to the lecturer's
+// browser. Render the same placeholder until hydration has completed.
+const subscribeToLocalDates = () => () => {};
+const localDatesReady = () => true;
+const serverDatesReady = () => false;
 
 // datetime-local-Felder arbeiten in der Ortszeit des Browsers; gespeichert wird UTC.
 function formatDateTime(value: string) {
@@ -485,6 +491,7 @@ export function LecturerDashboard({
   csrfToken: string;
 }) {
   const [lectures, setLectures] = useState(initialLectures);
+  const datesReady = useSyncExternalStore(subscribeToLocalDates, localDatesReady, serverDatesReady);
   const [modelDemoBusy, setModelDemoBusy] = useState(false);
   const [modelDemoError, setModelDemoError] = useState("");
   const [selectedId, setSelectedId] = useState(initialLectures[0]?.id ?? "");
@@ -2225,8 +2232,8 @@ export function LecturerDashboard({
   function renderPlanTabs() {
     const planItems: Array<{ editor: Exclude<PlanEditor, null>; label: string; value: string }> = [
       { editor: "status", label: "Status", value: formatLectureStatus(edit.status) },
-      { editor: "live", label: "Live", value: formatPlanDateTime(edit.liveAt) },
-      { editor: "exam", label: "Prüfung", value: formatPlanDate(edit.examDate) },
+      { editor: "live", label: "Live", value: datesReady ? formatPlanDateTime(edit.liveAt) : "…" },
+      { editor: "exam", label: "Prüfung", value: datesReady ? formatPlanDate(edit.examDate) : "…" },
       { editor: "learn", label: "Lernmodus", value: `Fragedichte ${normalizeLearnQuestionDensity(edit.learnQuestionDensity)}` },
       { editor: "leaderboard", label: "Rangliste", value: edit.leaderboardEnabled ? "an" : "aus" },
       { editor: "budget", label: "KI", value: `${edit.aiDailyLimit}/${edit.seriesAiDailyLimit}/${edit.tenantAiDailyLimit}` }
@@ -2543,7 +2550,7 @@ export function LecturerDashboard({
                 </div>
                 <div className="studio-deck-picker compact" role="listbox" aria-label="Vorlesung auswählen">
                   {lectures.map((lecture) => {
-                    const lectureDate = formatLectureDate(lecture.liveAt);
+                    const lectureDate = datesReady ? formatLectureDate(lecture.liveAt) : "";
                     return (
                       <button
                         aria-selected={lecture.id === selected.id}
@@ -2604,10 +2611,10 @@ export function LecturerDashboard({
                 </div>
                 {latestExportJob ? (
                   <span className={`studio-export-status ${latestExportJob.status}`}>
-                    {`${formatExportJobStatus(latestExportJob.status)} · ${formatVisibleExportJobMessage(latestExportJob)}`}
+                    {`${formatExportJobStatus(latestExportJob.status)} · ${datesReady ? formatVisibleExportJobMessage(latestExportJob) : "…"}`}
                   </span>
                 ) : latestStandaloneExport ? (
-                  <span className="studio-export-status queued">{formatExportTime(latestStandaloneExport.createdAt)}</span>
+                  <span className="studio-export-status queued">{datesReady ? formatExportTime(latestStandaloneExport.createdAt) : "…"}</span>
                 ) : null}
                 <form action={`/lecturer/actions/exports/${selected.id}`} method="post">
                   <input type="hidden" name="csrfToken" value={csrfToken} />
