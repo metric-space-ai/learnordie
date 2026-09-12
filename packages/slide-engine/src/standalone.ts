@@ -1,8 +1,9 @@
 import type { SlideAssetRef, SlideBlock, SlideDocument, SlideNode } from "./schema";
 import { createModellSceneState, modellFallbackDataUri, modellSceneAccents } from "./scenes/modell-state";
 import { scene3dSceneKey } from "./scenes/scene-ids";
+import { renderStandaloneCanvas, standaloneCanvasScript, STANDALONE_CANVAS_CSP } from "./standalone-canvas";
 
-export const SLIDE_STANDALONE_RENDERER_VERSION = "learnordie-slide-standalone-v1" as const;
+export const SLIDE_STANDALONE_RENDERER_VERSION = "learnordie-slide-standalone-v2" as const;
 
 export type StandaloneAnswerOption = {
   key: string;
@@ -45,6 +46,7 @@ export type RenderStandaloneSlideDocumentInput = {
   dataJson: string;
   manifestJson: string;
   assetUrlMode?: "inline-only" | "relative-or-inline" | "allow-external";
+  nativeCanvasRuntime?: { source: string; sha256: string; licenses: string };
 };
 
 export function standaloneStyles() {
@@ -72,6 +74,11 @@ export function standaloneStyles() {
     .ld-standalone-slide, .question { display: grid; gap: clamp(14px, 2vw, 24px); padding: clamp(18px, 3vw, 32px); }
     .ld-slide-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; font-weight: 780; }
     .ld-slide-body { display: grid; gap: clamp(14px, 2vw, 22px); min-width: 0; }
+    .ld-native-export { min-width: 0; display: grid; gap: 12px; }
+    .ld-native-export details { overflow-wrap: anywhere; }
+    .ld-native-export pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    [data-native-export-status="failed"], [data-native-export-status="unsupported"] { border: 2px solid #a34232; padding: 12px; }
+    [data-native-export-view] { min-width: 0; }
     .slide-doc-block { min-width: 0; overflow-wrap: anywhere; }
     .slide-doc-block[data-block-type="paragraph"], .question p { max-width: 820px; font-size: clamp(17px, 2.4vw, 22px); line-height: 1.45; }
     .slide-doc-block ul, .slide-doc-block ol { display: grid; gap: 8px; margin: 0; padding-left: 22px; font-size: clamp(17px, 2.2vw, 21px); line-height: 1.38; }
@@ -219,7 +226,7 @@ export function standaloneScript() {
         });
       });
     })();
-  `.trim();
+  `.trim() + "\n" + standaloneCanvasScript();
 }
 
 export function renderStandaloneSlideDocumentHtml(input: RenderStandaloneSlideDocumentInput) {
@@ -229,11 +236,13 @@ export function renderStandaloneSlideDocumentHtml(input: RenderStandaloneSlideDo
   const seriesTitle = input.metadata.seriesTitle ?? "learnordie";
   const selfContained = input.metadata.selfContained ?? true;
   const externalAssetCount = input.metadata.externalAssetCount ?? 0;
+  const hasNativeCanvas = input.document.slides.some((slide) => Boolean(slide.canvas));
 
   return `<!doctype html>
 <html lang="${escapeAttribute(input.document.language)}">
 <head>
   <meta charset="utf-8">
+  ${hasNativeCanvas ? `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(STANDALONE_CANVAS_CSP)}">` : ""}
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(seriesTitle)} - ${escapeHtml(title)}</title>
   <style>${styles}</style>
@@ -261,8 +270,9 @@ export function renderStandaloneSlideDocumentHtml(input: RenderStandaloneSlideDo
     </section>
     <section id="slides" class="ld-standalone-section" aria-labelledby="slides-title">
       <h2 id="slides-title" class="sr-only">Folien</h2>
-      ${renderSlides(input.document, input.assetUrlMode ?? "inline-only")}
+      ${renderSlides(input.document, input.assetUrlMode ?? "inline-only", Boolean(input.nativeCanvasRuntime))}
     </section>
+    ${input.nativeCanvasRuntime ? `<details><summary>Lizenzen der eingebetteten Zeichen-Engine und Schriften</summary><pre>${escapeHtml(input.nativeCanvasRuntime.licenses)}</pre></details>` : ""}
     <section id="questions" class="ld-standalone-section" aria-labelledby="questions-title">
       <h2 id="questions-title">Eingebettete Fragen</h2>
       ${renderQuestions(input.questions ?? [])}
@@ -287,14 +297,15 @@ export function renderStandaloneSlideDocumentHtml(input: RenderStandaloneSlideDo
     })();
   </script>
   <script>${script}</script>
+  ${hasNativeCanvas && input.nativeCanvasRuntime ? `<script type="module" data-native-runtime-sha256="${escapeAttribute(input.nativeCanvasRuntime.sha256)}">${input.nativeCanvasRuntime.source.replace(/<\/script/gi, "<\\/script")}</script>` : ""}
 </body>
 </html>`;
 }
 
-function renderSlides(document: SlideDocument, assetUrlMode: RenderStandaloneSlideDocumentInput["assetUrlMode"]) {
+function renderSlides(document: SlideDocument, assetUrlMode: RenderStandaloneSlideDocumentInput["assetUrlMode"], nativeRuntimeAvailable: boolean) {
   const assets = new Map(document.assets.map((asset) => [asset.id, asset]));
   return document.slides
-    .map((slide, index) => renderSlide(slide, index + 1, document.slides.length, assets, assetUrlMode))
+    .map((slide, index) => renderSlide(slide, index + 1, document.slides.length, assets, assetUrlMode, nativeRuntimeAvailable))
     .join("");
 }
 
@@ -303,7 +314,8 @@ function renderSlide(
   slideNumber: number,
   slideCount: number,
   assets: Map<string, SlideAssetRef>,
-  assetUrlMode: RenderStandaloneSlideDocumentInput["assetUrlMode"]
+  assetUrlMode: RenderStandaloneSlideDocumentInput["assetUrlMode"],
+  nativeRuntimeAvailable: boolean
 ) {
   return `
     <article class="ld-standalone-slide" id="${escapeAttribute(slide.id)}" aria-labelledby="${escapeAttribute(slide.id)}-title" data-slide-id="${escapeAttribute(slide.id)}" data-layout="${escapeAttribute(slide.layout)}" data-intent="${escapeAttribute(slide.intent)}">
@@ -313,7 +325,7 @@ function renderSlide(
       </div>
       <h3 id="${escapeAttribute(slide.id)}-title">${escapeHtml(slide.title)}</h3>
       <div class="ld-slide-body">
-        ${visibleBodyBlocks(slide).map((block) => renderBlock(block, assets, assetUrlMode)).join("")}
+        ${slide.canvas ? renderStandaloneCanvas(slide.canvas, nativeRuntimeAvailable) : visibleBodyBlocks(slide).map((block) => renderBlock(block, assets, assetUrlMode)).join("")}
       </div>
     </article>`;
 }
