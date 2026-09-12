@@ -78,6 +78,7 @@ html[data-theme="dark"] .native-workspace {
   background: var(--studio-surface); color: var(--studio-ink); transform: none; animation: none; box-shadow: none;
 }
 .native-workspace .studio-bottom-bar > * { grid-area: auto; flex-shrink: 0; }
+.native-workspace .studio-bottom-bar > .studio-tool-menu { width: auto; }
 .native-workspace .studio-bottom-bar .studio-stepper { display: flex; align-items: center; gap: 8px; margin-right: auto; }
 .native-workspace .studio-stepper span { white-space: nowrap; min-width: 50px; text-align: center; font-size: 13px; }
 .native-workspace .studio-bottom-bar .studio-stepper button { width: 38px; height: 38px; padding: 0; font-size: 22px; }
