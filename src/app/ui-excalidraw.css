@@ -62,8 +62,10 @@ html[data-theme="dark"] .native-workspace {
 }
 .native-workspace .studio-filmstrip-head { color: var(--studio-muted); padding: 0 4px 12px; border: 0; }
 .native-workspace .studio-filmstrip-head strong { font-size: 12px; font-weight: 500; line-height: 1.4; }
-.native-workspace .studio-filmstrip-list { gap: 10px; }
-.native-workspace .studio-filmstrip-list button { min-height: 76px; padding: 12px; background: var(--studio-paper); color: var(--studio-ink); border: 1px solid var(--studio-line); border-radius: 8px; box-shadow: none; }
+.native-workspace .studio-account-mini { border-color: var(--studio-line); }
+.native-workspace .studio-account-mini strong { color: var(--studio-muted); font-size: 12px; font-weight: 500; line-height: 1.4; }
+.native-workspace .studio-filmstrip-list { display: flex; flex-direction: column; gap: 10px; }
+.native-workspace .studio-filmstrip-list button { flex: 0 0 auto; aspect-ratio: auto; min-height: 84px; padding: 12px; background: var(--studio-paper); color: var(--studio-ink); border: 1px solid var(--studio-line); border-radius: 8px; box-shadow: none; animation: none; }
 .native-workspace .studio-filmstrip-list button:is(.active, [aria-current="true"], [aria-pressed="true"]) { background: var(--studio-selected); border-color: var(--studio-accent); }
 .native-workspace .studio-filmstrip-list strong { font-size: 12px; line-height: 1.35; font-weight: 500; }
 .native-workspace .studio-slide-stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; background: var(--studio-paper); overflow: visible; min-height: 0; }
@@ -96,6 +98,15 @@ html[data-theme="dark"] .native-workspace {
 .native-canvas { position: relative; width: 100%; flex: 1 1 auto; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
 .native-canvas-host { position: absolute; inset: 0; width: 100%; height: 100%; }
 .native-canvas-host > div { width: 100%; height: 100%; }
+.native-canvas .excalidraw .HintViewer { display: none; }
+.learnordie-canvas-scene .lb-scene3d {
+  height: 100%; min-height: 0; border-radius: 8px; font-size: 20px;
+  --lb-scene-panel: #232329; --lb-scene-ink: #f1f0f5; --lb-scene-muted: #b3b1bf;
+  --lb-scene-line: #46464f; --lb-scene-accent: #a8a5ff;
+}
+.learnordie-canvas-scene .lb-scene3d-stage { flex: 1 1 0; min-height: 80px; aspect-ratio: auto; }
+.learnordie-canvas-scene .lb-scene3d-controls { flex: 0 0 auto; max-height: 48%; overflow: auto; padding: 12px 16px; font-size: 18px; }
+.learnordie-canvas-scene .lb-scene3d-tool { min-height: 32px; padding: 6px 10px; background: #232329; font-size: 16px; }
 .native-canvas-transcript { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .native-canvas-notice { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; margin: 0; padding: 24px; background: var(--studio-surface, var(--panel, #fff)); color: var(--studio-ink, var(--ink, #1b1b1f)); font-size: 15px; text-align: center; }
 .native-canvas-notice button { padding: 10px 16px; border-radius: 8px; border: 1px solid #6965db; background: transparent; color: inherit; cursor: pointer; }
