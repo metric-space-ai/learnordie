@@ -12,7 +12,7 @@ export default async function LecturerLivePage({ params }: { params: Promise<{ t
   const { token } = await params;
   if (!isValidPublicLectureToken(token)) notFound();
 
-  const lecture = await getLectureRepository().getLectureByToken(token);
+  const lecture = (await getLectureRepository().listLectures(session.email)).find((item) => item.publicToken === token);
   if (!lecture) notFound();
 
   return <LecturerLiveExperience lecture={lecture} csrfToken={createLecturerCsrfToken(session)} />;

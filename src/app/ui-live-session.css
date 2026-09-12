@@ -1,0 +1,52 @@
+/* Only the synchronized classroom; does not change the independent learn mode. */
+.student-connection-notice {
+  position: fixed;
+  z-index: 35;
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 24px));
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: #122c3b;
+  box-shadow: 0 8px 24px #0002;
+  overflow-wrap: anywhere;
+}
+.student-connection-notice a, .student-connection-notice button { margin-left: 12px; }
+.action-stack.live-controls {
+  top: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  right: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  padding: 4px;
+  z-index: 32;
+}
+.live-controls > * { flex-shrink: 0; }
+.live-controls label { display: grid; gap: 2px; font-size: 11px; background: white; border-radius: 8px; padding: 4px 8px; }
+.live-controls select { font: inherit; font-size: 14px; min-height: 30px; max-width: 120px; color: #122c3b; }
+.live-identity-nudge {
+  top: auto;
+  bottom: 82px;
+  z-index: 15;
+  grid-template-columns: minmax(0, 1fr);
+  max-height: 45dvh;
+  overflow: auto;
+}
+.live-question-drawer { bottom: 82px; max-height: calc(100dvh - 150px); overflow-y: auto; }
+.live-question-drawer:focus-visible { outline: 3px solid #246f94; outline-offset: 2px; }
+.live-question-drawer .question-feedback { overflow-wrap: anywhere; }
+.live-question-drawer .answer { min-height: 44px; }
+@media (max-width: 700px) {
+  .live-question-drawer { left: 50%; right: auto; width: calc(100vw - 16px); max-height: calc(100dvh - 156px); min-height: 0; }
+  .live-question-drawer .question-head { flex-wrap: wrap; gap: 8px; }
+  .live-question-drawer .drawer-main { min-width: 0; }
+  .live-question-drawer .question { font-size: clamp(17px, 4.6vw, 22px); }
+  .live-question-drawer .levels button { min-width: 44px; min-height: 44px; }
+}

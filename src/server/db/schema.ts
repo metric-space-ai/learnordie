@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+import type { LiveAnswerReceipt } from "@/lib/live-session";
+import type { StoredLiveRound } from "../live-session-repository";
 import {
   boolean,
   integer,
@@ -419,6 +421,29 @@ export const studentEnrollments = pgTable(
       .where(sql`${table.status} = 'active' AND ${table.displayNameNormalized} <> ''`)
   ]
 );
+
+export const liveSessions = pgTable("live_sessions", {
+  lectureId: uuid("lecture_id").primaryKey().references(() => lectures.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull(),
+  revision: integer("revision").notNull(),
+  status: text("status").$type<"active" | "ended">().notNull(),
+  slideIndex: integer("slide_index").notNull().default(0),
+  showIntro: boolean("show_intro").notNull().default(true),
+  round: jsonb("round").$type<StoredLiveRound | null>(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const liveAnswers = pgTable("live_answers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lectureId: uuid("lecture_id").notNull().references(() => lectures.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull(),
+  roundId: uuid("round_id").notNull(),
+  studentProfileId: uuid("student_profile_id").notNull().references(() => studentProfiles.id, { onDelete: "cascade" }),
+  points: integer("points").notNull(),
+  correct: boolean("correct").notNull(),
+  receipt: jsonb("receipt").$type<LiveAnswerReceipt>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+}, (table) => [uniqueIndex("live_answers_round_profile_idx").on(table.roundId, table.studentProfileId)]);
 
 export const studentReadinessSnapshots = pgTable("student_readiness_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),

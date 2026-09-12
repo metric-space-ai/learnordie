@@ -21,6 +21,7 @@ export function SlideEngineCanvas({
   lectureToken,
   lectureTitle,
   showJoinIntro = false,
+  navigationDisabled = false,
   onPrevious,
   onNext
 }: {
@@ -30,6 +31,7 @@ export function SlideEngineCanvas({
   lectureToken?: string;
   lectureTitle?: string;
   showJoinIntro?: boolean;
+  navigationDisabled?: boolean;
   onPrevious: () => void;
   onNext: () => void;
 }) {
@@ -60,6 +62,7 @@ export function SlideEngineCanvas({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (navigationDisabled) return;
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
       if (event.key === "ArrowLeft") onPrevious();
@@ -68,7 +71,7 @@ export function SlideEngineCanvas({
 
     window.document.addEventListener("keydown", onKey);
     return () => window.document.removeEventListener("keydown", onKey);
-  }, [onNext, onPrevious]);
+  }, [onNext, onPrevious, navigationDisabled]);
 
   return (
     <>
@@ -80,7 +83,7 @@ export function SlideEngineCanvas({
       >
         {lectureUrl && <a className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`}>{lectureUrl}</a>}
         {showJoinIntro && lectureUrl ? (
-          <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={onNext} />
+          <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} />
         ) : <DeckRenderer
           className="slide-engine-deck"
           currentSlideId={currentSlide.id}
@@ -90,9 +93,9 @@ export function SlideEngineCanvas({
         />}
       </article>
       <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
-        <button type="button" onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
+        <button type="button" disabled={navigationDisabled} onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
         <span className="slide-count">{showJoinIntro ? "Beitreten" : `${current + 1} / ${slides.length}`}</span>
-        <button type="button" onClick={onNext} aria-label="Nächste Folie">›</button>
+        <button type="button" disabled={navigationDisabled} onClick={onNext} aria-label="Nächste Folie">›</button>
       </nav>
     </>
   );

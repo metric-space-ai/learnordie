@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { seriesIdFromTitle } from "@/lib/series";
+import { seriesIdForLecture } from "@/lib/series";
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { isValidPublicLectureToken } from "@/server/public-params";
@@ -165,12 +165,16 @@ export async function POST(request: Request) {
   const lecture = await getLectureRepository().getLectureByToken(parsed.data.lectureToken);
   if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
 
+  if (parsed.data.eventType === "answer_selected" && mode(parsed.data.payload.mode) === "live") {
+    return NextResponse.json({ error: "Live-Antworten müssen zur aktuellen Fragerunde gehören." }, { status: 409 });
+  }
+
   const claimNeeded = parsed.data.eventType === "answer_selected" || parsed.data.eventType === "student_joined";
   let claimName = parsed.data.pseudonym;
   if (claimNeeded) {
     const claim = await getStudentRepository().getClaimByAnonymousKey(
       parsed.data.anonymousKey,
-      seriesIdFromTitle(lecture.seriesTitle)
+      seriesIdForLecture(lecture)
     );
     if (!claim?.displayName || claim.status !== "active") {
       return NextResponse.json(

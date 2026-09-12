@@ -12,9 +12,13 @@ export default async function StudentLivePage({ params }: { params: Promise<{ to
   const lecture = await getLectureRepository().getLectureByToken(token);
   if (!lecture) notFound();
 
+  const publicLecture = { ...lecture, tenantBudgetKey: "", questions: [], transcriptSegments: [], studentChatQuestions: [], assistantMessages: [], agentThreads: [], questionReviews: [], materials: [], materialProcessingRuns: [], standaloneExportJobs: [],
+    slideDocument: lecture.slideDocument ? { ...lecture.slideDocument, slides: lecture.slideDocument.slides.map((slide) => ({ ...slide, speakerNotes: [] })) } : undefined
+  };
+
   return (
-    <SeriesClaimGate lecture={lecture} source="direct_live_link">
-      <StudentLiveExperience lecture={lecture} />
+    <SeriesClaimGate lecture={publicLecture} source="direct_live_link">
+      <StudentLiveExperience lecture={publicLecture} />
     </SeriesClaimGate>
   );
 }

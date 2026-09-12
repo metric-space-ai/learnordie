@@ -1,13 +1,15 @@
 "use client";
 
-import { questionsForSlide } from "@/lib/questions";
+import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { audioFileExtension, recordAudioSnippet } from "@/lib/audio-capture";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
+import { useLiveSession } from "@/lib/use-live-session";
+import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
-import { QuizDrawer } from "./QuizDrawer";
+import { LiveQuizDrawer } from "./LiveQuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
 
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -33,9 +35,14 @@ const LIVE_QUESTION_MIN_INTERVAL_MS = 75_000;
 const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
-  const [slide, setSlide] = useState(0);
-  const [showJoinIntro, setShowJoinIntro] = useState(true);
-  const [questionOpen, setQuestionOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const live = useLiveSession(lecture.publicToken, leaderboardOpen, { id: lecture.id, csrfToken });
+  const slide = Math.min(live.state?.slideIndex ?? 0, Math.max(0, lecture.slides.length - 1));
+  const showJoinIntro = live.state?.showIntro ?? true;
+  const questionOpen = Boolean(live.connected && live.state?.round);
+  const [familyIndex, setFamilyIndex] = useState(0);
+  const [durationSeconds, setDurationSeconds] = useState(60);
+  const startAttempted = useRef(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
   const [transcriptVisible, setTranscriptVisible] = useState(false);
@@ -47,6 +54,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [transcriptDrafts, setTranscriptDrafts] = useState<TranscriptDraft[]>([]);
   const [sttStatus, setSttStatus] = useState<"idle" | "requesting" | "listening" | "transcribing" | "ready" | "error">("idle");
   const [questions, setQuestions] = useState(lecture.questions);
+  const families = groupQuestionFamilies(questionsForSlide(questions, lecture.slides[slide]?.id));
   const [liveQuestionsOn, setLiveQuestionsOn] = useState(true);
   const [liveQuestionStatus, setLiveQuestionStatus] = useState<"idle" | "collecting" | "generating" | "error">("idle");
   const [liveQuestionMessage, setLiveQuestionMessage] = useState("");
@@ -60,16 +68,25 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const autoLoopRunningRef = useRef(false);
   const slideRef = useRef(slide);
 
+  useEffect(() => {
+    if (live.state?.status === "waiting" && !startAttempted.current) {
+      startAttempted.current = true;
+      void live.send({ action: "start" });
+    }
+  }, [live.state?.status, live.send]);
+
+  const toggleQuestion = useCallback(() => {
+    void live.send(questionOpen ? { action: "close" } : { action: "fire", familyIndex, durationSeconds });
+  }, [live.send, questionOpen, familyIndex, durationSeconds]);
+
   const previous = useCallback(() => {
-    setQuestionOpen(false);
-    if (slide === 0) setShowJoinIntro(true);
-    else setSlide((current) => current - 1);
-  }, [slide]);
+    setFamilyIndex(0);
+    void live.send({ action: "slide", slideIndex: Math.max(0, slide - 1), showIntro: slide === 0 });
+  }, [slide, live.send]);
   const next = useCallback(() => {
-    setQuestionOpen(false);
-    if (showJoinIntro) setShowJoinIntro(false);
-    else setSlide((current) => Math.min(current + 1, lecture.slides.length - 1));
-  }, [showJoinIntro, lecture.slides.length]);
+    setFamilyIndex(0);
+    void live.send({ action: "slide", slideIndex: showJoinIntro ? 0 : Math.min(slide + 1, lecture.slides.length - 1), showIntro: false });
+  }, [showJoinIntro, slide, lecture.slides.length, live.send]);
 
   function stopListening() {
     autoSegmentingRef.current = false;
@@ -196,6 +213,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
       setQuestions(payload.questions);
+      // Newly generated STT families become explicitly selectable for broadcast.
+      if (slideRef.current === slideIndex) {
+        setFamilyIndex(Math.max(0, groupQuestionFamilies(questionsForSlide(payload.questions, slideId)).length - 1));
+      }
       pendingTranscriptRef.current = "";
       lastLiveQuestionAtRef.current = Date.now();
       const preview = (payload.family as Array<{ level: string; text: string }> | undefined)?.find((item) => item.level === "2.0");
@@ -280,13 +301,13 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         event.preventDefault();
         if (showJoinIntro) { next(); return; }
         setQuestionOrigin("space");
-        setQuestionOpen((current) => !current);
+        toggleQuestion();
       }
     };
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showJoinIntro, next]);
+  }, [showJoinIntro, next, toggleQuestion]);
 
   useEffect(() => () => {
     autoSegmentingRef.current = false;
@@ -352,17 +373,25 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     <main
       className={`slide-screen lb-motion-root ${questionOpen ? "question-open" : ""}`}
       data-question-origin={questionOrigin}
+      data-csrf-token={csrfToken}
+      data-live-status={live.state?.status ?? "connecting"}
     >
       <SlideEngineCanvas
         lectureToken={lecture.publicToken}
         lectureTitle={lecture.title}
         showJoinIntro={showJoinIntro}
+        navigationDisabled={live.busy || !live.connected || live.state?.status !== "active"}
         current={slide}
         onNext={next}
         onPrevious={previous}
         slideDocument={lecture.slideDocument}
         slides={lecture.slides}
       />
+
+      {(!live.connected || live.error || live.state?.status !== "active") && <aside className="student-connection-notice" role="status">
+        {live.error || (!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Live-Sitzung beendet." : "Live-Sitzung wird vorbereitet …")}
+        {live.connected && live.state?.status !== "active" && <button type="button" disabled={live.busy} onClick={() => void live.send({ action: "start" })}>Neue Live-Sitzung starten</button>}
+      </aside>}
 
       <Presence show={transcriptVisible}>
         {(motionState) => (
@@ -449,8 +478,19 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         )}
       </Presence>
 
-      <div className="action-stack lb-enter-control">
-        <a className="live-back-link" href="/lecturer">Beenden</a>
+      <div className="action-stack live-controls lb-enter-control">
+        <button className="live-back-link" type="button" disabled={live.busy} onClick={async () => {
+          if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }
+        }}>Beenden</button>
+        {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" onClick={() => setLeaderboardOpen(true)}>Rangliste</button>}
+        {!showJoinIntro && <>
+          <label>Frage<select aria-label="Fragenfamilie" value={Math.min(familyIndex, Math.max(0, families.length - 1))} onChange={(event) => setFamilyIndex(Number(event.target.value))}>
+            {families.map((family, index) => <option key={family[0]?.familyId ?? index} value={index}>Frage {index + 1}</option>)}
+          </select></label>
+          <label>Zeit<select aria-label="Fragezeit" value={durationSeconds} onChange={(event) => setDurationSeconds(Number(event.target.value))}>
+            {[5, 15, 30, 60, 90, 120].map((seconds) => <option key={seconds} value={seconds}>{seconds} s</option>)}
+          </select></label>
+        </>}
         <button
           className="icon-action"
           type="button"
@@ -483,27 +523,19 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
           type="button"
           title="Quiz (Leertaste)"
           aria-label="Quiz (Leertaste)"
-          disabled={showJoinIntro}
+          disabled={showJoinIntro || live.busy || !live.connected || live.state?.status !== "active" || families.length === 0}
           aria-pressed={questionOpen}
           onClick={() => {
             setQuestionOrigin("control");
-            setQuestionOpen((current) => !current);
+            toggleQuestion();
           }}
         >
           <span className="lb-icon lb-icon-question" aria-hidden="true" />
         </button>
       </div>
 
-      <Presence show={questionOpen}>
-        {(motionState) => (
-          <QuizDrawer
-            key={lecture.slides[slide]?.id}
-            questions={questionsForSlide(questions, lecture.slides[slide]?.id)}
-            origin={questionOrigin}
-            motionState={motionState}
-          />
-        )}
-      </Presence>
+      {questionOpen && live.state?.round && <LiveQuizDrawer key={live.state.round.id} round={live.state.round} serverOffset={live.serverOffset} receipt={null} onClose={() => void live.send({ action: "close" })} />}
+      <Presence show={lecture.leaderboardEnabled && leaderboardOpen}>{(motionState) => <LeaderboardModal entries={live.state?.leaderboard ?? []} loading={!live.connected || !live.state?.leaderboard} motionState={motionState} onClose={() => setLeaderboardOpen(false)} />}</Presence>
     </main>
   );
 }
