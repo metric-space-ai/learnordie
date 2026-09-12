@@ -126,6 +126,11 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
 
   return <div className={`native-canvas ${readOnly ? "native-canvas-view" : "native-canvas-edit"}`} data-canvas-engine="excalidraw" data-canvas-ready={ready} data-slide-id={slideId} aria-label={readOnly ? `Folie: ${title}` : "Excalidraw-Folieneditor"}>
     <div className="native-canvas-host" ref={host} />
+    {readOnly && <section className="native-canvas-transcript" aria-label="Folieninhalt als Text">
+      {scene.elements.filter((element) => element.type === "text" && !element.isDeleted && element.opacity !== 0).map((element) =>
+        <p key={element.id}>{element.originalText ?? element.text}</p>
+      )}
+    </section>}
     {assetWarning && ready && <p className="native-asset-warning" role="status">{assetWarning}</p>}
     {failure ? <div className="native-canvas-notice" role="alert">{failure}<button type="button" onClick={() => setAttempt((value) => value + 1)}>Erneut laden</button></div>
       : !ready && <p className="native-canvas-notice" role="status">Zeichenfläche wird geladen …</p>}

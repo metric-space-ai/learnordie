@@ -189,9 +189,11 @@ test("native text is edited directly, saved in preview, reloaded and presented t
     await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     await viewCanvas(page);
     await viewCanvas(student);
+    await expect(student.getByRole("region", { name: "Folieninhalt als Text" })).toContainText(revisedText);
     await expect(student.getByRole("dialog", { name: /Pseudonym/ })).toHaveCount(0);
     await student.reload();
     await viewCanvas(student);
+    await expect(student.getByRole("region", { name: "Folieninhalt als Text" })).toContainText(revisedText);
     await expect(student.locator(".slide-lecture-link")).toHaveAttribute("href", new RegExp(`/l/${lecture.publicToken}$`));
     await testInfo.attach("native-student-after-reload", { body: await student.screenshot(), contentType: "image/png" });
     const other = await otherContext.newPage();

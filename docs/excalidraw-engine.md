@@ -22,6 +22,8 @@ provide feedback, respecting reduced motion.
 - Scene edits use the existing authenticated lecturer save path and PostgreSQL
   JSON storage. Browser local storage is not the durable source of truth.
 - Both live presentation and independent learning use the same native scene.
+  Read-only scenes expose non-deleted native text in a screen-reader region;
+  drawing text is not reduced to inaccessible pixels alone.
   The separate server-authoritative live session controls slide index, question
   rounds and scoring; the engine does not introduce a second scoring system.
 - Each new live session retains the QR welcome slide and written join URL.
