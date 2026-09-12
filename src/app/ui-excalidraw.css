@@ -100,6 +100,7 @@ html[data-theme="dark"] .native-workspace {
 .native-canvas-host { position: absolute; inset: 0; width: 100%; height: 100%; }
 .native-canvas-host > div { width: 100%; height: 100%; }
 .native-canvas .excalidraw .HintViewer { display: none; }
+.native-canvas-view .excalidraw .layer-ui__wrapper { display: none; }
 /* Excalidraw inverts its drawing canvas, but three.js renders its own colors. */
 .native-canvas .excalidraw.theme--dark .learnordie-canvas-scene canvas { filter: none; }
 .learnordie-canvas-scene .lb-scene3d {
