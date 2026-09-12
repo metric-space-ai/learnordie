@@ -7,11 +7,13 @@ import type { LecturerSession } from "@/lib/types";
 import { getDb } from "./db/client";
 import { magicLoginRateLimits, magicLoginTokens, users } from "./db/schema";
 import { configuredPublicAppUrl, isProductionDeployment, shouldUseSecureCookies } from "./runtime-config";
+import { configuredTestAccounts, testAccountVersion, verifyTestAccountPassword } from "./test-accounts";
 
 const COOKIE_NAME = "lb_lecturer_session";
 export const LECTURER_CSRF_HEADER = "x-learnbuddy-csrf";
 const TOKEN_TTL_MS = 15 * 60 * 1000;
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+// Dozenten bleiben auf ihrem Geraet angemeldet, bis sie sich abmelden (180 Tage).
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 180;
 const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 const DEV_SECRET = "learnbuddy-dev-secret-change-before-production";
 const PLACEHOLDER_SECRET = "replace-with-a-long-random-secret";
@@ -29,6 +31,7 @@ type RateLimitBucket = {
 };
 
 const devMagicLinkRateLimits = new Map<string, RateLimitBucket>();
+const devLoginCodes = new Map<string, { codeHash: string; expiresAt: number }>();
 
 export class MagicLinkRateLimitError extends Error {
   retryAfterSeconds: number;
@@ -363,10 +366,15 @@ export async function consumeMagicToken(token: string) {
     return null;
   }
 
+  return issueLecturerSession(payload.email);
+}
+
+async function issueLecturerSession(email: string, testVersion?: string, ttlSeconds = SESSION_TTL_SECONDS) {
   const session: LecturerSession = {
-    email: payload.email,
+    email,
     issuedAt: new Date().toISOString(),
-    expiresAt: Date.now() + SESSION_TTL_MS
+    expiresAt: Date.now() + ttlSeconds * 1000,
+    ...(testVersion ? { testAccountVersion: testVersion } : {})
   };
 
   const cookieStore = await cookies();
@@ -374,11 +382,64 @@ export async function consumeMagicToken(token: string) {
     httpOnly: true,
     sameSite: "lax",
     secure: shouldUseSecureCookies(),
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: ttlSeconds,
     path: "/"
   });
 
   return session;
+}
+
+function loginCodeSecret(email: string, code: string) {
+  return `login-code:${normalizedEmail(email)}:${code}`;
+}
+
+// Anmeldung per 6-stelligem Code: robust gegen Mailfilter, die Links vorab oeffnen
+// und damit Einmal-Links verbrauchen.
+export async function createLoginChallenge(email: string) {
+  const cleanEmail = normalizedEmail(email);
+  const token = await createMagicToken(cleanEmail);
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  const expiresAt = Date.now() + TOKEN_TTL_MS;
+  if (canPersistMagicTokens()) {
+    await storeMagicToken({ email: cleanEmail, token: loginCodeSecret(cleanEmail, code), expiresAt });
+  } else {
+    devLoginCodes.set(cleanEmail, { codeHash: tokenHash(loginCodeSecret(cleanEmail, code)), expiresAt });
+  }
+  return { token, code };
+}
+
+export class LoginCodeAttemptsError extends MagicLinkRateLimitError {}
+
+export async function consumeLoginCode(email: string, code: string) {
+  const cleanEmail = normalizedEmail(email);
+  if (!/^\d{6}$/.test(code)) return null;
+
+  const attemptsBucket = bucketHash(`login-code:attempts:${cleanEmail}`);
+  try {
+    if (canPersistMagicTokens()) await evaluateStoredMagicLinkBucket(attemptsBucket);
+    else evaluateDevMagicLinkBucket(attemptsBucket);
+  } catch (error) {
+    if (error instanceof MagicLinkRateLimitError) throw new LoginCodeAttemptsError(error.retryAfterSeconds);
+    throw error;
+  }
+
+  if (canPersistMagicTokens()) {
+    const consumed = await consumeStoredMagicTokenAndEnsureAccount({ email: cleanEmail, token: loginCodeSecret(cleanEmail, code) });
+    if (!consumed) return null;
+    // Nach erfolgreicher Anmeldung sind offene Links und Codes dieser Adresse wertlos.
+    await getDb()
+      .update(magicLoginTokens)
+      .set({ consumedAt: new Date() })
+      .where(and(eq(magicLoginTokens.email, cleanEmail), isNull(magicLoginTokens.consumedAt)));
+  } else if (isProductionDeployment()) {
+    return null;
+  } else {
+    const stored = devLoginCodes.get(cleanEmail);
+    if (!stored || stored.expiresAt < Date.now() || stored.codeHash !== tokenHash(loginCodeSecret(cleanEmail, code))) return null;
+    devLoginCodes.delete(cleanEmail);
+  }
+
+  return issueLecturerSession(cleanEmail);
 }
 
 export async function getLecturerSession() {
@@ -386,8 +447,32 @@ export async function getLecturerSession() {
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
 
-  const session = verifySignedToken<LecturerSession>(token);
+  const session = verifySignedToken<LecturerSession & { testAccountVersion?: string }>(token);
+  if (session?.testAccountVersion) {
+    const account = configuredTestAccounts().find((entry) => entry.email === session.email);
+    if (!account || testAccountVersion(account) !== session.testAccountVersion) return null;
+  }
   return isValidLecturerSession(session) ? session : null;
+}
+
+export async function loginTestAccount(email: string, password: string) {
+  const cleanEmail = normalizedEmail(email);
+  const accounts = configuredTestAccounts();
+  if (!accounts.length) return null;
+  // All password attempts for an account share the same persistent limit across
+  // serverless instances. Unknown accounts return the same authentication error.
+  const hash = bucketHash(`test-login:attempts:${cleanEmail}`);
+  if (canPersistMagicTokens()) await evaluateStoredMagicLinkBucket(hash);
+  else if (isProductionDeployment()) throw new Error("Database required for test-login rate limits");
+  else evaluateDevMagicLinkBucket(hash);
+  const account = accounts.find((entry) => entry.email === cleanEmail);
+  if (!await verifyTestAccountPassword(account, password) || !account) return null;
+  if (canPersistMagicTokens()) {
+    await getDb().insert(users).values({ email: cleanEmail, role: "lecturer" })
+      .onConflictDoNothing({ target: users.email });
+  }
+  const ttl = Math.max(1, Math.min(8 * 60 * 60, Math.floor((Date.parse(account.expiresAt) - Date.now()) / 1000)));
+  return issueLecturerSession(cleanEmail, testAccountVersion(account), ttl);
 }
 
 export function createLecturerCsrfToken(session: LecturerSession) {

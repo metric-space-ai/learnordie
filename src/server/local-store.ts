@@ -8,7 +8,9 @@ import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
 import {
   buildLegacyLectureSlideDocument,
+  hasEngineOnlyBlocks,
   legacySlidesFromSlideDocument,
+  mergeLegacySlideEditsIntoDocument,
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
 import type {
@@ -56,6 +58,14 @@ import { applyQualityDecision, recordReviewEdits } from "./question-review-metad
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
 import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
 
+// Freigegebene Familie ergaenzt die Fragen; ersetzt werden nur dieselbe Review-Familie
+// und die folienlose Startfamilie ohne familyId (Demo-Bestand).
+function withReviewFamily(current: QuestionVariant[], reviewId: string, sourceTitle: string, variants: QuestionVariant[]) {
+  const familyId = `review:${reviewId}`;
+  const kept = current.filter((question) => question.familyId && question.familyId !== familyId);
+  return [...kept, ...clone(variants).map((variant) => ({ ...variant, familyId, familySource: sourceTitle }))];
+}
+
 const STORE_PATH = path.join(process.cwd(), ".data", "learnbuddy-local.json");
 
 type LocalStoreData = {
@@ -63,6 +73,12 @@ type LocalStoreData = {
   seriesEvaluationTemplates?: Record<string, Lecture["evaluationConfig"]>;
   seriesAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
   tenantAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
+};
+
+type AppendQuestionFamilyInput = {
+  slideId?: string;
+  source: string;
+  variants: QuestionVariant[];
 };
 
 type CreateLectureInput = {
@@ -430,7 +446,9 @@ export class LocalLectureStore {
     if (input.slides !== undefined) {
       const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
       lecture.slides = lecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
-      if (input.slideDocument === undefined) {
+      if (input.slideDocument === undefined && hasEngineOnlyBlocks(lecture.slideDocument)) {
+        lecture.slideDocument = mergeLegacySlideEditsIntoDocument(lecture.slideDocument, lecture.slides);
+      } else if (input.slideDocument === undefined) {
         lecture.slideDocument = buildLegacyLectureSlideDocument({
           id: lecture.id,
           title: lecture.title,
@@ -477,6 +495,19 @@ export class LocalLectureStore {
     if (input.kind !== "audio" && lecture.status === "draft") lecture.status = "material_processing";
     await writeStore(store);
     return material;
+  }
+
+  async appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    const familyId = `${input.source}:${crypto.randomUUID()}`;
+    lecture.questions = [
+      ...lecture.questions,
+      ...clone(input.variants).map((variant) => ({ ...variant, slideId: input.slideId, familyId, familySource: input.source }))
+    ];
+    await writeStore(store);
+    return lecture;
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {
@@ -1147,7 +1178,7 @@ export class LocalLectureStore {
       actor
     });
     if (decision === "approved") {
-      lecture.questions = clone(review.variants);
+      lecture.questions = withReviewFamily(lecture.questions, review.id, review.sourceTitle, review.variants);
       lecture.status = "ready_for_live";
     } else {
       const reviews = lecture.questionReviews ?? [];
@@ -1176,7 +1207,7 @@ export class LocalLectureStore {
       actor
     });
     if (review.status === "approved") {
-      lecture.questions = clone(review.variants);
+      lecture.questions = withReviewFamily(lecture.questions, review.id, review.sourceTitle, review.variants);
     }
 
     await writeStore(store);

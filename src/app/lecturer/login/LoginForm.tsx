@@ -3,6 +3,8 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 
+type Step = "email" | "code";
+
 export function LoginForm({
   initialMagicLink = "",
   sent = false,
@@ -12,77 +14,117 @@ export function LoginForm({
   sent?: boolean;
   initialError?: string;
 }) {
+  const [step, setStep] = useState<Step>(sent ? "code" : "email");
   const [email, setEmail] = useState("");
-  const [magicLink, setMagicLink] = useState(initialMagicLink);
-  const [sentWithoutLocalLink, setSentWithoutLocalLink] = useState(sent && !initialMagicLink);
+  const [code, setCode] = useState("");
+  const [devLink, setDevLink] = useState(initialMagicLink);
   const [error, setError] = useState(initialError);
+  const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function requestCode(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setError("");
-    setMagicLink("");
-    setSentWithoutLocalLink(false);
+    setNotice("");
     setPending(true);
-
     try {
       const response = await fetch("/api/auth/magic-link", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email })
       });
-      const payload = (await response.json()) as { sent?: boolean; magicLink?: string; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { sent?: boolean; magicLink?: string; code?: string; error?: string };
       if (!response.ok || !payload.sent) {
-        setError(payload.error ?? "Anmeldelink konnte nicht erstellt werden.");
+        setError(payload.error ?? "Code konnte nicht gesendet werden.");
         return;
       }
-      if (payload.magicLink) {
-        setMagicLink(payload.magicLink);
-        return;
-      }
-      setSentWithoutLocalLink(true);
+      setDevLink(payload.magicLink ?? "");
+      setCode("");
+      setStep("code");
+      setNotice(payload.code ? `Entwicklungsmodus: Code ${payload.code}` : "");
     } catch {
-      setError("Netzwerkfehler. Die E-Mail bleibt stehen — bitte erneut versuchen.");
+      setError("Keine Verbindung. Bitte erneut versuchen.");
     } finally {
       setPending(false);
     }
   }
 
+  async function verifyCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+    try {
+      const response = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, code: code.replace(/\s+/g, "") })
+      });
+      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Code falsch oder abgelaufen.");
+        return;
+      }
+      window.location.assign("/lecturer");
+    } catch {
+      setError("Keine Verbindung. Bitte erneut versuchen.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (step === "code") {
+    return (
+      <form className="login-form" onSubmit={verifyCode}>
+        <p className="login-flow-note">Code an {email || "deine E-Mail"} gesendet.</p>
+        <label className="login-field">
+          <span>Code</span>
+          <input
+            name="code"
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="\d{6}"
+            autoFocus
+            required
+          />
+        </label>
+        <button className="primary-button" type="submit" disabled={pending || code.length !== 6}>
+          {pending ? "Prüft …" : "Anmelden"}
+        </button>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {notice && <p className="form-success">{notice}</p>}
+        <p className="login-support">
+          <button className="plain-button" type="button" disabled={pending} onClick={() => requestCode()}>Neuen Code senden</button>
+          <button className="plain-button" type="button" onClick={() => { setStep("email"); setError(""); setNotice(""); }}>Andere E-Mail</button>
+        </p>
+        {devLink && (
+          <p className="login-dev-link">
+            Entwicklungsmodus: <a href={devLink}>Direkt zum Dozentenbereich</a>
+          </p>
+        )}
+      </form>
+    );
+  }
+
   return (
-    <form action="/auth/request-magic" className="login-form" method="post" onSubmit={submit}>
+    <form action="/auth/request-magic" className="login-form" method="post" onSubmit={requestCode}>
       <label className="login-field">
-        <span>Dienstliche E-Mail</span>
+        <span>E-Mail</span>
         <input
           name="email"
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@hochschule.de"
           autoComplete="email"
           required
           suppressHydrationWarning
         />
       </label>
-      <p className="login-flow-note">
-        Neu hier? Derselbe Link legt das Konto an. Bestehende Konten werden damit angemeldet.
-      </p>
       <button className="primary-button" type="submit" disabled={pending}>
-        {pending ? "Link wird gesendet …" : "Anmeldelink senden"}
+        {pending ? "Sendet …" : "Code senden"}
       </button>
-      <p className="login-support">
-        Der Link ist 15 Minuten gültig. Nach der Bestätigung öffnet sich dein Dozentenbereich.
-      </p>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {sentWithoutLocalLink && (
-        <p className="form-success">
-          Link ist unterwegs. Wenn diese E-Mail noch nicht registriert ist, wird dein Konto beim Öffnen des Links angelegt.
-        </p>
-      )}
-      {magicLink && (
-        <p className="login-dev-link">
-          Entwicklungsmodus: <a href={magicLink}>Direkt zum Dozentenbereich</a>
-        </p>
-      )}
     </form>
   );
 }

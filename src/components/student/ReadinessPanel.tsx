@@ -14,12 +14,13 @@ export function ReadinessPanel({ readiness }: { readiness?: ReadinessSnapshot })
 
   const tone = BAND_TONE[readiness.band] ?? "start";
   const empty = readiness.readinessScore === 0;
+  const linkedActions = readiness.nextActions.filter((action) => action.lectureToken);
 
   return (
     <section className="readiness-panel" aria-label="Prüfungsvorbereitung">
       <header className="readiness-head">
         <div>
-          <p className="readiness-eyebrow">Prüfungsvorbereitung</p>
+          <h3 className="readiness-heading">Prüfungsvorbereitung</h3>
           <p className="readiness-band" data-tone={tone}>{readiness.bandLabel}</p>
         </div>
         {!empty && (
@@ -57,21 +58,13 @@ export function ReadinessPanel({ readiness }: { readiness?: ReadinessSnapshot })
         </p>
       )}
 
-      {readiness.nextActions.length > 0 && (
+      {linkedActions.length > 0 && (
         <ul className="readiness-actions">
-          {readiness.nextActions.map((action) => (
+          {linkedActions.map((action) => (
             <li key={action.id} className="readiness-action">
-              {action.lectureToken ? (
-                <a href={action.kind === "live" ? `/l/${action.lectureToken}` : `/learn/${action.lectureToken}`}>
-                  <span className="readiness-action-title">{action.title}</span>
-                  <span className="readiness-action-detail">{action.detail}</span>
-                </a>
-              ) : (
-                <div>
-                  <span className="readiness-action-title">{action.title}</span>
-                  <span className="readiness-action-detail">{action.detail}</span>
-                </div>
-              )}
+              <a href={action.kind === "live" ? `/l/${action.lectureToken}` : `/learn/${action.lectureToken}`}>
+                <span className="readiness-action-title">{action.title}</span>
+              </a>
             </li>
           ))}
         </ul>

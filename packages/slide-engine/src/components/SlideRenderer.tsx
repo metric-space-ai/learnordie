@@ -175,7 +175,7 @@ export function SlideRenderer({
         </header>
         {body}
         <footer style={footerStyle}>
-          <span>{sourceSummary(slide.sourceRefs?.length ?? 0)}</span>
+          <span />
           {showSlideNumber && slideNumber && slideCount ? (
             <span>
               {slideNumber} / {slideCount}
@@ -358,11 +358,6 @@ function getLayoutMode(layout: string): SlideLayoutMode {
 }
 
 function isVisualBlock(block: SlideBlock) {
-  return block.type === "figure" || block.type === "formula" || block.type === "table" || block.type === "chart";
+  return block.type === "figure" || block.type === "formula" || block.type === "table" || block.type === "chart" || block.type === "scene3d";
 }
 
-function sourceSummary(count: number) {
-  if (count === 0) return "";
-  if (count === 1) return "1 Quelle";
-  return `${count} Quellen`;
-}

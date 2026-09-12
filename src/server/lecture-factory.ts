@@ -20,7 +20,7 @@ export function clone<T>(value: T): T {
 export { seriesIdFromTitle as slugify } from "@/lib/series";
 
 export function normalizeExamDate(value: string | Date | null | undefined) {
-  if (!value) return "2026-07-24";
+  if (!value) return "2027-07-23";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return value.slice(0, 10);
 }

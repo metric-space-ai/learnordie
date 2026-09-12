@@ -5,9 +5,12 @@ import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { demoLecture } from "@/lib/demo-data";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
 import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import { hasCompleteQuestionFamilies } from "@/lib/questions";
 import {
   buildLegacyLectureSlideDocument,
+  hasEngineOnlyBlocks,
   legacySlidesFromSlideDocument,
+  mergeLegacySlideEditsIntoDocument,
   normalizeLectureSlideDocument
 } from "@/lib/slide-documents";
 import {
@@ -108,23 +111,24 @@ import { getStorageProvider } from "./providers/storage";
 import { configuredWorkerMaxAttempts } from "./worker-policy";
 import type {
   AddMaterialInput,
+  AppendQuestionFamilyInput,
   ApplyLecturerAssistantEvaluationFocusInput,
   ApplyLecturerAssistantLearnDensityInput,
   ApplyLecturerAssistantSlidePointInput,
   CreateAgentThreadInput,
-  CreateLecturerAssistantSourceNoteInput,
-  CreateLecturerAssistantReviewInput,
-  CreateStandaloneExportJobInput,
   CreateLectureInput,
+  CreateLecturerAssistantReviewInput,
+  CreateLecturerAssistantSourceNoteInput,
+  CreateStandaloneExportJobInput,
+  DecideAgentThreadInput,
   LectureRepository,
   ModerateChatQuestionInput,
   RecordStandaloneExportInput,
-  DecideAgentThreadInput,
-  SubmitLecturerAssistantMessageInput,
   SubmitChatQuestionInput,
+  SubmitLecturerAssistantMessageInput,
   SubmitTranscriptSegmentInput,
-  UpdateStandaloneExportJobInput,
-  UpdateLectureInput
+  UpdateLectureInput,
+  UpdateStandaloneExportJobInput
 } from "./repository";
 import { createLecturerAssistantEvaluationFocus, createLecturerAssistantLearnDensity, createLecturerAssistantSlidePoint, generateLecturerAssistantReply } from "./lecturer-assistant";
 import { applyAgentReviewPatchToLecture, createAgentThreadRun } from "./agent-runtime";
@@ -847,19 +851,22 @@ export class PostgresLectureRepository implements LectureRepository {
     const effectiveSeriesTitle = input.seriesTitle?.trim() || existingScopedLecture.seriesTitle;
     let nextSlides: Slide[] | undefined;
     if (input.slideDocument !== undefined) {
-      const alignedSlideDocument = alignSlideDocumentToPersistedSlides(input.slideDocument, existingScopedLecture.slides);
+      const persistedSlides = await this.appendSlideRowsForDocument(id, input.slideDocument, existingScopedLecture.slides);
+      const alignedSlideDocument = alignSlideDocumentToPersistedSlides(input.slideDocument, persistedSlides);
       patch.slideDocumentJson = alignedSlideDocument;
-      nextSlides = legacySlidesFromSlideDocument(alignedSlideDocument, existingScopedLecture.slides);
+      nextSlides = legacySlidesFromSlideDocument(alignedSlideDocument, persistedSlides);
     } else if (input.slides !== undefined) {
       const incoming = new Map(input.slides.map((slide) => [slide.id, slide]));
       nextSlides = existingScopedLecture.slides.map((slide) => normalizeSlideUpdate(slide, incoming.get(slide.id)));
-      patch.slideDocumentJson = buildLegacyLectureSlideDocument({
-        id,
-        title: effectiveTitle,
-        seriesTitle: effectiveSeriesTitle,
-        language: existingScopedLecture.language,
-        slides: nextSlides
-      });
+      patch.slideDocumentJson = hasEngineOnlyBlocks(existingScopedLecture.slideDocument)
+        ? mergeLegacySlideEditsIntoDocument(existingScopedLecture.slideDocument, nextSlides)
+        : buildLegacyLectureSlideDocument({
+            id,
+            title: effectiveTitle,
+            seriesTitle: effectiveSeriesTitle,
+            language: existingScopedLecture.language,
+            slides: nextSlides
+          });
     }
 
     if (Object.keys(patch).length > 0) {
@@ -936,6 +943,26 @@ export class PostgresLectureRepository implements LectureRepository {
     }
 
     return this.materialFromRow(material);
+  }
+
+  // Haengt eine vollstaendige Fragenfamilie an (z. B. live aus dem Transkript),
+  // ohne bestehende Fragen anzutasten.
+  async appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    if (!hasCompleteQuestionFamilies(input.variants.map((variant) => ({ level: variant.level })))) {
+      throw new Error("Question family must contain exactly one variant per level.");
+    }
+    await this.db.transaction(async (tx) => {
+      await this.insertQuestionFamiliesInTransaction(
+        tx,
+        lectureId,
+        input.variants.map((variant) => ({ ...variant, slideId: input.slideId, familyId: undefined, familySource: input.source })),
+        input.source
+      );
+    });
+    return this.getLectureById(lectureId, ownerEmail);
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {
@@ -1903,7 +1930,7 @@ export class PostgresLectureRepository implements LectureRepository {
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
       if (decision === "approved") {
-        await this.replaceActiveQuestionsInTransaction(tx, lectureId, decidedVariants, review.sourceTitle);
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, decidedVariants, review.sourceTitle);
         await tx.update(lectures).set({ status: "ready_for_live" }).where(eq(lectures.id, lectureId));
         return;
       }
@@ -1943,7 +1970,7 @@ export class PostgresLectureRepository implements LectureRepository {
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
       if (review.status === "approved") {
-        await this.replaceActiveQuestionsInTransaction(tx, lectureId, nextVariants, review.sourceTitle);
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, nextVariants, review.sourceTitle);
       }
     });
 
@@ -2152,6 +2179,44 @@ export class PostgresLectureRepository implements LectureRepository {
       .map((slide) => this.slideFromRow(slide));
   }
 
+  // Navigation, Fragen und Antwortereignisse haengen an Folienzeilen. Waechst ein
+  // SlideDocument ueber die gespeicherten Zeilen hinaus, bekommen die neuen Folien
+  // eigene Zeilen, damit sie in Live, Learn und Studio erreichbar sind.
+  private async appendSlideRowsForDocument(lectureId: string, document: SlideDocument, persistedSlides: Slide[]) {
+    if (document.slides.length <= persistedSlides.length) return persistedSlides;
+
+    // Sperre auf der Vorlesung: gleichzeitige Speichervorgaenge duerfen keine
+    // doppelten Zeilen an denselben Positionen anlegen.
+    const rows = await this.db.transaction(async (tx) => {
+      await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lectureId)).for("update");
+      const existingRows = await tx.select().from(slides).where(eq(slides.lectureId, lectureId));
+      if (existingRows.length >= document.slides.length) return existingRows;
+
+      const extraSlides = legacySlidesFromSlideDocument(
+        { ...document, slides: document.slides.slice(existingRows.length) },
+        []
+      );
+      const insertedRows = await tx.insert(slides).values(
+        extraSlides.map((slide, index) => ({
+          lectureId,
+          position: existingRows.length + index + 1,
+          title: slide.title,
+          contentJson: {
+            eyebrow: slide.eyebrow,
+            topic: slide.topic,
+            copy: slide.copy,
+            diagram: slide.diagram
+          }
+        }))
+      ).returning();
+      return [...existingRows, ...insertedRows];
+    });
+
+    return rows
+      .sort((left, right) => left.position - right.position)
+      .map((row) => this.slideFromRow(row));
+  }
+
   private async updateSlides(lectureId: string, slideItems: Slide[]) {
     if (slideItems.length === 0) return;
 
@@ -2171,6 +2236,26 @@ export class PostgresLectureRepository implements LectureRepository {
     });
   }
 
+  // Eine freigegebene Fragenfamilie ergaenzt die Vorlesung, statt alle anderen Fragen
+  // zu ersetzen. Ersetzt werden nur dieselbe Quelle und der Demo-Startbestand.
+  private async upsertQuestionFamilyInTransaction(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    lectureId: string,
+    variants: QuestionVariant[],
+    source: string
+  ) {
+    const replaced = await tx
+      .select({ id: questions.id })
+      .from(questions)
+      .where(and(eq(questions.lectureId, lectureId), inArray(questions.source, [source, "initial_seed"])));
+    const replacedIds = replaced.map((row) => row.id);
+    if (replacedIds.length > 0) {
+      await tx.delete(questionVariants).where(inArray(questionVariants.questionId, replacedIds));
+      await tx.delete(questions).where(inArray(questions.id, replacedIds));
+    }
+    await this.insertQuestionFamiliesInTransaction(tx, lectureId, variants.map((variant) => ({ ...variant, familyId: undefined, familySource: source })), source);
+  }
+
   private async replaceActiveQuestionsInTransaction(
     tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
     lectureId: string,
@@ -2185,19 +2270,46 @@ export class PostgresLectureRepository implements LectureRepository {
       await tx.delete(questions).where(eq(questions.lectureId, lectureId));
     }
 
-    const [question] = await tx.insert(questions).values({ lectureId, source }).returning({ id: questions.id });
-    await tx.insert(questionVariants).values(
-      variants.map((variant) => ({
-        questionId: question.id,
-        level: variant.level,
-        points: variant.points,
-        text: variant.text,
-        answersJson: clone(variant.answers),
-        correctAnswerKey: variant.answers.find((answer) => answer.correct)?.key ?? "A",
-        explanation: variant.explanation,
-        promptVersion: variant.promptVersion ?? "unknown"
-      }))
+    await this.insertQuestionFamiliesInTransaction(tx, lectureId, variants, source);
+  }
+
+  private async insertQuestionFamiliesInTransaction(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    lectureId: string,
+    variants: QuestionVariant[],
+    source: string
+  ) {
+    // Eine Fragenzeile je Fragenfamilie (alle vier Niveaus), optional an eine Folie gebunden.
+    const lectureSlideIds = new Set(
+      (await tx.select({ id: slides.id }).from(slides).where(eq(slides.lectureId, lectureId))).map((row) => row.id)
     );
+    const groups = new Map<string, { slideId: string | null; familySource?: string; variants: QuestionVariant[] }>();
+    for (const variant of variants) {
+      const slideId = variant.slideId && lectureSlideIds.has(variant.slideId) ? variant.slideId : null;
+      const key = `${slideId ?? ""}|${variant.familyId ?? ""}`;
+      const group = groups.get(key) ?? { slideId, familySource: variant.familySource, variants: [] };
+      group.variants.push(variant);
+      groups.set(key, group);
+    }
+
+    for (const { slideId, familySource, variants: groupVariants } of groups.values()) {
+      const [question] = await tx
+        .insert(questions)
+        .values({ lectureId, source: familySource ?? source, slideId })
+        .returning({ id: questions.id });
+      await tx.insert(questionVariants).values(
+        groupVariants.map((variant) => ({
+          questionId: question.id,
+          level: variant.level,
+          points: variant.points,
+          text: variant.text,
+          answersJson: clone(variant.answers),
+          correctAnswerKey: variant.answers.find((answer) => answer.correct)?.key ?? "A",
+          explanation: variant.explanation,
+          promptVersion: variant.promptVersion ?? "unknown"
+        }))
+      );
+    }
   }
 
   private async hydrateLectures(rows: LectureJoinRow[]) {
@@ -2299,10 +2411,18 @@ export class PostgresLectureRepository implements LectureRepository {
     questionRows: QuestionRow[],
     variantRows: VariantRow[]
   ): Lecture {
-    const questionIds = new Set(questionRows.map((question) => question.id));
+    const questionById = new Map(questionRows.map((question) => [question.id, question]));
     const questionsForLecture = variantRows
-      .filter((variant) => questionIds.has(variant.questionId))
-      .map((variant) => this.variantFromRow(variant))
+      .filter((variant) => questionById.has(variant.questionId))
+      .map((variant) => {
+        const family = questionById.get(variant.questionId)!;
+        return {
+          ...this.variantFromRow(variant),
+          ...(family.slideId ? { slideId: family.slideId } : {}),
+          familyId: family.id,
+          familySource: family.source
+        };
+      })
       .sort((left, right) => questionLevelOrder[left.level] - questionLevelOrder[right.level]);
     const slideItems = slideRows.sort((left, right) => left.position - right.position).map((slide) => this.slideFromRow(slide));
     const slideDocument = alignSlideDocumentToPersistedSlides(normalizeLectureSlideDocument(row.lecture.slideDocumentJson, {

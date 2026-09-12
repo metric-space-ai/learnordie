@@ -115,7 +115,6 @@ function SeriesCard({
 
       {series.liveNow.length > 0 && (
         <section className="student-block live">
-          <p className="student-block-label">● Live jetzt</p>
           <ul className="student-event-list">
             {series.liveNow.map((event) => (
               <li key={event.lectureId}>
@@ -128,7 +127,6 @@ function SeriesCard({
 
       {series.upcoming.length > 0 && (
         <section className="student-block">
-          <p className="student-block-label">Nächste Termine</p>
           <ul className="student-event-list">
             {series.upcoming.map((event) => (
               <li key={event.lectureId} className="student-event">
@@ -142,7 +140,6 @@ function SeriesCard({
 
       {series.learn.length > 0 && (
         <section className="student-block">
-          <p className="student-block-label">Lernen</p>
           <ul className="student-event-list">
             {series.learn.map((event) => (
               <li key={event.lectureId} className="student-event">
@@ -152,10 +149,6 @@ function SeriesCard({
             ))}
           </ul>
         </section>
-      )}
-
-      {series.liveNow.length === 0 && series.upcoming.length === 0 && series.learn.length === 0 && (
-        <p className="student-empty-note">Noch keine Termine in dieser Reihe.</p>
       )}
 
       <ReadinessPanel readiness={series.readiness} />
@@ -259,7 +252,7 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
             <>
               <span className="student-id-label">Bevorzugter Name</span>
               <strong>{dashboard.profile.pseudonym}</strong>
-              <button className="plain-button small" type="button" onClick={() => setEditing(true)}>Ändern</button>
+              <button className="plain-button small" type="button" aria-label="Pseudonym ändern" onClick={() => setEditing(true)}>Ändern</button>
             </>
           )}
         </div>
@@ -272,7 +265,6 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
             <input
               value={codeInput}
               onChange={(event) => setCodeInput(event.target.value)}
-              placeholder="z. B. ME1-GL-2026"
               autoComplete="off"
               autoCapitalize="characters"
             />
@@ -284,12 +276,7 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
 
       {dashboard.series.length === 0 ? (
         <section className="student-emptystate lb-enter-panel">
-          <p className="eyebrow">Noch keine Vorlesung</p>
           <h1>Gib einen Vorlesungscode ein</h1>
-          <p>
-            Du bist noch keiner Vorlesung beigetreten. Sobald du oben einen Code eingibst, erscheinen hier deine
-            Live-Termine, der Lernmodus und dein Level bis zur Prüfung.
-          </p>
         </section>
       ) : (
         <div className="student-series-grid">

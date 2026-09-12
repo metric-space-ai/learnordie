@@ -77,7 +77,7 @@ export function StudioSlideDocumentEditor({
   const [tableColumnIndex, setTableColumnIndex] = useState(0);
   const [tableCellValue, setTableCellValue] = useState("");
   const [quizLevel, setQuizLevel] = useState<QuestionLevel>(selectedQuizAnchor?.level ?? "2.0");
-  const [status, setStatus] = useState("SlideDocument bereit.");
+  const [status, setStatus] = useState("");
   const [issue, setIssue] = useState("");
   const [agentPopover, setAgentPopover] = useState<{ x: number; y: number } | null>(null);
   const [agentPrompt, setAgentPrompt] = useState("");
@@ -115,7 +115,7 @@ export function StudioSlideDocumentEditor({
 
   function selectBlock(selection: SlideBlockSelection) {
     setSelectedBlockId(selection.blockId);
-    setStatus(`Block ${selection.blockId} ausgewählt.`);
+    setStatus("");
     setIssue("");
   }
 
@@ -151,13 +151,12 @@ export function StudioSlideDocumentEditor({
       });
       const payload = await response.json() as { error?: string; thread?: AgentThread; lectures?: Lecture[] };
       if (!response.ok || !payload.thread) {
-        throw new Error(payload.error ?? "Agent-Thread konnte nicht erstellt werden.");
+        throw new Error(payload.error ?? "KI-Vorschlag konnte nicht erstellt werden.");
       }
       setAgentThread(payload.thread);
       if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setStatus("Agent-Review-Diff bereit.");
     } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "Agent-Thread konnte nicht erstellt werden.");
+      setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht erstellt werden.");
     } finally {
       setAgentBusy(false);
     }
@@ -178,16 +177,16 @@ export function StudioSlideDocumentEditor({
       });
       const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
       if (!response.ok || !payload.lecture) {
-        throw new Error(payload.error ?? "Agent-Patch konnte nicht übernommen werden.");
+        throw new Error(payload.error ?? "KI-Vorschlag konnte nicht übernommen werden.");
       }
       if (payload.lecture.slideDocument) {
         onSlideDocumentChange(payload.lecture.slideDocument, payload.lecture.slides);
       }
       if (payload.lectures) onLecturesChange?.(payload.lectures);
       setAgentThread((thread) => thread ? { ...thread, status: "accepted" } : thread);
-      setStatus("Agent-Patch übernommen.");
+      setStatus("KI-Vorschlag übernommen.");
     } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "Agent-Patch konnte nicht übernommen werden.");
+      setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht übernommen werden.");
     } finally {
       setAgentBusy(false);
     }
@@ -209,14 +208,14 @@ export function StudioSlideDocumentEditor({
       });
       const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
       if (!response.ok || !payload.lecture) {
-        throw new Error(payload.error ?? "Agent-Patch konnte nicht verworfen werden.");
+        throw new Error(payload.error ?? "KI-Vorschlag konnte nicht verworfen werden.");
       }
       if (payload.lectures) onLecturesChange?.(payload.lectures);
       setAgentThread((thread) => thread ? { ...thread, status: "rejected" } : thread);
       setAgentPopover(null);
-      setStatus("Agent-Patch verworfen.");
+      setStatus("KI-Vorschlag verworfen.");
     } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "Agent-Patch konnte nicht verworfen werden.");
+      setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht verworfen werden.");
     } finally {
       setAgentBusy(false);
     }
@@ -226,7 +225,7 @@ export function StudioSlideDocumentEditor({
     const result = applySlideDocumentEdits(document, operations);
     if (!result.ok) {
       const firstIssue = result.issues[0];
-      setIssue(firstIssue ? `${firstIssue.code}: ${firstIssue.repairHint}` : "Unbekannter Validierungsfehler.");
+      setIssue(firstIssue ? firstIssue.repairHint : "Diese Änderung ist ungültig.");
       setStatus("Nicht gespeichert.");
       return false;
     }
@@ -246,12 +245,12 @@ export function StudioSlideDocumentEditor({
         slideId: currentSlide.id,
         patch: { layout }
       }
-    ], "Engine-Layout gespeichert. Bitte Lecture speichern.");
+    ], "Layout geändert. Mit „Speichern“ sichern.");
   }
 
   function saveSelectedBlock() {
     if (!currentSlide || !selectedBlock || !selectedField) return;
-    applyOperations(selectedField.operations(editorValue), "Engine-Block gespeichert. Bitte Lecture speichern.");
+    applyOperations(selectedField.operations(editorValue), "Text geändert. Mit „Speichern“ sichern.");
   }
 
   function updateFigureAsset(assetId: string) {
@@ -278,7 +277,7 @@ export function StudioSlideDocumentEditor({
         }
       }
     );
-    applyOperations(operations, "Engine-Asset gespeichert. Bitte Lecture speichern.");
+    applyOperations(operations, "Grafik geändert. Mit „Speichern“ sichern.");
   }
 
   function saveTableCell() {
@@ -297,7 +296,7 @@ export function StudioSlideDocumentEditor({
         blockId: selectedTable.id,
         patch: { rows }
       }
-    ], "Engine-Tabellenzelle gespeichert. Bitte Lecture speichern.");
+    ], "Zelle geändert. Mit „Speichern“ sichern.");
   }
 
   function addTableRow() {
@@ -312,7 +311,7 @@ export function StudioSlideDocumentEditor({
         blockId: selectedTable.id,
         patch: { rows: [...selectedTable.rows, nextRow] }
       }
-    ], "Engine-Tabellenzeile ergänzt. Bitte Lecture speichern.");
+    ], "Zeile ergänzt. Mit „Speichern“ sichern.");
     if (saved) {
       setTableRowIndex(nextRowIndex);
       setTableColumnIndex(0);
@@ -332,7 +331,7 @@ export function StudioSlideDocumentEditor({
         blockId: selectedTable.id,
         patch: { columns, rows }
       }
-    ], "Engine-Tabellenspalte ergänzt. Bitte Lecture speichern.");
+    ], "Spalte ergänzt. Mit „Speichern“ sichern.");
     if (saved) setTableColumnIndex(nextColumnIndex);
   }
 
@@ -350,7 +349,7 @@ export function StudioSlideDocumentEditor({
           label: quizAnchorLabel(selectedBlock)
         }
       }
-    ], "Engine-Quizanker gespeichert. Bitte Lecture speichern.");
+    ], "Quizpunkt gesetzt. Mit „Speichern“ sichern.");
   }
 
   if (!currentSlide) {
@@ -359,7 +358,7 @@ export function StudioSlideDocumentEditor({
 
   return (
     <aside
-      aria-label="SlideDocument Studio Editor"
+      aria-label="Folie bearbeiten"
       className="studio-engine-editor"
       data-selected-block-id={selectedBlock?.id ?? ""}
       data-studio-engine-editor="true"
@@ -375,50 +374,46 @@ export function StudioSlideDocumentEditor({
         />
         {agentPopover ? (
           <div
-            aria-label="KI Agent Thread"
+            aria-label="Mit KI bearbeiten"
             className="studio-agent-popover"
             role="dialog"
             style={{ left: agentPopover.x, top: agentPopover.y }}
           >
             <div className="studio-agent-popover-head">
               <strong>Mit KI bearbeiten</strong>
-              <button type="button" aria-label="KI Agent schließen" onClick={() => setAgentPopover(null)}>×</button>
+              <button type="button" aria-label="Schließen" title="Schließen" onClick={() => setAgentPopover(null)}>×</button>
             </div>
-            <p>Scope: {currentSlide.title}{selectedBlock ? ` / ${selectedBlock.type}` : ""}</p>
             <label>
-              <span>Agent Prompt</span>
+              <span>Was soll die KI ändern?</span>
               <textarea
-                aria-label="Agent Prompt"
+                aria-label="Was soll die KI ändern?"
                 rows={3}
                 value={agentPrompt}
                 onChange={(event) => setAgentPrompt(event.currentTarget.value)}
-                placeholder="z.B. Kernaussage zur Mischreibung präziser formulieren"
               />
             </label>
             <div className="studio-agent-actions">
               <button type="button" disabled={agentBusy || !agentPrompt.trim()} onClick={startAgentThread}>
-                {agentBusy && !agentThread ? "Agent läuft" : "Agent starten"}
+                {agentBusy && !agentThread ? "KI arbeitet …" : "Vorschlag holen"}
               </button>
               <button type="button" onClick={rejectAgentPatch}>Verwerfen</button>
             </div>
             {agentThread ? (
               <div className="studio-agent-result">
-                <strong>Review-Diff</strong>
-                <span>{agentThread.reviewPatch?.operations.length ?? 0} Operation(en)</span>
-                <ol>
-                  {(agentThread.events ?? []).slice(-6).map((event) => (
-                    <li key={event.id}>
-                      <span>{event.label}</span>
-                      <small>{event.status}</small>
-                    </li>
-                  ))}
-                </ol>
+                <strong>Vorschlag</strong>
+                {agentThread.reviewPatch ? (
+                  proposedTexts(agentThread).map((text, index) => (
+                    <p className="studio-agent-proposal" key={index}>{text}</p>
+                  ))
+                ) : (
+                  <p>Die KI hat keinen Vorschlag erstellt.</p>
+                )}
                 {agentThread.reviewPatch?.qa.warnings.length ? (
                   <p className="studio-agent-warning">{agentThread.reviewPatch.qa.warnings.join(" ")}</p>
                 ) : null}
                 <button
                   type="button"
-                  disabled={agentBusy || agentThread.status === "accepted"}
+                  disabled={agentBusy || !agentThread.reviewPatch || agentThread.status === "accepted"}
                   onClick={acceptAgentPatch}
                 >
                   Änderung übernehmen
@@ -430,14 +425,8 @@ export function StudioSlideDocumentEditor({
         ) : null}
       </div>
       <div className="studio-engine-editor-panel">
-        <div className="studio-engine-editor-heading">
-          <span>SlideDocument</span>
-          <strong>{selectedBlock?.id ?? "Kein Block"}</strong>
-          <small>{selectedBlock?.type ?? "n/a"} · native Engine</small>
-        </div>
-
         <label>
-          <span>Engine Layout</span>
+          <span>Layout</span>
           <select
             aria-label="Engine Layout"
             value={currentSlide.layout}
@@ -453,7 +442,7 @@ export function StudioSlideDocumentEditor({
           <label>
             <span>{selectedField.label}</span>
             <textarea
-              aria-label={selectedField.label}
+              aria-label={selectedField.ariaLabel}
               rows={4}
               value={editorValue}
               onChange={(event) => setEditorValue(event.currentTarget.value)}
@@ -463,21 +452,21 @@ export function StudioSlideDocumentEditor({
 
         {selectedBlock?.type === "figure" ? (
           <label>
-            <span>Engine Asset</span>
+            <span>Grafik</span>
             <select
               aria-label="Engine Asset"
               value={selectedBlock.assetId}
               onChange={(event) => updateFigureAsset(event.currentTarget.value)}
             >
               {figureAssets.map((asset) => (
-                <option key={asset.id} value={asset.id}>{asset.title} · {asset.kind}</option>
+                <option key={asset.id} value={asset.id}>{asset.title}</option>
               ))}
             </select>
           </label>
         ) : null}
 
         {selectedTable ? (
-          <div className="studio-engine-editor-group" aria-label="Engine Tabelleneditor">
+          <div className="studio-engine-editor-group" aria-label="Tabelle">
             <label>
               <span>Zeile</span>
               <select
@@ -521,9 +510,9 @@ export function StudioSlideDocumentEditor({
         ) : null}
 
         {selectedBlock ? (
-          <div className="studio-engine-editor-group" aria-label="Engine Quizanker Editor">
+          <div className="studio-engine-editor-group" aria-label="Quizpunkt">
             <label>
-              <span>Quizanker Niveau</span>
+              <span>Quizniveau</span>
               <select
                 aria-label="Engine Quizanker Niveau"
                 value={quizLevel}
@@ -535,14 +524,14 @@ export function StudioSlideDocumentEditor({
               </select>
             </label>
             <button type="button" onClick={upsertQuizAnchor}>
-              {selectedQuizAnchor ? "Quizanker aktualisieren" : "Quizanker setzen"}
+              {selectedQuizAnchor ? "Quizpunkt ändern" : "Quizpunkt setzen"}
             </button>
           </div>
         ) : null}
 
         <div className="studio-engine-editor-actions">
           <button type="button" disabled={!selectedField} onClick={saveSelectedBlock}>
-            Engine-Block speichern
+            Übernehmen
           </button>
           <button type="button" onClick={() => setAgentPopover({ x: 24, y: 24 })}>
             Mit KI bearbeiten
@@ -558,6 +547,7 @@ export function StudioSlideDocumentEditor({
 function editableField(block: SlideBlock, slideId: string): {
   key: string;
   label: string;
+  ariaLabel: string;
   value: string;
   operations: (value: string) => SlideDocumentEditOperation[];
 } | null {
@@ -565,7 +555,8 @@ function editableField(block: SlideBlock, slideId: string): {
     case "heading":
       return {
         key: "heading",
-        label: "Engine Folientitel",
+        label: "Folientitel",
+        ariaLabel: "Folientitel",
         value: block.text,
         operations: (text) => [
           {
@@ -586,55 +577,81 @@ function editableField(block: SlideBlock, slideId: string): {
     case "paragraph":
       return {
         key: "text",
-        label: "Engine Folientext",
+        label: "Folientext",
+        ariaLabel: "Engine Folientext",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "figure":
       return {
         key: "caption",
-        label: "Engine Folienthema",
+        label: "Bildunterschrift",
+        ariaLabel: "Bildunterschrift",
         value: block.caption ?? "",
         operations: (caption) => [patchBlockOperation(slideId, block.id, { caption })]
       };
     case "formula":
       return {
         key: "latex",
-        label: "Engine Formel",
+        label: "Formel",
+        ariaLabel: "Engine Formel",
         value: block.latex ?? block.mathMl ?? "",
         operations: (latex) => [patchBlockOperation(slideId, block.id, { latex, mathMl: undefined })]
       };
     case "callout":
       return {
         key: "callout",
-        label: "Engine Hinweistext",
+        label: "Hinweistext",
+        ariaLabel: "Hinweistext",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "definition":
       return {
         key: "definition",
-        label: "Engine Definition",
+        label: "Definition",
+        ariaLabel: "Definition",
         value: block.definition,
         operations: (definition) => [patchBlockOperation(slideId, block.id, { definition })]
       };
     case "quote":
       return {
         key: "quote",
-        label: "Engine Zitat",
+        label: "Zitat",
+        ariaLabel: "Zitat",
         value: block.text,
         operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
       };
     case "code":
       return {
         key: "code",
-        label: "Engine Code",
+        label: "Code",
+        ariaLabel: "Code",
         value: block.code,
         operations: (code) => [patchBlockOperation(slideId, block.id, { code })]
       };
     default:
       return null;
   }
+}
+
+const proposalTextKeys = ["text", "definition", "caption", "latex", "code"] as const;
+
+function proposedTexts(thread: AgentThread): string[] {
+  return (thread.reviewPatch?.operations ?? []).flatMap((operation) => {
+    const fields: Record<string, unknown> | undefined = operation.kind === "patchBlock"
+      ? operation.patch
+      : operation.kind === "insertBlock" || operation.kind === "replaceBlock"
+        ? operation.block
+        : undefined;
+    if (!fields) return [];
+    for (const key of proposalTextKeys) {
+      const value = fields[key];
+      if (typeof value === "string" && value.trim()) return [value.trim()];
+    }
+    const items = Array.isArray(fields.items) ? fields.items.filter((item): item is string => typeof item === "string") : [];
+    return items.length ? [items.join("\n")] : [];
+  });
 }
 
 function patchBlockOperation(slideId: string, blockId: string, patch: SlideBlockPatch): SlideDocumentEditOperation {
@@ -647,8 +664,25 @@ function patchBlockOperation(slideId: string, blockId: string, patch: SlideBlock
   };
 }
 
+const layoutLabels: Record<SlideLayoutId, string> = {
+  title_statement: "Titel mit Aussage",
+  section_divider: "Kapiteltrenner",
+  technical_one_column: "Eine Spalte",
+  technical_two_column: "Zwei Spalten",
+  technical_figure_right: "Grafik rechts",
+  technical_figure_left: "Grafik links",
+  definition_with_example: "Definition mit Beispiel",
+  formula_derivation: "Formel",
+  table_focus: "Tabelle",
+  chart_focus: "Diagramm",
+  comparison_split: "Vergleich",
+  process_steps: "Ablauf",
+  case_study: "Fallbeispiel",
+  quiz_transition: "Quiz"
+};
+
 function formatLayoutLabel(layout: SlideLayoutId) {
-  return layout.replaceAll("_", " ");
+  return layoutLabels[layout] ?? layout;
 }
 
 const figureCompatibleAssetKinds = new Set<SlideAssetKind>(["figure", "photo", "diagram", "chart"]);
@@ -677,7 +711,7 @@ function presentationAssetToSlideAssetRef(asset: PresentationAsset): SlideAssetR
   return {
     id,
     kind: asset.kind,
-    title: boundedText(asset.title, 160) ?? "Asset",
+    title: boundedText(asset.title, 160) ?? "Grafik",
     description: boundedText(asset.description, 500),
     storageKey: boundedText(asset.storageKey, 500),
     previewKey: boundedText(asset.previewKey, 500),

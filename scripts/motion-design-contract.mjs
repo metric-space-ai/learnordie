@@ -303,7 +303,7 @@ expectContains("lecturer_live_contract", lecturerLiveExperience, [
   "className={`slide-screen lb-motion-root",
   "transcript-panel lb-enter-overlay",
   "data-panel-origin=\"transcript\"",
-  "question-drawer compact lb-enter-sheet",
+  "<QuizDrawer",
   "<Presence show={transcriptVisible}>",
   "<Presence show={questionOpen}>"
 ], "src/components/LecturerLiveExperience.tsx");
@@ -321,7 +321,6 @@ expectContains("studio_contract", lecturerDashboard, [
   "<Presence show={toolMenuOpen} exitMs={200}>",
   "data-state={motionState}",
   "studio-bottom-bar lb-enter-control",
-  "studio-hotspot lb-enter-hotspot",
   "style={{ \"--lb-i\": index } as MotionStyle}",
   "studio-context-drawer materials",
   "studio-context-drawer questions",

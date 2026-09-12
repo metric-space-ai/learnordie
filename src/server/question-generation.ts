@@ -87,6 +87,32 @@ function normalizeAnswers(rawAnswers: unknown): AnswerOption[] {
   return answers;
 }
 
+function shuffled<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index--) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swap]] = [copy[swap], copy[index]];
+  }
+  return copy;
+}
+
+// Sprachmodelle setzen die richtige Antwort meist an die erste Stelle. Innerhalb einer
+// Familie steht sie deshalb je Niveau an einer anderen, zufaelligen Position A-D.
+function distributeAnswerKeys(variants: QuestionVariant[]): QuestionVariant[] {
+  const correctPositions = shuffled([0, 1, 2, 3]);
+  return variants.map((variant, variantIndex) => {
+    const correct = variant.answers.find((answer) => answer.correct);
+    const distractors = shuffled(variant.answers.filter((answer) => !answer.correct));
+    if (!correct || distractors.length !== 3) return variant;
+    const ordered = [...distractors];
+    ordered.splice(correctPositions[variantIndex % 4], 0, correct);
+    return {
+      ...variant,
+      answers: ordered.map((answer, index) => ({ ...answer, key: ANSWER_KEYS[index] }))
+    };
+  });
+}
+
 function questionFingerprint(value: string) {
   return value.toLocaleLowerCase("de-DE").replace(/\s+/g, " ").trim();
 }
@@ -210,9 +236,127 @@ export async function generateQuestionVariantsForMaterial(input: {
   }
 
   const model = `${provider.info.provider}:${provider.info.model}`;
-  const variants = parseGeneratedVariants(result.answer);
+  const variants = distributeAnswerKeys(parseGeneratedVariants(result.answer));
   return variants.map((variant) => withVariantMetadata(variant, input.material, {
     promptVersion: "llm-material-v1",
     model
   }));
+}
+
+export type LiveQuestionSlideContext = {
+  title: string;
+  lines: string[];
+};
+
+function liveQuestionSystemPrompt() {
+  return [
+    "Du bist ein deutschsprachiger Aufgabenautor und begleitest eine laufende technische Universitätsvorlesung.",
+    "Du erzeugst genau EINE Frage als Fragenfamilie: dieselbe Kernaussage, geprüft in vier Schwierigkeitsstufen.",
+    "Das Thema kommt ausschließlich aus dem Transkript, also aus dem, was die Lehrperson gerade gesagt hat.",
+    "Der Folieninhalt dient nur zur Einordnung und nur, soweit er zum Transkript passt; Folienthemen, die im Transkript nicht vorkommen, sind tabu.",
+    "Erfinde keine Fakten. Rechne Zahlen selbst nach.",
+    "Verwende korrektes Deutsch mit Umlauten und Unicode-Formelzeichen, kein LaTeX.",
+    "Gib ausschließlich valides JSON zurück. Keine Markdown-Umrandung, keine Erklärung außerhalb des JSON."
+  ].join(" ");
+}
+
+function liveQuestionUserPrompt(input: {
+  lecture: Lecture;
+  slide: LiveQuestionSlideContext;
+  transcript: string;
+  existingQuestionTexts: string[];
+}) {
+  return [
+    `Vorlesung: ${input.lecture.seriesTitle} / ${input.lecture.title}`,
+    "GRUNDLAGE – Transkript der letzten Minuten (automatisch erkannt, kann Erkennungsfehler enthalten):",
+    compact(input.transcript, 3200),
+    `KONTEXT – aktuelle Folie „${input.slide.title}“ (nur verwenden, soweit sie zum Transkript passt):`,
+    ...input.slide.lines.map((line) => `- ${compact(line, 300)}`),
+    input.existingQuestionTexts.length > 0 ? "Bereits gestellte Fragen zu dieser Folie (nicht wiederholen, anderen Aspekt wählen):" : "",
+    ...input.existingQuestionTexts.slice(0, 12).map((text) => `- ${compact(text, 200)}`),
+    "Vorgehen:",
+    "1. Wähle EINE Kernaussage, die im Transkript ausdrücklich vorkommt, und formuliere sie als \"coreStatement\" (ein Satz).",
+    "2. Erzeuge vier Varianten, die ALLE diese Kernaussage prüfen – nur die Schwierigkeit steigt:",
+    "4.0 Wiedergeben: die Kernaussage oder ihren zentralen Begriff erkennen.",
+    "3.0 Verstehen: erklären, warum die Kernaussage gilt oder wie ihre Teile zusammenhängen.",
+    "2.0 Anwenden: die Kernaussage auf einen konkreten Fall, eine Zahl oder Formel anwenden.",
+    "1.0 Übertragen oder Bewerten: die Kernaussage auf eine neue technische Situation übertragen oder eine Fehlvorstellung dazu beurteilen.",
+    "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier Antworten, genau eine korrekt, Erklärung höchstens 480 Zeichen.",
+    "Ablenker sind typische Fehlvorstellungen zur Kernaussage: fachlich plausibel für Studierende, die sie nicht sicher beherrschen, in gleicher Form und ähnlicher Länge wie die richtige Antwort. Keine offensichtlich absurden Aussagen.",
+    "Jede Antwort ist ein vollständiger, grammatisch korrekter Ausdruck oder Satz. Die richtige Antwort ist nicht auffällig länger oder genauer formuliert als die Ablenker.",
+    "Die Erklärung sagt, warum die richtige Antwort stimmt, und benennt die Fehlvorstellung des stärksten Ablenkers.",
+    "Keine Antworten wie „alle/keine der genannten“, keine verneinten Fragestellungen.",
+    "JSON-Schema:",
+    "{\"topic\":\"2 bis 5 Wörter\",\"coreStatement\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}"
+  ].filter(Boolean).join("\n");
+}
+
+function clampLiveVariant(variant: QuestionVariant): QuestionVariant {
+  return {
+    ...variant,
+    text: variant.text.length > 260 ? `${variant.text.slice(0, 257)}...` : variant.text,
+    explanation: variant.explanation.length > 520 ? `${variant.explanation.slice(0, 517)}...` : variant.explanation,
+    answers: variant.answers.map((answer) => ({ ...answer, text: answer.text.slice(0, 400) }))
+  };
+}
+
+// Eine neue Fragenfamilie (alle vier Niveaus) aus dem Live-Transkript einer Folie.
+export async function generateLiveQuestionFamily(input: {
+  lecture: Lecture;
+  slide: LiveQuestionSlideContext;
+  transcript: string;
+  existingQuestionTexts: string[];
+}): Promise<QuestionVariant[]> {
+  const liveMetadata = {
+    promptVersion: "live-transcript-v1",
+    reviewStatus: "approved" as const,
+    sourceRef: `Live-Transkript · ${input.slide.title}`
+  };
+
+  if (!usesAIQuestionGenerator()) {
+    const material = {
+      id: "live-transcript",
+      lectureId: input.lecture.id,
+      kind: "notes",
+      source: "notes",
+      originalName: `Live-Transkript ${input.slide.title}`,
+      status: "ready",
+      extractedTextPreview: compact(input.transcript, 240)
+    } as unknown as LectureMaterial;
+    return generateReviewVariants(input.lecture, material).map((variant) => ({ ...variant, ...liveMetadata }));
+  }
+
+  const provider = getAIProvider();
+  if (provider.info.provider === "learnbuddy-demo") {
+    throw new Error("Question generator is not configured: LEARNBUDDY_AI_PROVIDER is required for live questions.");
+  }
+
+  // Ein zweiter Versuch, falls die KI eine schon gestellte Frage wiederholt.
+  const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
+  let variants: QuestionVariant[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let result;
+    try {
+      result = await provider.complete({
+        system: liveQuestionSystemPrompt(),
+        user: attempt === 0
+          ? liveQuestionUserPrompt(input)
+          : `${liveQuestionUserPrompt(input)}\nWICHTIG: Der vorige Vorschlag wiederholte eine bereits gestellte Frage. Wähle einen anderen Aspekt aus dem Transkript.`,
+        maxOutputTokens: 2600,
+        temperature: attempt === 0 ? 0.3 : 0.6,
+        responseFormat: "json_object",
+        timeoutMs: 25_000
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(message.toLowerCase().includes("timed out") || message.toLowerCase().includes("abort")
+        ? "Question generator request timed out."
+        : `Question generator request failed: ${message}`);
+    }
+    variants = distributeAnswerKeys(parseGeneratedVariants(result.answer).map(clampLiveVariant));
+    if (!variants.some((variant) => existing.has(questionFingerprint(variant.text)))) break;
+    if (attempt === 1) throw new Error("Question generator returned a duplicate of an existing question.");
+  }
+  const model = `${provider.info.provider}:${provider.info.model}`;
+  return variants.map((variant) => ({ ...variant, ...liveMetadata, promptVersion: `live-transcript-v1:${model}` }));
 }

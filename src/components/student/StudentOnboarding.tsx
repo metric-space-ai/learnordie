@@ -63,7 +63,6 @@ export function StudentOnboarding() {
       </header>
 
       <section className="student-emptystate lb-enter-panel">
-        <p className="eyebrow">Lernen im Norden</p>
         <h1>Wähle ein Pseudonym</h1>
         <p>Du brauchst kein Konto. Dein bevorzugter Name wird beim Beitritt in der Vorlesung eindeutig gemacht.</p>
         <form className="student-onboard-form" onSubmit={submit}>
@@ -78,7 +77,6 @@ export function StudentOnboarding() {
             <input
               value={codeInput}
               onChange={(event) => setCodeInput(event.target.value)}
-              placeholder="z. B. ME1-GL-2026"
               autoComplete="off"
               autoCapitalize="characters"
               disabled={busy}

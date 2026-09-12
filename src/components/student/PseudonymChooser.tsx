@@ -94,7 +94,6 @@ export function PseudonymChooser({
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="z. B. Lagerstern-42"
           autoComplete="off"
           maxLength={PSEUDONYM_MAX_LENGTH}
           disabled={disabled}

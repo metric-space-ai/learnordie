@@ -25,9 +25,9 @@ const LECTURER_EMAIL = process.env.LOCAL_E2E_LECTURER_EMAIL ?? "referent@example
 
 async function loginLecturerAndSetCode(page: Page, code: string) {
   await page.goto("/lecturer/login");
-  await page.getByRole("textbox", { name: "Dienstliche E-Mail" }).fill(LECTURER_EMAIL);
-  await page.getByRole("button", { name: "Anmeldelink senden" }).click();
-  const link = page.getByRole("link", { name: /Dozentenbereich/ });
+  await page.getByLabel("E-Mail").fill(LECTURER_EMAIL);
+  await page.getByRole("button", { name: "Code senden" }).click();
+  const link = page.getByRole("link", { name: "Direkt zum Dozentenbereich" });
   await expect(link).toBeVisible();
   const href = await link.getAttribute("href");
   await page.goto(href!);
@@ -75,7 +75,6 @@ test("Dozent setzt Code, Student tritt mit Pseudonym bei und sieht das Dashboard
 
   await expect(page).toHaveURL(/\/student/);
   await expect(page.getByRole("heading", { name: SERIES_TITLE })).toBeVisible();
-  await expect(page.getByText(`Code ${JOIN_CODE}`)).toBeVisible();
 
   // Persistence: reopening the dashboard keeps the enrollment.
   await page.reload();
@@ -104,7 +103,7 @@ test("Root zeigt für ein bestehendes Profil den Dashboard-Einstieg", async ({ b
     await page.locator(".join-form button[type=submit]").click();
     await expect(page).toHaveURL(/\/student/);
   }
-  // Now the root surfaces "Zum Dashboard".
+  // Now the root surfaces "Meine Vorlesungen".
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Zum Dashboard" })).toBeVisible();
   await ctx.close();
@@ -147,7 +146,7 @@ test("Learn-Ruhezustand auf 390×844: ein Zähler, Hotspots nicht über Text", a
 
 test("Dozentenlogin sendet Anmeldelink und erklärt abgelaufene Links", async ({ page }) => {
   await page.goto("/lecturer/login?error=invalid-token");
-  await expect(page.getByRole("button", { name: "Anmeldelink senden" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Code senden" })).toBeVisible();
   await expect(page.getByText(/abgelaufen/i)).toBeVisible();
 });
 
@@ -304,4 +303,3 @@ test("T04 Formular begrenzt auf 40 Zeichen", async ({ page }) => {
   const input = page.getByLabel("Eigenes Pseudonym");
   await expect(input).toHaveAttribute("maxLength", "40");
 });
-

@@ -1,0 +1,71 @@
+/* UI overhaul: ui-entry */
+
+/* Home: nur das Beitrittsformular in der Mitte; Links oben rechts im Kopf. */
+.home-app {
+  background: var(--stage);
+}
+
+.home-app-stage {
+  background: var(--slide);
+}
+
+.home-app-grid {
+  grid-template-columns: minmax(0, 560px);
+  justify-content: center;
+}
+
+.home-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.home-lecturer-link {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.home-lecturer-link:hover,
+.home-lecturer-link:focus-visible {
+  color: var(--ink);
+}
+
+/* Login: plain card on the same ground as the join screen. */
+.login-screen {
+  background:
+    linear-gradient(var(--lb-stage-grid), var(--lb-stage-grid)) 0 0 / 32px 1px,
+    linear-gradient(90deg, var(--lb-stage-grid), var(--lb-stage-grid)) 0 0 / 1px 32px,
+    var(--stage);
+}
+
+.login-card::before {
+  content: none;
+}
+
+.login-support {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Pseudonym chooser: only the label remains in the head row. */
+.pseudonym-choice-head {
+  justify-content: flex-start;
+}
+
+/* Readiness: plain small heading instead of an uppercase overline. */
+.readiness-heading {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 840;
+  line-height: 1.3;
+}
+
+.readiness-action a {
+  gap: 0;
+}

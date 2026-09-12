@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
+import { groupQuestionFamilies } from "@/lib/questions";
 import type { QuestionLevel, QuestionVariant } from "@/lib/types";
 import type { PresenceState } from "./Presence";
 
@@ -35,15 +36,26 @@ export function QuizDrawer({
   onPeekSlide?: () => void;
 }) {
   const [level, setLevel] = useState<QuestionLevel>(initialLevel);
+  const [familyIndex, setFamilyIndex] = useState(0);
   const [seconds, setSeconds] = useState(60);
   const [selected, setSelected] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const expiredRef = useRef(false);
 
-  const question = useMemo(
-    () => questions.find((item) => item.level === level) ?? questions[0],
-    [level, questions]
-  );
+  // Jede Frage ist eine Familie in allen Niveaus; der Niveau-Umschalter bleibt in der Familie.
+  const families = useMemo(() => groupQuestionFamilies(questions), [questions]);
+  const activeFamilyIndex = Math.min(familyIndex, Math.max(families.length - 1, 0));
+  const family = families[activeFamilyIndex] ?? [];
+  const question = family.find((item) => item.level === level) ?? family[0];
+
+  function showFamily(nextIndex: number) {
+    if (families.length === 0) return;
+    setFamilyIndex((nextIndex + families.length) % families.length);
+    setSelected(null);
+    setRevealed(false);
+    setSeconds(60);
+    expiredRef.current = false;
+  }
   const drawerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const root = drawerRef.current;
@@ -96,13 +108,14 @@ export function QuizDrawer({
   const answersLocked = revealed || (mode === "live" && timedOut);
 
   function choose(answerKey: string) {
-    if (answersLocked) return;
+    if (answersLocked || !question) return;
     const option = question.answers.find((answer) => answer.key === answerKey);
     setSelected(answerKey);
     setRevealed(true);
     onAnswered?.({ level, correct: Boolean(option?.correct), question, selected: answerKey });
   }
 
+  if (!question) return null;
   const selectedIsCorrect = Boolean(question.answers.find((answer) => answer.key === selected)?.correct);
   const timerCaption = revealed
     ? selectedIsCorrect
@@ -128,7 +141,7 @@ export function QuizDrawer({
       data-state={motionState}
       aria-label="Quizfrage"
     >
-      <div className="drawer-main" key={question.level}>
+      <div className="drawer-main" key={`${activeFamilyIndex}-${question.level}`}>
         <div className="question-head">
           <div className="levels lb-enter-control" aria-label="Niveau">
             {levels.map((item) => (
@@ -148,6 +161,13 @@ export function QuizDrawer({
               </button>
             ))}
           </div>
+          {families.length > 1 ? (
+            <div className="question-family-stepper lb-enter-control" aria-label="Fragen dieser Folie">
+              <button type="button" onClick={() => showFamily(activeFamilyIndex - 1)} aria-label="Vorherige Frage" title="Vorherige Frage">‹</button>
+              <span aria-live="polite">Frage {activeFamilyIndex + 1}/{families.length}</span>
+              <button type="button" onClick={() => showFamily(activeFamilyIndex + 1)} aria-label="Nächste Frage" title="Nächste Frage">›</button>
+            </div>
+          ) : null}
           <div className="question-head-actions">
             {onPeekSlide && (
               <button className="plain-button question-peek" type="button" onClick={onPeekSlide}>

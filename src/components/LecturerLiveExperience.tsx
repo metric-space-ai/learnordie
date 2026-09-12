@@ -1,11 +1,13 @@
 "use client";
 
+import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { audioFileExtension, recordAudioSnippet } from "@/lib/audio-capture";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { Presence } from "./Presence";
+import { QuizDrawer } from "./QuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
 
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -25,12 +27,17 @@ const MANUAL_STT_SEGMENT_MS = 1200;
 const AUTO_STT_SEGMENT_MS = 6500;
 const AUTO_STT_PAUSE_MS = 700;
 const MAX_TRANSCRIPT_DRAFTS = 4;
+// Live-Fragen: etwa eine Minute Sprechen je Frage, nicht oefter als alle 75 s.
+const LIVE_QUESTION_MIN_CHARS = 700;
+const LIVE_QUESTION_MIN_INTERVAL_MS = 75_000;
+const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
   const [slide, setSlide] = useState(0);
   const [questionOpen, setQuestionOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
-  const [transcriptVisible, setTranscriptVisible] = useState(true);
+  const [transcriptVisible, setTranscriptVisible] = useState(false);
   const [listening, setListening] = useState(false);
   const [autoSegmenting, setAutoSegmenting] = useState(false);
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>(lecture.transcriptSegments ?? []);
@@ -38,6 +45,15 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [transcriptSavingId, setTranscriptSavingId] = useState<string | null>(null);
   const [transcriptDrafts, setTranscriptDrafts] = useState<TranscriptDraft[]>([]);
   const [sttStatus, setSttStatus] = useState<"idle" | "requesting" | "listening" | "transcribing" | "ready" | "error">("idle");
+  const [questions, setQuestions] = useState(lecture.questions);
+  const [liveQuestionsOn, setLiveQuestionsOn] = useState(true);
+  const [liveQuestionStatus, setLiveQuestionStatus] = useState<"idle" | "collecting" | "generating" | "error">("idle");
+  const [liveQuestionMessage, setLiveQuestionMessage] = useState("");
+  const liveQuestionsOnRef = useRef(true);
+  const pendingTranscriptRef = useRef("");
+  const liveGeneratingRef = useRef(false);
+  const lastLiveQuestionAtRef = useRef(0);
+  const livePipelineRef = useRef<((draft: TranscriptDraft, slideIndex: number) => Promise<void>) | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const autoSegmentingRef = useRef(false);
   const autoLoopRunningRef = useRef(false);
@@ -45,10 +61,6 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
-  const latestTranscript = transcriptDrafts[0]?.text ?? transcriptSegments[0]?.text ?? "Noch keine Passage übernommen.";
-  const transcriptSample = lecture.slides[slide]?.topic === "Stribeck-Kurve"
-    ? "Die Stribeck-Kurve zeigt, wie Reibung von Drehzahl, Viskosität und Last abhängt."
-    : "Mischreibung ist beim Anlauf kritisch, weil der Schmierfilm noch nicht voll trägt und Festkörperkontakt auftreten kann.";
 
   function stopListening() {
     autoSegmentingRef.current = false;
@@ -57,29 +69,29 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     mediaStreamRef.current = null;
     setListening(false);
     setSttStatus("idle");
-    setTranscriptMessage("Mikrofonstream pausiert.");
+    setTranscriptMessage("");
   }
 
   async function startListening() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setTranscriptMessage("Browser-Mikrofon ist nicht verfügbar.");
+      setTranscriptMessage("Kein Mikrofon verfügbar.");
       setSttStatus("error");
       return;
     }
 
     try {
-      setTranscriptMessage("Mikrofonfreigabe wird angefragt.");
+      setTranscriptMessage("");
       setSttStatus("requesting");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = stream;
       setListening(true);
       setSttStatus("listening");
-      setTranscriptMessage("Browser-Mikrofon streamt. Segmente können manuell oder automatisch transkribiert werden.");
+      setTranscriptMessage("");
     } catch {
       setListening(false);
       setSttStatus("error");
-      setTranscriptMessage("Mikrofonfreigabe wurde nicht erteilt.");
+      setTranscriptMessage("Mikrofon nicht freigegeben.");
     }
   }
 
@@ -96,7 +108,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.error ?? "STT-Proxy konnte die Passage nicht transkribieren.");
+      throw new Error(payload.error ?? "Transkription fehlgeschlagen.");
     }
 
     const draft: TranscriptDraft = {
@@ -110,22 +122,23 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       mode
     };
     setTranscriptDrafts((current) => [draft, ...current].slice(0, MAX_TRANSCRIPT_DRAFTS));
-    setTranscriptMessage(`Transkript bereit: ${Math.round((payload.confidence ?? 0) * 100)}% Konfidenz, ${payload.audioBytes ?? 0} Bytes Audio.`);
+    setTranscriptMessage("");
     setSttStatus("ready");
+    return draft;
   }, [csrfToken, lecture.id, lecture.slides, lecture.title]);
 
   async function transcribeCurrentPassage() {
     const stream = mediaStreamRef.current;
     if (!stream || !listening) {
-      setTranscriptMessage("Erst STT starten und Mikrofon freigeben.");
+      setTranscriptMessage("Erst Mikrofon einschalten.");
       return;
     }
     if (autoSegmenting) {
-      setTranscriptMessage("Automatische Segmentierung läuft bereits.");
+      setTranscriptMessage("");
       return;
     }
 
-    setTranscriptMessage("Audiopassage wird an den STT-Proxy gesendet.");
+    setTranscriptMessage("");
     setSttStatus("transcribing");
     const startedAt = new Date().toISOString();
     try {
@@ -133,17 +146,83 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       const endedAt = new Date().toISOString();
       await transcribeAudioBlob(audio, startedAt, endedAt, slideRef.current, "manual");
     } catch (error) {
-      setTranscriptMessage(error instanceof Error ? error.message : "Audiopassage konnte nicht aufgenommen werden.");
+      setTranscriptMessage(error instanceof Error ? error.message : "Aufnahme fehlgeschlagen.");
       setSttStatus("error");
     }
   }
 
-  async function submitTranscriptSegment(draftId?: string) {
-    const draft = transcriptDrafts.find((item) => item.id === draftId) ?? transcriptDrafts[0];
-    if (!draft) {
-      setTranscriptMessage("Erst eine Audiopassage transkribieren.");
-      return;
+  async function persistTranscriptDraft(draft: TranscriptDraft) {
+    const response = await fetch(`/api/lectures/${lecture.id}/transcript-segments`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-learnbuddy-csrf": csrfToken
+      },
+      body: JSON.stringify({
+        text: draft.text.slice(0, 1200),
+        provider: draft.provider,
+        startedAt: draft.startedAt,
+        endedAt: draft.endedAt
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error ?? "Transkript konnte nicht gespeichert werden.");
+    setTranscriptSegments((current) => [payload.segment, ...current]);
+    setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
+    return payload.segment as TranscriptSegment;
+  }
+
+  async function generateLiveQuestion(slideIndex: number, transcript: string) {
+    const slideId = lecture.slides[slideIndex]?.id;
+    if (!slideId || liveGeneratingRef.current) return;
+    liveGeneratingRef.current = true;
+    setLiveQuestionStatus("generating");
+    setLiveQuestionMessage("");
+    try {
+      const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
+        body: JSON.stringify({ slideId, transcript })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
+      setQuestions(payload.questions);
+      pendingTranscriptRef.current = "";
+      lastLiveQuestionAtRef.current = Date.now();
+      const preview = (payload.family as Array<{ level: string; text: string }> | undefined)?.find((item) => item.level === "2.0");
+      setLiveQuestionStatus("collecting");
+      setLiveQuestionMessage(`Neue Frage auf Folie ${slideIndex + 1}${preview ? `: ${preview.text}` : ""}`);
+    } catch (error) {
+      setLiveQuestionStatus("error");
+      setLiveQuestionMessage(error instanceof Error ? error.message : "Frage konnte nicht erzeugt werden.");
+    } finally {
+      liveGeneratingRef.current = false;
     }
+  }
+
+  // Pipeline: Auto-Segment uebernehmen, Transkript sammeln, ab genug Text eine Familie erzeugen.
+  // Die Funktion wird nach jedem Render aktualisiert, damit die Aufnahmeschleife aktuelle Werte sieht.
+  useEffect(() => {
+    livePipelineRef.current = async (draft, slideIndex) => {
+      try {
+        await persistTranscriptDraft(draft);
+      } catch (error) {
+        setLiveQuestionMessage(error instanceof Error ? error.message : "Transkript konnte nicht gespeichert werden.");
+        return;
+      }
+      pendingTranscriptRef.current = `${pendingTranscriptRef.current} ${draft.text}`.trim().slice(-LIVE_QUESTION_MAX_PENDING_CHARS);
+      setLiveQuestionStatus((current) => (current === "idle" ? "collecting" : current));
+      const enoughText = pendingTranscriptRef.current.length >= LIVE_QUESTION_MIN_CHARS;
+      const pausedLongEnough = Date.now() - lastLiveQuestionAtRef.current >= LIVE_QUESTION_MIN_INTERVAL_MS;
+      if (enoughText && pausedLongEnough) {
+        void generateLiveQuestion(slideIndex, pendingTranscriptRef.current);
+      }
+    };
+  });
+
+  async function submitTranscriptSegment(draftId: string) {
+    const draft = transcriptDrafts.find((item) => item.id === draftId);
+    if (!draft) return;
     setTranscriptSavingId(draft.id);
     setTranscriptMessage("");
 
@@ -163,19 +242,31 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      setTranscriptMessage(payload.error ?? "Transkriptsegment konnte nicht gespeichert werden.");
+      setTranscriptMessage(payload.error ?? "Transkript konnte nicht gespeichert werden.");
       setTranscriptSavingId(null);
       return;
     }
 
     setTranscriptSegments((current) => [payload.segment, ...current]);
     setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
-    setTranscriptMessage(payload.message ?? "Transkriptsegment gespeichert.");
+    setTranscriptMessage(payload.message ?? "Transkript gespeichert.");
     setTranscriptSavingId(null);
   }
 
   useEffect(() => {
+    const onChange = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if ((event.key === "f" || event.key === "F") && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        toggleFullscreen();
+        return;
+      }
       if (event.code === "Space") {
         event.preventDefault();
         setQuestionOrigin("space");
@@ -201,11 +292,15 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   }, [autoSegmenting]);
 
   useEffect(() => {
+    liveQuestionsOnRef.current = liveQuestionsOn;
+  }, [liveQuestionsOn]);
+
+  useEffect(() => {
     if (!autoSegmenting || !listening || autoLoopRunningRef.current) return;
 
     let cancelled = false;
     autoLoopRunningRef.current = true;
-    setTranscriptMessage("Automatische STT-Segmente laufen.");
+    setTranscriptMessage("");
 
     async function runAutoLoop() {
       while (!cancelled && autoSegmentingRef.current && mediaStreamRef.current) {
@@ -215,10 +310,14 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         try {
           const audio = await recordAudioSnippet(stream, AUTO_STT_SEGMENT_MS);
           const endedAt = new Date().toISOString();
-          await transcribeAudioBlob(audio, startedAt, endedAt, slideRef.current, "auto");
+          const slideIndex = slideRef.current;
+          const draft = await transcribeAudioBlob(audio, startedAt, endedAt, slideIndex, "auto");
+          if (liveQuestionsOnRef.current && draft.text.trim()) {
+            await livePipelineRef.current?.(draft, slideIndex);
+          }
         } catch (error) {
           if (!cancelled) {
-            setTranscriptMessage(error instanceof Error ? error.message : "Automatisches STT-Segment konnte nicht verarbeitet werden.");
+            setTranscriptMessage(error instanceof Error ? error.message : "Automatische Transkription fehlgeschlagen.");
             setSttStatus("error");
           }
         }
@@ -228,7 +327,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       autoLoopRunningRef.current = false;
       if (!cancelled && listening) {
         setSttStatus("listening");
-        setTranscriptMessage("Automatische STT-Segmente pausiert.");
+        setTranscriptMessage("");
       }
     }
 
@@ -257,73 +356,120 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         <aside className="transcript-panel lb-enter-overlay" data-panel-origin="transcript" data-state={motionState} aria-label="Transkriptstatus">
           <div className="overlay-head">
             <h2>Transkript</h2>
-            <button type="button" aria-label="Transkript ausblenden" onClick={() => setTranscriptVisible(false)}>×</button>
+            <button type="button" aria-label="Transkript ausblenden" title="Transkript ausblenden" onClick={() => setTranscriptVisible(false)}>×</button>
           </div>
           <p className="lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
             <span className={`status-dot ${listening ? "live" : ""}`} />
             {sttStatus === "requesting"
-              ? "Mikrofonfreigabe läuft"
+              ? "Mikrofon wird freigegeben"
               : sttStatus === "transcribing"
-                ? "STT-Proxy transkribiert"
-                : autoSegmenting
-                  ? "Automatische Segmente laufen"
-                  : listening
-                  ? "Browser-Mikrofon streamt"
-                  : "Mikrofon wartet"}
+                ? "Transkribiert …"
+                : listening
+                  ? (autoSegmenting ? "Hört zu · automatisch" : "Hört zu")
+                  : "Mikrofon aus"}
           </p>
-          <p className="muted lb-enter-row" style={{ "--lb-i": 1 } as MotionStyle}>Letzte Passage: {latestTranscript}</p>
-          {transcriptDrafts.length > 0 ? (
-            <div className="transcript-draft-list lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle} aria-label="STT-Kandidaten">
+          {transcriptDrafts.length > 0 && (
+            <div className="transcript-draft-list lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle} aria-label="Neues Transkript">
               {transcriptDrafts.map((draft) => (
                 <div className="transcript-draft" key={draft.id}>
-                  <p>{draft.mode === "auto" ? "Auto-Segment" : "Manuelle Passage"} · {draft.text}</p>
+                  <p>{draft.text}</p>
                   <button className="plain-button" disabled={transcriptSavingId === draft.id} type="button" onClick={() => submitTranscriptSegment(draft.id)}>
                     {transcriptSavingId === draft.id ? "Speichert" : "Übernehmen"}
                   </button>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="form-note lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle}>Fachlicher Fallback: {transcriptSample}</p>
           )}
           {transcriptMessage && <p className="form-note lb-enter-row" style={{ "--lb-i": 3 } as MotionStyle}>{transcriptMessage}</p>}
           {transcriptSegments.length > 0 && (
-            <div className="transcript-mini-list" aria-label="Übernommene Transkriptsegmente">
+            <div className="transcript-mini-list" aria-label="Übernommenes Transkript">
               {transcriptSegments.slice(0, 3).map((segment, index) => (
                 <span
                   className={`${segment.status} lb-enter-row`}
                   key={segment.id}
                   style={{ "--lb-i": index + 4 } as MotionStyle}
                 >
-                  {segment.status === "accepted" ? "Quelle" : "Ignoriert"} · {segment.text}
+                  {segment.text}
                 </span>
               ))}
             </div>
           )}
           <div className="transcript-actions lb-enter-row" style={{ "--lb-i": 7 } as MotionStyle}>
             <button className="plain-button" type="button" onClick={listening ? stopListening : startListening}>
-              {listening ? "STT pausieren" : "STT starten"}
+              {listening ? "Mikrofon aus" : "Mikrofon an"}
             </button>
             <button className="plain-button" disabled={!listening || sttStatus === "transcribing" || autoSegmenting} type="button" onClick={transcribeCurrentPassage}>
-              {sttStatus === "transcribing" ? "Transkribiert" : "Passage transkribieren"}
+              Jetzt transkribieren
             </button>
-            <button className="plain-button" disabled={!listening} type="button" onClick={() => setAutoSegmenting((current) => !current)}>
-              {autoSegmenting ? "Auto stoppen" : "Auto-Segmente"}
+            <button
+              className="plain-button"
+              disabled={!listening}
+              type="button"
+              aria-pressed={autoSegmenting}
+              onClick={() => setAutoSegmenting((current) => !current)}
+            >
+              Automatisch
             </button>
           </div>
-          <button className="primary-button lb-enter-row" style={{ "--lb-i": 8 } as MotionStyle} disabled={transcriptDrafts.length < 1 || Boolean(transcriptSavingId)} type="button" onClick={() => submitTranscriptSegment()}>
-            {transcriptSavingId ? "Speichert" : "Neueste Passage übernehmen"}
-          </button>
+          <div className="live-question-pipeline lb-enter-row" style={{ "--lb-i": 9 } as MotionStyle} aria-label="Live-Fragen aus dem Transkript" data-status={liveQuestionStatus}>
+            <div className="transcript-actions">
+              <button
+                className="plain-button"
+                type="button"
+                aria-pressed={liveQuestionsOn}
+                onClick={() => setLiveQuestionsOn((current) => !current)}
+              >
+                {liveQuestionsOn ? "Live-Fragen an" : "Live-Fragen aus"}
+              </button>
+              <button
+                className="plain-button"
+                type="button"
+                disabled={liveQuestionStatus === "generating"}
+                onClick={() => generateLiveQuestion(slide, pendingTranscriptRef.current)}
+              >
+                {liveQuestionStatus === "generating" ? "Erzeugt …" : "Frage erzeugen"}
+              </button>
+            </div>
+            {liveQuestionMessage ? <p className="form-note" aria-live="polite">{liveQuestionMessage}</p> : null}
+          </div>
         </aside>
         )}
       </Presence>
 
       <div className="action-stack lb-enter-control">
+        <a className="live-back-link" href="/lecturer">Beenden</a>
         <button
           className="icon-action"
           type="button"
-          title="Fragen mit Leertaste ein-/ausklappen"
-          aria-label="Fragen ein- oder ausklappen"
+          title="Transkript und Mikrofon"
+          aria-label="Transkript und Mikrofon"
+          aria-pressed={transcriptVisible}
+          onClick={() => setTranscriptVisible((current) => !current)}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="3" width="6" height="11" rx="3" />
+            <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+          </svg>
+        </button>
+        <button
+          className="icon-action"
+          type="button"
+          title="Vollbild (Taste F)"
+          aria-label="Vollbild"
+          aria-pressed={fullscreen}
+          onClick={toggleFullscreen}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {fullscreen
+              ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+              : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+          </svg>
+        </button>
+        <button
+          className="icon-action"
+          type="button"
+          title="Quiz (Leertaste)"
+          aria-label="Quiz (Leertaste)"
           aria-pressed={questionOpen}
           onClick={() => {
             setQuestionOrigin("control");
@@ -336,30 +482,22 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
       <Presence show={questionOpen}>
         {(motionState) => (
-        <section
-          className="question-drawer compact lb-enter-sheet"
-          data-origin={questionOrigin}
-          data-state={motionState}
-          aria-label="Live-Fragen"
-        >
-          <div className="drawer-main">
-            <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>Live-Fragen für diese Folie</p>
-            <div className="answers">
-              {lecture.questions.map((question, index) => (
-                <div
-                  className="lecturer-question lb-enter-row"
-                  key={question.level}
-                  style={{ "--lb-i": index + 1 } as MotionStyle}
-                >
-                  <strong>Niveau {question.level}</strong>
-                  <span>{question.text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+          <QuizDrawer
+            key={lecture.slides[slide]?.id}
+            questions={questionsForSlide(questions, lecture.slides[slide]?.id)}
+            origin={questionOrigin}
+            motionState={motionState}
+          />
         )}
       </Presence>
     </main>
   );
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => undefined);
+    return;
+  }
+  void document.documentElement.requestFullscreen?.().catch(() => undefined);
 }

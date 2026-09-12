@@ -99,7 +99,6 @@ export function JoinFlow({ code, target, hasProfile: _hasProfile, hasClaim = fal
               <input
                 value={retryCode}
                 onChange={(event) => setRetryCode(event.target.value)}
-                placeholder="z. B. ME1-GL-2026"
                 autoComplete="off"
                 autoCapitalize="characters"
               />
@@ -204,7 +203,7 @@ export function JoinFlow({ code, target, hasProfile: _hasProfile, hasClaim = fal
             />
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button" type="submit" disabled={busy}>
-              {busy ? "Trete bei …" : "Pseudonym wählen und beitreten"}
+              {busy ? "Trete bei …" : "Beitreten"}
             </button>
           </form>
         )}

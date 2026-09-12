@@ -1,13 +1,10 @@
 "use client";
 
+import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
-import {
-  MAX_LEARN_QUESTION_DENSITY,
-  MIN_LEARN_QUESTION_DENSITY,
-  normalizeLearnQuestionDensity
-} from "@/lib/learn-settings";
+import { normalizeLearnQuestionDensity } from "@/lib/learn-settings";
 import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
 import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
 import { LeaderboardModal } from "./LeaderboardModal";
@@ -63,10 +60,16 @@ const hotspotOrigins = [
   { x: "92%", y: "69%" }
 ];
 
+function formatChatBudget(remaining: number, limit: number) {
+  const percent = limit > 0 ? Math.max(0, Math.min(100, Math.round((remaining / limit) * 100))) : 0;
+  return `KI-Kontingent heute: noch ${percent} %`;
+}
+
 export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const evaluationConfig = lecture.evaluationConfig;
   const [slide, setSlide] = useState(0);
-  const [density, setDensity] = useState(() => normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
+  // Die Fragedichte legt die Lehrperson im Studio fest; Studierende sehen nur die Hotspots.
+  const density = normalizeLearnQuestionDensity(lecture.learnQuestionDensity);
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
   const [activeHotspotIndex, setActiveHotspotIndex] = useState<number | null>(null);
@@ -145,10 +148,6 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   }, [questionOpen, peekingSlide]);
 
   useEffect(() => {
-    setDensity(normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
-  }, [lecture.learnQuestionDensity, lecture.publicToken]);
-
-  useEffect(() => {
     if (!questionOpen || questionOrigin !== "hotspot" || activeHotspotIndex === null) return;
     const pending = pendingHotspotSharedRef.current;
     if (!pending || pending.index !== activeHotspotIndex) return;
@@ -179,9 +178,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   }, [activeHotspotIndex, questionOpen, questionOrigin]);
 
   const questions = useMemo(() => {
-    if (!forcedLevel) return lecture.questions;
-    return [...lecture.questions].sort((a, b) => (a.level === forcedLevel ? -1 : b.level === forcedLevel ? 1 : 0));
-  }, [forcedLevel, lecture.questions]);
+    const slideQuestions = questionsForSlide(lecture.questions, lecture.slides[slide]?.id);
+    if (!forcedLevel) return slideQuestions;
+    return [...slideQuestions].sort((a, b) => (a.level === forcedLevel ? -1 : b.level === forcedLevel ? 1 : 0));
+  }, [forcedLevel, lecture.questions, lecture.slides, slide]);
   const activeQuestion = questions[0];
   const chatStarterPrompts = useMemo(() => {
     const questionText = activeQuestion?.text ?? "die aktuelle Frage";
@@ -287,7 +287,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     setChatLoading(true);
     setChatAnswer("");
     setChatSources([]);
-    setChatBudget("Antwort wird gestreamt.");
+    setChatBudget("");
     setChatMessage(outgoingMessage);
     setChatProviderMeta({
       answerState: "loading",
@@ -337,7 +337,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           streamSource: payload.streamSource ?? "none"
         });
         if (typeof payload.tokenLimit === "number" && typeof payload.tokensRemaining === "number") {
-          setChatBudget(`${payload.tokensRemaining} von ${payload.tokenLimit} Tokens heute verfügbar`);
+          setChatBudget(formatChatBudget(payload.tokensRemaining, payload.tokenLimit));
         }
         return;
       }
@@ -363,7 +363,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           if (event.type === "done") {
             setChatSources(event.sources ?? []);
             if (typeof event.tokenLimit === "number" && typeof event.tokensRemaining === "number") {
-              setChatBudget(`${event.tokensRemaining} von ${event.tokenLimit} Tokens heute verfügbar`);
+              setChatBudget(formatChatBudget(event.tokensRemaining, event.tokenLimit));
             } else {
               setChatBudget("");
             }
@@ -389,10 +389,6 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     } finally {
       setChatLoading(false);
     }
-  }
-
-  function updateDensity(value: string) {
-    setDensity(normalizeLearnQuestionDensity(value, density));
   }
 
   async function submitEvaluation() {
@@ -486,15 +482,15 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           download
           onClick={() => void recordLearnEvent("standalone_export_downloaded", { mode: "learn" })}
         >
-          Lern-HTML herunterladen
+          Herunterladen
         </a>
       </div>
       <div className="action-stack island-control lb-enter-control">
         <button
           className="icon-action"
           type="button"
-          title="Frage mit Leertaste ein-/ausklappen"
-          aria-label="Frage ein- oder ausklappen"
+          title="Quiz (Leertaste)"
+          aria-label="Quiz (Leertaste)"
           aria-pressed={questionOpen}
           onClick={() => {
             setQuestionOrigin("control");
@@ -547,31 +543,26 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         </details>
         {lecture.leaderboardEnabled && (
           <button
-            className="icon-action desktop-only-action"
+            className="icon-action action-text desktop-only-action"
             type="button"
-            aria-label="Leaderboard anzeigen"
             onClick={() => {
               setLeaderboardOpen(true);
               void loadLeaderboard();
             }}
           >
-            <span className="lb-icon lb-icon-rank" aria-hidden="true" />
+            Rangliste
           </button>
         )}
         {evaluationConfig.enabled && (
-          <button
-            className="icon-action desktop-only-action"
-            type="button"
-            aria-label={`${evaluationConfig.title} öffnen`}
-            onClick={() => setEvaluationOpen(true)}
-          >
-            <span className="lb-icon lb-icon-eval" aria-hidden="true" />
+          <button className="icon-action action-text desktop-only-action" type="button" onClick={() => setEvaluationOpen(true)}>
+            Feedback
           </button>
         )}
       </div>
       <Presence show={questionOpen}>
         {(motionState) => (
           <QuizDrawer
+            key={lecture.slides[slide]?.id}
             questions={questions}
             initialLevel={forcedLevel ?? "2.0"}
             origin={questionOrigin}
@@ -598,6 +589,8 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 await recordLearnEvent("answer_selected", {
                   mode: "learn",
                   level: question.level,
+                  familyId: question.familyId,
+                  slideId: question.slideId,
                   points: question.points,
                   questionText: question.text,
                   selected,
@@ -642,20 +635,20 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         >
           <div className="overlay-head">
             <h2>KI-Assistent</h2>
-            <button type="button" onClick={() => setChatOpen(false)} aria-label="Chat schließen">×</button>
+            <button type="button" onClick={() => setChatOpen(false)} aria-label="Chat schließen" title="Schließen">×</button>
           </div>
           <div className="chat-body">
-            <div className="chat-message lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
-              <strong>Thema</strong>
-              <span>{activeQuestion?.text ?? "Aktuelle Frage"}</span>
-            </div>
+            {activeQuestion?.text && (
+              <div className="chat-message lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
+                <span>{activeQuestion.text}</span>
+              </div>
+            )}
             <div className="chat-message lb-enter-row" style={{ "--lb-i": 1 } as MotionStyle}>
-              <strong>{chatProviderMeta.answerState === "answered" ? "Antwort" : "Assistent"}</strong>
               <div aria-live="polite">
                 {chatAnswer ? (
                   <MarkdownContent content={chatAnswer} />
                 ) : (
-                  <span>{chatLoading ? "Antwort wird aufgebaut..." : "Was möchtest du zuerst klären?"}</span>
+                  <span>{chatLoading ? "Antwort wird geladen …" : "Was möchtest du zuerst klären?"}</span>
                 )}
               </div>
               {!chatLoading && !chatAnswer && (
@@ -678,9 +671,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 <strong>Quellen</strong>
                 {chatSources.map((source, index) => (
                   <span className="lb-enter-row" key={`${source.sourceRef}-${index}`} style={{ "--lb-i": index } as MotionStyle}>
-                    {source.sourceRef}
-                    {source.retrievalMethod ? ` · ${source.retrievalMethod === "vector" ? "Vektor" : "Text"}` : ""}
-                    {typeof source.score === "number" ? ` · Score ${source.score.toFixed(2)}` : ""}: {source.excerpt}
+                    {source.sourceRef}: {source.excerpt}
                   </span>
                 ))}
               </div>
@@ -692,11 +683,12 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             <input
               value={chatMessage}
               onChange={(event) => setChatMessage(event.target.value)}
-              placeholder="Eigene Nachfrage stellen"
+              aria-label="Eigene Frage"
+              placeholder="Eigene Frage"
               suppressHydrationWarning
             />
             <button className="primary-button" type="button" onClick={() => void askAI()} disabled={chatLoading || !chatMessage.trim()}>
-              {chatLoading ? "Sendet" : "Fragen"}
+              {chatLoading ? "Sendet …" : "Fragen"}
             </button>
           </div>
         </aside>
@@ -707,7 +699,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         <aside className="overlay-panel tall evaluation-panel lb-enter-overlay" data-panel-origin="evaluation" data-state={motionState} aria-label="Evaluation">
           <div className="overlay-head">
             <h2>{evaluationConfig.title}</h2>
-            <button type="button" onClick={() => setEvaluationOpen(false)} aria-label="Evaluation schließen">×</button>
+            <button type="button" onClick={() => setEvaluationOpen(false)} aria-label="Evaluation schließen" title="Schließen">×</button>
           </div>
           <p className="form-note lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>{evaluationConfig.intro}</p>
           <div className="evaluation-body">
@@ -759,7 +751,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             </label>
           </div>
           <button className="primary-button" type="button" onClick={submitEvaluation}>{evaluationConfig.submitLabel}</button>
-          {evaluationSaved && <p className="form-note">Evaluation gespeichert.</p>}
+          {evaluationSaved && <p className="form-note">Gespeichert.</p>}
         </aside>
         )}
       </Presence>

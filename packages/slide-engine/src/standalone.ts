@@ -1,4 +1,6 @@
 import type { SlideAssetRef, SlideBlock, SlideDocument, SlideNode } from "./schema";
+import { createModellSceneState, modellFallbackDataUri, modellSceneAccents } from "./scenes/modell-state";
+import { scene3dSceneKey } from "./scenes/scene-ids";
 
 export const SLIDE_STANDALONE_RENDERER_VERSION = "learnordie-slide-standalone-v1" as const;
 
@@ -359,7 +361,18 @@ function renderBlock(
       return `<span class="slide-doc-block quiz-anchor" ${dataAttrs} data-quiz-anchor="${escapeAttribute(block.anchorId)}">Niveau ${escapeHtml(block.level)}${block.prompt ? ` · ${escapeHtml(block.prompt)}` : ""}</span>`;
     case "spacer":
       return `<span class="slide-doc-block" ${dataAttrs} aria-hidden="true" style="display:block;height:${block.size === "large" ? 40 : block.size === "medium" ? 22 : 10}px"></span>`;
+    case "scene3d":
+      return renderScene3DBlock(block, dataAttrs);
   }
+}
+
+// Der Export bleibt ohne WebGL-Laufzeit: die Szene erscheint als 2D-Ersatzansicht
+// der Vorlage, der interaktive Teil lebt in der App.
+function renderScene3DBlock(block: Extract<SlideBlock, { type: "scene3d" }>, dataAttrs: string) {
+  const key = scene3dSceneKey(block.sceneId);
+  const accent = block.accent ?? modellSceneAccents[key];
+  const src = modellFallbackDataUri(key, createModellSceneState(false), accent, block.altText);
+  return `<figure class="slide-doc-block figure-block scene3d-block" ${dataAttrs} data-scene-id="${escapeAttribute(block.sceneId)}"><img src="${escapeAttribute(src)}" alt="${escapeAttribute(block.altText)}"><figcaption>${escapeHtml(block.caption ?? block.altText)} · Interaktive 3D-Fassung in learnordie.app</figcaption></figure>`;
 }
 
 function renderFigureBlock(

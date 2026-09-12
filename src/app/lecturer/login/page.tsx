@@ -1,4 +1,6 @@
 import { LoginForm } from "./LoginForm";
+import { TestAccountForm } from "./TestAccountForm";
+import { configuredTestAccounts } from "@/server/test-accounts";
 
 export default async function LecturerLoginPage({
   searchParams
@@ -13,23 +15,19 @@ export default async function LecturerLoginPage({
     errorCode === "invalid-email"
       ? "Bitte eine gültige E-Mail eingeben."
       : errorCode === "invalid-token"
-        ? "Dieser Anmeldelink ist abgelaufen oder wurde bereits verwendet. Bitte einen neuen Link anfordern."
+        ? "Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an."
       : errorCode === "rate-limited"
         ? "Zu viele Anfragen. Bitte später erneut versuchen."
       : errorCode === "send-failed"
-        ? "Anmeldelink konnte nicht versendet werden. Bitte erneut versuchen."
+        ? "Code konnte nicht gesendet werden. Versuche es gleich noch einmal."
         : "";
 
   return (
-    <main className="join-screen app-canvas lb-motion-root">
-      <section className="join-card app-island mode-card lb-enter-sheet" role="dialog" aria-modal="true" aria-labelledby="login-title">
-        <p className="eyebrow">Dozentenbereich</p>
-        <h1 id="login-title">Mit dienstlicher E-Mail anmelden</h1>
-        <p className="join-lead">
-          Kein Passwort. Wir senden einen Anmeldelink. Ist die Adresse neu, entsteht das Dozentenkonto
-          nach der Bestätigung; ist sie bekannt, landest du direkt im Studio.
-        </p>
+    <main className="join-screen app-canvas login-screen lb-motion-root">
+      <section className="join-card app-island login-card lb-enter-sheet">
+        <h1>Anmelden</h1>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
+        {configuredTestAccounts().length > 0 && <TestAccountForm />}
       </section>
     </main>
   );

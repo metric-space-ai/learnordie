@@ -33,6 +33,8 @@ export type AICompleteInput = {
   maxOutputTokens?: number;
   temperature?: number;
   responseFormat?: "json_object";
+  /** Optionales Zeitlimit fuer diesen Aufruf (max. 60 s); sonst LEARNBUDDY_AI_TIMEOUT_MS. */
+  timeoutMs?: number;
 };
 
 export interface AIProvider {
@@ -153,7 +155,8 @@ function normalizeResponsesBaseUrl(value: string) {
   return endpoint;
 }
 
-function providerTimeoutMs() {
+function providerTimeoutMs(requested?: number) {
+  if (requested && Number.isFinite(requested) && requested > 0) return Math.min(60_000, Math.round(requested));
   const configured = Number(process.env.LEARNBUDDY_AI_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0 ? Math.min(60_000, Math.round(configured)) : 15_000;
 }
@@ -323,7 +326,7 @@ class OpenAICompatibleProvider implements AIProvider {
 
   async complete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     try {
       const response = await fetch(this.endpoint, {
@@ -378,7 +381,7 @@ class OpenAICompatibleProvider implements AIProvider {
 
   async streamComplete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     const response = await fetch(this.endpoint, {
       method: "POST",
@@ -479,7 +482,7 @@ class ResponsesProxyProvider implements AIProvider {
 
   async complete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     try {
       const response = await fetch(this.endpoint, {
@@ -525,7 +528,7 @@ class ResponsesProxyProvider implements AIProvider {
 
   async streamComplete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     const response = await fetch(this.endpoint, {
       method: "POST",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { hasCompleteQuestionFamilies } from "@/lib/questions";
 
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
@@ -48,7 +49,10 @@ const questionSchema = z.object({
   sourceRef: z.string().min(1).optional(),
   learningObjective: z.string().min(1).optional(),
   reviewStatus: z.enum(["draft", "reviewed", "approved", "rejected"]).optional(),
-  reviewerComment: z.string().optional()
+  reviewerComment: z.string().optional(),
+  slideId: z.string().min(1).max(120).optional(),
+  familyId: z.string().min(1).max(120).optional(),
+  familySource: z.string().min(1).max(60).optional()
 });
 
 const improvementDraftEventSchema = z.object({
@@ -84,7 +88,12 @@ const updateLectureSchema = z.object({
   saveEvaluationAsSeriesTemplate: z.boolean().optional(),
   slides: z.array(slideSchema).min(1).max(40).optional(),
   slideDocument: slideDocumentSchema.optional(),
-  questions: z.array(questionSchema).length(4).optional(),
+  questions: z
+    .array(questionSchema)
+    .min(4)
+    .max(800)
+    .refine(hasCompleteQuestionFamilies, "Jede Frage braucht genau eine Variante pro Niveau (4.0, 3.0, 2.0, 1.0).")
+    .optional(),
   improvementDraftEvent: improvementDraftEventSchema.optional(),
   status: z
     .enum(["draft", "material_processing", "question_review", "ready_for_live", "live", "learn_active", "archived"])

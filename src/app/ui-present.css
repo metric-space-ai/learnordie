@@ -1,0 +1,52 @@
+/* UI overhaul: ui-present */
+
+/* Presentation view: "Beenden" text button in the action stack, same chrome as the icon buttons. */
+.action-stack .live-back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid oklch(20% 0.03 236 / 0.22);
+  border-radius: 9px;
+  background: oklch(98% 0.006 230 / 0.92);
+  box-shadow: 0 12px 34px oklch(15% 0.04 235 / 0.2);
+  backdrop-filter: blur(14px);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 850;
+  text-decoration: none;
+  transition:
+    background-color var(--lb-dur-control) var(--lb-ease-standard),
+    border-color var(--lb-dur-control) var(--lb-ease-standard);
+}
+
+.action-stack .live-back-link:hover {
+  border-color: oklch(70% 0.09 72 / 0.72);
+  background: oklch(96% 0.028 74 / 0.94);
+}
+
+/* Transcript sheet: no decorative handle bar. */
+.transcript-panel::before {
+  content: none;
+  display: none;
+}
+
+/* Transcript sheet: toggles show their state instead of flipping their label. */
+.transcript-panel .plain-button[aria-pressed="true"] {
+  border-color: oklch(70% 0.09 72);
+  background: var(--accent-soft);
+  color: oklch(30% 0.09 72);
+}
+
+/* Slide editor: the AI proposal text is content, not a caption. */
+.studio-agent-popover .studio-agent-proposal {
+  max-height: 180px;
+  overflow: auto;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -955,38 +955,6 @@ button {
   background-size: 36px 36px, 36px 36px, 100% 100%, auto;
 }
 
-.mode-screen::before,
-.mode-screen::after {
-  content: "";
-  position: fixed;
-  pointer-events: none;
-}
-
-.mode-screen::before {
-  left: 24px;
-  right: 24px;
-  bottom: 34px;
-  height: 1px;
-  border-radius: var(--lb-radius-pill);
-  background:
-    linear-gradient(90deg, transparent, oklch(98% 0.006 230 / 0.26) 12%, transparent 30%),
-    linear-gradient(90deg, transparent 60%, oklch(67% 0.11 74 / 0.48), transparent 78%),
-    repeating-linear-gradient(90deg, transparent 0 28px, oklch(98% 0.006 230 / 0.15) 28px 29px);
-  animation: lb-stage-axis-in var(--lb-dur-panel) var(--lb-ease-mask) 420ms backwards;
-}
-
-.mode-screen::after {
-  top: 24px;
-  right: 24px;
-  width: 130px;
-  height: 130px;
-  border-top: 1px solid oklch(98% 0.006 230 / 0.2);
-  border-right: 1px solid oklch(98% 0.006 230 / 0.2);
-  border-radius: 0 var(--lb-radius-cover) 0 0;
-  opacity: 0.8;
-  animation: lb-register-corner-in var(--lb-dur-panel) var(--lb-ease-mask) 220ms backwards;
-}
-
 .mode-card {
   position: relative;
   overflow: hidden;
@@ -1009,23 +977,6 @@ button {
     oklch(62% 0.085 208),
     oklch(60% 0.11 150)
   );
-}
-
-.mode-card::after {
-  content: "";
-  position: absolute;
-  right: 18px;
-  bottom: 16px;
-  width: min(220px, 32%);
-  height: 42px;
-  border-right: 1px solid var(--lb-blueprint-line);
-  border-bottom: 1px solid var(--lb-blueprint-line);
-  border-radius: 0 0 var(--lb-radius-panel) 0;
-  background:
-    linear-gradient(90deg, transparent, var(--lb-blueprint-line-soft), transparent) 0 18px / 100% 1px no-repeat;
-  pointer-events: none;
-  animation: lb-register-scan-in var(--lb-dur-panel) var(--lb-ease-mask) 360ms backwards;
-  transform-origin: right center;
 }
 
 .eyebrow {
@@ -1181,37 +1132,6 @@ button {
     var(--slide);
   box-shadow: 0 24px 90px oklch(5% 0.02 236 / 0.25);
   overflow: hidden;
-}
-
-.home-app-stage::before,
-.home-app-stage::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.home-app-stage::before {
-  inset: 18px;
-  border-radius: calc(var(--lb-radius-stage) - 4px);
-  background:
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left top / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right top / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left bottom / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right bottom / 72px 1px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left top / 1px 72px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right top / 1px 72px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) left bottom / 1px 72px no-repeat,
-    linear-gradient(oklch(55% 0.06 218 / 0.14), oklch(55% 0.06 218 / 0.14)) right bottom / 1px 72px no-repeat;
-}
-
-.home-app-stage::after {
-  left: 50%;
-  bottom: 28px;
-  width: min(420px, calc(100% - 72px));
-  height: 1px;
-  border-radius: var(--lb-radius-pill);
-  background: linear-gradient(90deg, transparent, oklch(52% 0.07 208 / 0.28), transparent);
-  transform: translateX(-50%);
 }
 
 .home-route-cover {
@@ -5252,6 +5172,15 @@ textarea.review-live-explanation {
 .primary-button:disabled {
   cursor: wait;
   opacity: 0.62;
+}
+
+a.primary-button,
+a.plain-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  text-decoration: none;
 }
 
 .lb-icon {
@@ -11937,5 +11866,116 @@ h1, h2, .question, .ld-slide-renderer, .join-card h1, .student-series h2, .home-
     width: auto;
     max-width: none;
     max-height: calc(100svh - 80px);
+  }
+}
+/* Mehrere Fragen je Folie: Blaettern zwischen Fragenfamilien. */
+.question-family-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.question-family-stepper button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.question-family-stepper button:hover,
+.question-family-stepper button:focus-visible {
+  border-color: color-mix(in oklch, var(--question-accent) 72%, var(--line));
+}
+
+.question-next-family {
+  justify-self: start;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in oklch, var(--question-accent) 72%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--question-accent) 18%, var(--panel));
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.studio-present-link {
+  white-space: nowrap;
+}
+
+.studio-engine-editor-panel button,
+.studio-agent-popover button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.studio-engine-editor-panel select,
+.studio-engine-editor-panel textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+
+/* Keine Zierlinien, Griffleisten oder Farbstreifen: sie tragen keine Information. */
+.mode-card::before,
+.overlay-panel::before,
+.transcript-panel::before,
+.chat-question-panel::before,
+.overlay-panel::after,
+.transcript-panel::after,
+.chat-question-panel::after,
+.overlay-head::after,
+.studio-context-drawer::before,
+.studio-slide-source-overlay::before,
+.studio-slide-tool-overlay::before,
+.slide-screen::after,
+.studio-slide-stage::after,
+.studio-filmstrip-rail::before,
+.studio-bottom-bar::before,
+.learn-bar::before {
+  content: none;
+}
+
+.mode-screen {
+  background: linear-gradient(155deg, oklch(12% 0.03 236), oklch(18% 0.032 226));
+}
+
+.join-screen {
+  background: var(--stage);
+}
+
+/* Aktionen rechts unten stapeln, damit sie neben dem Quizfenster frei bleiben. */
+@media (min-width: 861px) {
+  .action-stack {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .action-stack > .icon-action {
+    width: 100%;
   }
 }
