@@ -481,7 +481,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
       <details className="presentation-controls" ref={controlsRef}>
       <summary aria-label="Präsentationssteuerung" title="Präsentationssteuerung öffnen">⋯</summary>
-      <div className="presentation-control-panel" aria-label="Präsentationssteuerung">
+      <div className="presentation-control-panel" aria-label="Live-Werkzeuge">
       {(!live.connected || live.error || live.state?.status !== "active") && <aside className="presentation-connection-notice" role="status">
         {live.error || (!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Live-Sitzung beendet." : "Live-Sitzung wird vorbereitet …")}
         {live.connected && live.state?.status !== "active" && <button type="button" disabled={live.busy} onClick={() => void live.send({ action: "start" })}>Neue Live-Sitzung starten</button>}

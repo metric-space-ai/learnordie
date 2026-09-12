@@ -101,6 +101,8 @@ html[data-theme="dark"] .native-workspace {
 .native-canvas-host > div { width: 100%; height: 100%; }
 .native-canvas .excalidraw .HintViewer { display: none; }
 .native-canvas-view .excalidraw :is(.layer-ui__wrapper, .App-bottom-bar, .FixedSideContainer) { display: none; }
+/* Presentations do not need the editor's first-click-to-activate embed gate. */
+.native-canvas-view .excalidraw__embeddable-container__inner:has(.learnordie-canvas-embed-host) { pointer-events: all !important; }
 .native-canvas .excalidraw-hyperlinkContainer:has(a[href^="https://learnordie.invalid/embed/"]) { display: none; }
 /* Excalidraw inverts its drawing canvas, but three.js renders its own colors. */
 .native-canvas .excalidraw.theme--dark .learnordie-canvas-scene canvas { filter: none; }
