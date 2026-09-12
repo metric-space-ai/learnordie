@@ -49,7 +49,7 @@ export interface AnalyticsRepository {
   recordEvent(input: AnalyticsEventInput): Promise<{ event: AnalyticsEventRecord; count: number } | null>;
   listEvents(): Promise<AnalyticsEventRecord[]>;
   getLectureSummary(input: { lectureId: string; lectureToken: string; seriesTitle?: string }): Promise<LectureAnalyticsSummary>;
-  getLectureLeaderboard(input: { lectureId: string; lectureToken: string; currentAnonymousKey?: string; seriesTitle?: string }): Promise<LeaderboardEntry[]>;
+  getLectureLeaderboard(input: { lectureId: string; lectureToken: string; currentAnonymousKey?: string; seriesId?: string; seriesTitle?: string }): Promise<LeaderboardEntry[]>;
 }
 
 type LocalAnalyticsData = {
@@ -176,15 +176,13 @@ function buildLeaderboardEntries(events: AnalyticsEventRecord[], currentAnonymou
 
 async function withClaimLabels(
   entries: Array<LeaderboardEntry & { anonymousKey?: string }>,
-  seriesTitle?: string
+  seriesId?: string
 ): Promise<LeaderboardEntry[]> {
-  if (!seriesTitle || entries.length === 0) {
+  if (!seriesId || entries.length === 0) {
     return entries.map(({ anonymousKey: _k, ...entry }) => entry);
   }
-  const { seriesIdFromTitle } = await import("@/lib/series");
   const { getStudentRepository } = await import("./student-repository");
   const { rankingDisplayName } = await import("./student-claims");
-  const seriesId = seriesIdFromTitle(seriesTitle);
   const repository = getStudentRepository();
   const labeled = [];
   const used = new Map<string, number>();
@@ -1214,9 +1212,9 @@ class LocalAnalyticsRepository implements AnalyticsRepository {
     return buildSummary({ ...input, events });
   }
 
-  async getLectureLeaderboard(input: { lectureId: string; lectureToken: string; currentAnonymousKey?: string; seriesTitle?: string }) {
+  async getLectureLeaderboard(input: { lectureId: string; lectureToken: string; currentAnonymousKey?: string; seriesId?: string; seriesTitle?: string }) {
     const events = (await this.listEvents()).filter((event) => event.lectureToken === input.lectureToken);
-    return withClaimLabels(buildLeaderboardEntries(events, input.currentAnonymousKey), input.seriesTitle);
+    return withClaimLabels(buildLeaderboardEntries(events, input.currentAnonymousKey), input.seriesId);
   }
 }
 
@@ -1405,7 +1403,7 @@ class PostgresAnalyticsRepository implements AnalyticsRepository {
     });
   }
 
-  async getLectureLeaderboard(input: { lectureId: string; lectureToken: string; currentAnonymousKey?: string; seriesTitle?: string }) {
+  async getLectureLeaderboard(input: { lectureId: string; lectureToken: string; currentAnonymousKey?: string; seriesId?: string; seriesTitle?: string }) {
     const rows = await this.db
       .select({
         event: analyticsEvents,
@@ -1426,7 +1424,7 @@ class PostgresAnalyticsRepository implements AnalyticsRepository {
       occurredAt: row.event.occurredAt.toISOString()
     }));
 
-    return withClaimLabels(buildLeaderboardEntries(events, input.currentAnonymousKey), input.seriesTitle);
+    return withClaimLabels(buildLeaderboardEntries(events, input.currentAnonymousKey), input.seriesId);
   }
 
   private async findOrCreateParticipantSession(input: { lectureId: string; anonymousKey: string; pseudonym: string }) {

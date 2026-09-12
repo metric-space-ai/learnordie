@@ -402,6 +402,8 @@ export type Lecture = {
   publicToken: string;
   ownerEmail?: string;
   title: string;
+  /** Canonical lecture_series UUID in Postgres; absent in legacy local data. */
+  seriesId?: string;
   seriesTitle: string;
   language: "de";
   status: LectureStatus;

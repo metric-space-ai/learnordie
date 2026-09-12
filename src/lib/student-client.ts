@@ -16,7 +16,9 @@ export function ensureStudentEnrollment(input: {
   seriesId: string; seriesTitle: string; lectureId: string;
   source: "direct_live_link" | "direct_learn_link";
 }): Promise<void> {
-  const key = `${getOrCreateStudentKey()}:${input.seriesId}`;
+  // A visit to another lecture must still validate/touch its enrollment; titles
+  // and series-wide promise caching must never suppress that server check.
+  const key = `${getOrCreateStudentKey()}:${input.seriesId}:${input.lectureId}`;
   const existing = enrollmentRequests.get(key);
   if (existing) return existing;
   const operation = (async () => {

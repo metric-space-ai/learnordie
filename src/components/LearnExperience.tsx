@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { MAX_LEARN_QUESTION_DENSITY, MIN_LEARN_QUESTION_DENSITY, normalizeLearnQuestionDensity } from "@/lib/learn-settings";
-import { seriesIdFromTitle } from "@/lib/series";
+import { seriesIdForLecture } from "@/lib/series";
 import { ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
 import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
 import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
@@ -234,7 +234,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
 
   async function recordLearnEvent(eventType: string, payload: Record<string, unknown>) {
     try {
-      await ensureStudentEnrollment({ seriesId: seriesIdFromTitle(lecture.seriesTitle), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link" });
+      await ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link" });
     } catch { return; }
     await fetch("/api/events", {
       method: "POST",

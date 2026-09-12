@@ -15,7 +15,7 @@ import {
   animateStudioSlideSharedElement,
   animateStudioToolSharedElement
 } from "@/lib/motion";
-import { seriesIdFromTitle } from "@/lib/series";
+import { seriesIdForLecture } from "@/lib/series";
 import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { buildLegacyLectureSlideDocument, hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
@@ -2593,7 +2593,8 @@ export function LecturerDashboard({
                   <strong>Beitrittscode</strong>
                 </div>
                 <JoinCodeEditor
-                  seriesId={seriesIdFromTitle(selected.seriesTitle)}
+                  key={seriesIdForLecture(selected)}
+                  seriesId={seriesIdForLecture(selected)}
                   seriesTitle={selected.seriesTitle}
                   csrfToken={csrfToken}
                 />

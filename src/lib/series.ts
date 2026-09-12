@@ -1,7 +1,10 @@
-// Client-safe, deterministic mapping from a series title to a stable series id.
-// In local mode this slug IS the series id; the server `slugify` delegates to this
-// so the client and server always agree on the id for a given title.
+// Titles are display labels, never globally unique identifiers. Only legacy
+// local records lack an explicit series ID; PostgreSQL always supplies its UUID.
+export function seriesIdForLecture(lecture: { seriesId?: string; seriesTitle: string }): string {
+  return lecture.seriesId ?? seriesIdFromTitle(lecture.seriesTitle);
+}
 
+/** Legacy/local slug; do not derive an ID from a Postgres lecture title. */
 export function seriesIdFromTitle(title: string): string {
   const slug = title
     .toLowerCase()
