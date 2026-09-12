@@ -37,6 +37,8 @@ const LIVE_QUESTION_MAX_PENDING_CHARS = 3000;
 export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lecture; csrfToken: string }) {
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const live = useLiveSession(lecture.publicToken, leaderboardOpen, { id: lecture.id, csrfToken });
+  const sendLive = live.send;
+  const liveStatus = live.state?.status;
   const slide = Math.min(live.state?.slideIndex ?? 0, Math.max(0, lecture.slides.length - 1));
   const showJoinIntro = live.state?.showIntro ?? true;
   const questionOpen = Boolean(live.connected && live.state?.round);
@@ -69,24 +71,24 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const slideRef = useRef(slide);
 
   useEffect(() => {
-    if (live.state?.status === "waiting" && !startAttempted.current) {
+    if (liveStatus === "waiting" && !startAttempted.current) {
       startAttempted.current = true;
-      void live.send({ action: "start" });
+      void sendLive({ action: "start" });
     }
-  }, [live.state?.status, live.send]);
+  }, [liveStatus, sendLive]);
 
   const toggleQuestion = useCallback(() => {
-    void live.send(questionOpen ? { action: "close" } : { action: "fire", familyIndex, durationSeconds });
-  }, [live.send, questionOpen, familyIndex, durationSeconds]);
+    void sendLive(questionOpen ? { action: "close" } : { action: "fire", familyIndex, durationSeconds });
+  }, [sendLive, questionOpen, familyIndex, durationSeconds]);
 
   const previous = useCallback(() => {
     setFamilyIndex(0);
-    void live.send({ action: "slide", slideIndex: Math.max(0, slide - 1), showIntro: slide === 0 });
-  }, [slide, live.send]);
+    void sendLive({ action: "slide", slideIndex: Math.max(0, slide - 1), showIntro: slide === 0 });
+  }, [slide, sendLive]);
   const next = useCallback(() => {
     setFamilyIndex(0);
-    void live.send({ action: "slide", slideIndex: showJoinIntro ? 0 : Math.min(slide + 1, lecture.slides.length - 1), showIntro: false });
-  }, [showJoinIntro, slide, lecture.slides.length, live.send]);
+    void sendLive({ action: "slide", slideIndex: showJoinIntro ? 0 : Math.min(slide + 1, lecture.slides.length - 1), showIntro: false });
+  }, [showJoinIntro, slide, lecture.slides.length, sendLive]);
 
   function stopListening() {
     autoSegmentingRef.current = false;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CanvasElement, CanvasScene } from "@learnordie/slide-engine/excalidraw/canvas-schema";
 import type { SlideAssetRef } from "@learnordie/slide-engine/schema";
 import { loadCanvasRuntime } from "@/lib/excalidraw-runtime";
@@ -27,18 +27,21 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
 }) {
   const host = useRef<HTMLDivElement>(null);
   const callbacks = useRef({ onChange, onReady });
-  callbacks.current = { onChange, onReady };
   const initial = useRef(scene);
-  initial.current = scene;
   const initialTitle = useRef(title);
   const assetsRef = useRef(assets);
-  assetsRef.current = assets;
   const apiRef = useRef<CanvasApi | null>(null);
   const lastScene = useRef(JSON.stringify(scene));
   const [failure, setFailure] = useState("");
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [assetWarning, setAssetWarning] = useState("");
+
+  useLayoutEffect(() => {
+    callbacks.current = { onChange, onReady };
+    initial.current = scene;
+    assetsRef.current = assets;
+  }, [onChange, onReady, scene, assets]);
 
   useEffect(() => {
     let cancelled = false;

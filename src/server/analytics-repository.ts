@@ -179,7 +179,11 @@ async function withClaimLabels(
   seriesId?: string
 ): Promise<LeaderboardEntry[]> {
   if (!seriesId || entries.length === 0) {
-    return entries.map(({ anonymousKey: _k, ...entry }) => entry);
+    return entries.map((entry) => {
+      const publicEntry = { ...entry };
+      delete publicEntry.anonymousKey;
+      return publicEntry;
+    });
   }
   const { getStudentRepository } = await import("./student-repository");
   const { rankingDisplayName } = await import("./student-claims");
@@ -193,7 +197,8 @@ async function withClaimLabels(
     const count = (used.get(key) ?? 0) + 1;
     used.set(key, count);
     if (count > 1) name = `${name.slice(0, 36)}·${count}`;
-    const { anonymousKey: _ignored, ...rest } = entry;
+    const rest = { ...entry };
+    delete rest.anonymousKey;
     labeled.push({ ...rest, name });
   }
   return labeled;

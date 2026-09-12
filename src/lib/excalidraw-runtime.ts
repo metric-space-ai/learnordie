@@ -106,9 +106,9 @@ function loadModule(): Promise<CanvasRuntime> {
     const clean = () => { window.clearTimeout(timer); script.onload = null; script.onerror = null; script.remove(); };
     const fail = () => { clean(); reject(new Error(browser.__learnordieCanvasModuleError ?? "Die lokale Zeichen-Engine konnte nicht geladen werden. Bitte erneut versuchen oder die Seite neu laden.")); };
     script.onload = () => {
-      const module = browser.__learnordieCanvasModule;
-      if (!module || [module.mountExcalidraw, module.createElement, module.convertToExcalidrawElements, module.exportToSvg].some((fn) => typeof fn !== "function")) return fail();
-      clean(); resolve(module);
+      const loadedModule = browser.__learnordieCanvasModule;
+      if (!loadedModule || [loadedModule.mountExcalidraw, loadedModule.createElement, loadedModule.convertToExcalidrawElements, loadedModule.exportToSvg].some((fn) => typeof fn !== "function")) return fail();
+      clean(); resolve(loadedModule);
     };
     script.onerror = fail;
     document.head.append(script);

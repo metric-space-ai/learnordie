@@ -14,7 +14,7 @@ function harness({ failStyle = false, failScript = false, failFont = false } = {
   const nodes = new Map();
   const updates = [];
   let exportOptions;
-  const module = {
+  const mockRuntimeModule = {
     createElement: (type, props, ...children) => ({ type, props, children }),
     convertToExcalidrawElements: (elements) => elements.map((item, i) => ({ id: `element-${i}`, ...item })),
     exportToSvg: async (options) => { exportOptions = options; return {}; },
@@ -34,7 +34,7 @@ function harness({ failStyle = false, failScript = false, failFont = false } = {
         assert.match(node.src, /^\/learnordie-excalidraw-loader\.mjs\?/);
         queueMicrotask(() => {
           if (failScript) { failScript = false; node.onerror?.(); }
-          else { window.__learnordieCanvasModule = module; node.onload?.(); }
+          else { window.__learnordieCanvasModule = mockRuntimeModule; node.onload?.(); }
         });
       } else {
         counts.styles++;

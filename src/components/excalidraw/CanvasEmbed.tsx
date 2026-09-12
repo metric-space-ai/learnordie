@@ -64,7 +64,7 @@ export function buildCanvasHtmlDocument(html: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CANVAS_HTML_CSP}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;min-height:100%;box-sizing:border-box}body{padding:16px;font-family:system-ui,sans-serif;color:#20252b;overflow-wrap:anywhere}*,*:before,*:after{box-sizing:inherit}img,svg{max-width:100%}</style></head><body>${template.innerHTML}</body></html>`;
 }
 
-class EmbedErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class EmbedErrorBoundary extends Component<{ children?: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
@@ -122,7 +122,7 @@ export function renderCanvasEmbeddable(runtime: CanvasRuntime, element: CanvasEl
         if (ownedRoot) queueMicrotask(() => ownedRoot.unmount());
       }
       paint() {
-        this.root?.render(createElement(EmbedErrorBoundary, { key: this.props.element.id, children: createElement(EmbedContent, { element: this.props.element }) }));
+        this.root?.render(createElement(EmbedErrorBoundary, { key: this.props.element.id }, createElement(EmbedContent, { element: this.props.element })));
       }
       render() {
         return runtime.createElement("div", {

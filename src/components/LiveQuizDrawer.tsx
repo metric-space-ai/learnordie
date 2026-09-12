@@ -20,7 +20,7 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
   const titleId = `live-question-${round.id}`;
   // Once displayed, a round's local deadline cannot move backwards even if a
   // later network sample is faster or the device's wall clock changes.
-  const deadlineRef = useRef(performance.now() + round.expiresAt - Date.now() - serverOffset);
+  const deadlineRef = useRef<number | null>(null);
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -29,8 +29,9 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
     return () => { if (root.contains(document.activeElement)) previous?.focus(); };
   }, []);
   useEffect(() => {
-    deadlineRef.current = Math.min(deadlineRef.current, performance.now() + round.expiresAt - Date.now() - serverOffset);
-    const tick = () => setSeconds(Math.max(0, Math.ceil((deadlineRef.current - performance.now()) / 1000)));
+    const sampledDeadline = performance.now() + round.expiresAt - Date.now() - serverOffset;
+    deadlineRef.current = Math.min(deadlineRef.current ?? sampledDeadline, sampledDeadline);
+    const tick = () => setSeconds(Math.max(0, Math.ceil(((deadlineRef.current ?? sampledDeadline) - performance.now()) / 1000)));
     tick();
     const timer = setInterval(tick, 200);
     return () => clearInterval(timer);
@@ -38,7 +39,7 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
   const effectiveReceipt = saved ?? receipt;
   const question = round.questions.find((item) => item.level === (effectiveReceipt?.level ?? level)) ?? round.questions[0];
   async function answer(selected: string) {
-    if (!onAnswer || pendingRef.current || effectiveReceipt || performance.now() >= deadlineRef.current) return;
+    if (!onAnswer || pendingRef.current || effectiveReceipt || deadlineRef.current === null || performance.now() >= deadlineRef.current) return;
     pendingRef.current = true;
     setPending(true);
     setError("");

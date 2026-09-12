@@ -13,7 +13,9 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
   const stateRef = useRef<LiveSessionView | null>(null);
   const busyRef = useRef(false);
   const lastSuccess = useRef(0);
-  const offset = useRef(0);
+  const [serverOffset, setServerOffset] = useState(0);
+  const lecturerId = lecturer?.id;
+  const csrfToken = lecturer?.csrfToken;
   const refresh = useCallback(() => setRefreshKey((value) => value + 1), []);
   const accept = useCallback((incoming: LiveSessionView, requestStartedAt: number) => {
     const current = stateRef.current;
@@ -22,7 +24,7 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
     // serverNow is sampled AFTER request start. Using the start, not response
     // completion, is conservative: network/serialization delay can only close
     // a question early, never add time. Five-second request timeout bounds this.
-    offset.current = incoming.serverNow - requestStartedAt;
+    setServerOffset(incoming.serverNow - requestStartedAt);
     lastSuccess.current = Date.now();
     setState(incoming);
     setConnected(true);
@@ -60,13 +62,13 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
   }, [token, leaderboard, refreshKey, accept, refresh]);
 
   const send = useCallback(async (command: Omit<Extract<LiveCommand, { action: "slide" }>, "revision"> | Omit<Extract<LiveCommand, { action: "fire" }>, "revision"> | { action: "start" | "close" | "end" }) => {
-    if (!lecturer || busyRef.current || !stateRef.current) return false;
+    if (!lecturerId || !csrfToken || busyRef.current || !stateRef.current) return false;
     busyRef.current = true;
     setBusy(true);
     setError("");
     try {
       const startedAt = Date.now();
-      const response = await fetch(`/api/lectures/${lecturer.id}/live-session`, { method: "POST", headers: { "content-type": "application/json", "x-learnbuddy-csrf": lecturer.csrfToken }, body: JSON.stringify({ ...command, revision: stateRef.current.revision }), signal: AbortSignal.timeout(6000) });
+      const response = await fetch(`/api/lectures/${lecturerId}/live-session`, { method: "POST", headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken }, body: JSON.stringify({ ...command, revision: stateRef.current.revision }), signal: AbortSignal.timeout(6000) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Live-Befehl nicht gespeichert.");
       accept(body as LiveSessionView, startedAt);
@@ -76,6 +78,6 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
       refresh();
       return false;
     } finally { busyRef.current = false; setBusy(false); }
-  }, [lecturer?.id, lecturer?.csrfToken, accept, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { state, connected, error: error || connectionError, busy, send, refresh, serverOffset: offset.current };
+  }, [lecturerId, csrfToken, accept, refresh]);
+  return { state, connected, error: error || connectionError, busy, send, refresh, serverOffset };
 }

@@ -62,7 +62,7 @@ function useIslandFocus(active: boolean) {
   return ref;
 }
 
-export function JoinFlow({ code, target, hasProfile: _hasProfile, hasClaim = false, pseudonym }: JoinFlowProps) {
+export function JoinFlow({ code, target, hasClaim = false, pseudonym }: JoinFlowProps) {
   const router = useRouter();
   const [retryCode, setRetryCode] = useState("");
   const [pseudonymInput, setPseudonymInput] = useState(pseudonym ?? "");

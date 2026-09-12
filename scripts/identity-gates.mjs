@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 // Contract gates T01–T07, T14–T16 against a running local server.
-import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";

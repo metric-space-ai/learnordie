@@ -26,19 +26,20 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityMessage, setIdentityMessage] = useState("");
   const live = useLiveSession(lecture.publicToken, leaderboardOpen);
+  const seriesId = seriesIdForLecture(lecture);
   const round = live.connected ? live.state?.round : null;
   const enrollment = () => ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
   useEffect(() => { if (live.state?.receipt) setAnsweredOnce(true); }, [live.state?.receipt]);
 
   useEffect(() => {
     let stopped = false;
-    ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" })
-      .then(() => fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesIdForLecture(lecture))}`, { cache: "no-store" }))
+    ensureStudentEnrollment({ seriesId, seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" })
+      .then(() => fetch(`/api/student/claim?seriesId=${encodeURIComponent(seriesId)}`, { cache: "no-store" }))
       .then((response) => response.json())
       .then((data) => { if (!stopped && data.claim?.displayName) setPseudonym(data.claim.displayName); })
       .catch(() => undefined);
     return () => { stopped = true; };
-  }, [lecture.id, lecture.publicToken, lecture.seriesTitle]);
+  }, [lecture.id, lecture.seriesTitle, seriesId]);
 
   async function answer(level: QuestionLevel, selected: string): Promise<LiveAnswerReceipt> {
     if (!round || !live.state?.sessionId) throw new Error("Diese Frage ist nicht mehr geöffnet.");
