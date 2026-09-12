@@ -16,6 +16,7 @@ const child = spawn(
     "src/lib/canvas-sync.test.ts",
     "src/components/theme/theme-store.test.mjs",
     "src/server/model-demo.test.ts",
+    "src/lib/model-original-template.test.ts",
     "src/server/route-params.test.ts",
     "src/server/student-claims.test.ts",
     "src/server/test-accounts.test.ts",

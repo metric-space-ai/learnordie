@@ -1,4 +1,14 @@
-# Modell-Slides als persönlicher Beispielsatz
+# Modell-Import: aktuelle Originalvorlesung
+
+The explicit `POST /api/lectures/model-demo` now imports the full original lecture
+with a new owner/version key, never overwriting the earlier example. See
+[model-original-conversion.md](model-original-conversion.md) for the current
+contract, source inventory, coverage, readable notes and verification boundaries.
+
+## Historical v1 example (not the current endpoint template)
+
+The following records the previous implementation. Its factory remains for
+compatibility tests; no existing example data is migrated or replaced.
 
 ## Integration
 

@@ -1,0 +1,111 @@
+{
+  "html": {
+    "file": "Modellbegriff_ThreeJS_clean.html",
+    "sha256": "83fb6c5280eb2ac8b4bb30bdd45a62bdd15f51d157cac5b2895c0e4e6ccc039e",
+    "authoredDataSha256": "a5012ec4987534b0d0c03ee3d56e9b3850a841b1b442c6d9e8b232b475a6351e",
+    "sourceDialogSha256": "236e61a3ecb6fee4e3b7ad6dcd07ab8d4822847ba2b693126378b40fcea43c64"
+  },
+  "companion": {
+    "file": "Der_Begriff_Modell_im_Wandel_der_Zeit_Vorlesungsunterlage.md",
+    "sha256": "d4f448eb8a449475cbc861dbf8eb483d5b51e2f8af22413f5801c27083664da0",
+    "lines": 1350
+  },
+  "authority": "Scene-port header: packages/slide-engine/src/scenes/modell-factories.ts; companion explicitly names the clean HTML as its presentation.",
+  "fieldsPerSlide": [
+    "nav",
+    "kicker",
+    "title",
+    "lead",
+    "formula",
+    "takeaway",
+    "question",
+    "scene",
+    "sceneTitle",
+    "sceneSub",
+    "accent",
+    "source",
+    "notes"
+  ],
+  "sections": [
+    {
+      "title": "Von der Gedankenminiatur über das Naturgesetz zur gelernten, technisch wirksamen Funktion",
+      "startLine": 3,
+      "sha256": "a7b9777e17e09faad865449f714c6a6e4dca46c749abb1a306cbe808bf270357"
+    },
+    {
+      "title": "Orientierung und Quellenbasis",
+      "startLine": 12,
+      "sha256": "aca2114870ce29b3e24ed2029d5ef04f2651c784a964ec12d6ccc776c0c44520"
+    },
+    {
+      "title": "1. Ein Begriff im Wandel: die leitende Unterscheidung",
+      "startLine": 46,
+      "sha256": "d3e57e61bfc32fdd6ea9612d35c9eab44e3f9911504ffd570d8e4beb833b3dfb"
+    },
+    {
+      "title": "2. Die Gedankenminiatur: Wirklichkeit vorstellbar machen",
+      "startLine": 94,
+      "sha256": "108a6805a0691763b0aadfec9458a4a91eb423d95c4df254a2d468989851c634"
+    },
+    {
+      "title": "3. Das Naturgesetz: Beziehungen mathematisch ausdrücken",
+      "startLine": 138,
+      "sha256": "393074ea8fd3b9efc78d902db114f06b96940e2d8af1769db908d53f51f98762"
+    },
+    {
+      "title": "4. Das Naturgesetz als Modell: Beschreibung und Geltungsbereich",
+      "startLine": 251,
+      "sha256": "00bf74860e67b1dfe6ddd02256e20676309dc11c90df3c7373ed1fa04b8c3263"
+    },
+    {
+      "title": "5. Das ausführbare Modell: vom Abbild zur Wirkung",
+      "startLine": 358,
+      "sha256": "11bc3276bef3b7d01840c639ddd1bb17e71c023937686e1cd389c2e7622df016"
+    },
+    {
+      "title": "6. Das gelernte Modell: die Entstehung der Funktion gestalten",
+      "startLine": 445,
+      "sha256": "d4d2af8ede767183fcb4e1c94398432520f720008ffa42bd08241be9d864faa7"
+    },
+    {
+      "title": "7. Das LLM: Sprache als Gegenstand und Schnittstelle eines Modells",
+      "startLine": 602,
+      "sha256": "82cb83c4d9b0986cc1ec25ac23ce7decb8eaf8dd124ff62b0e5add683e4e787d"
+    },
+    {
+      "title": "8. Die Konsequenz: KI als Methode der Produktentwicklung",
+      "startLine": 684,
+      "sha256": "96887a812e7019644d45482543ffd08f2ab44feaab775df8f4d93bab64a64ace"
+    },
+    {
+      "title": "Vertiefung A. Von Tabellen zu Ähnlichkeitsräumen",
+      "startLine": 767,
+      "sha256": "7e0234eb36d3f2df531a4f60ed9f8afc09981d7cfc2fb605a9171fdfd7e69de2"
+    },
+    {
+      "title": "Vertiefung B. Von Ähnlichkeit zu einer gelernten Entscheidungsstruktur",
+      "startLine": 867,
+      "sha256": "e11886c2631f4fa5fb397495a4357c0adb7f34778c61900fb1f2bb69f3b0e6d1"
+    },
+    {
+      "title": "C. Aufgaben und Lösungshinweise",
+      "startLine": 993,
+      "sha256": "49b5689f7a47c1e680a13a8570f76e1f811a2d372ae96385ed1d05fbc57973d4"
+    },
+    {
+      "title": "D. Ablauf und Demonstrationen für den Vortrag",
+      "startLine": 1115,
+      "sha256": "12aef6a5dce4918c7df4dffc2a4292bce81100fd153c879ebc78c7877eb77824"
+    },
+    {
+      "title": "E. Begriffe und Symbole",
+      "startLine": 1200,
+      "sha256": "24d325a1ae3deefa5a34c96be11376be7a4061faf5f0c66b63d1fa92b2057219"
+    },
+    {
+      "title": "F. Quellen, zeitliche Orientierung und Abgrenzungen",
+      "startLine": 1270,
+      "sha256": "8c9c6bd32b4ab89275dc413809ed429570c459127ee2ab3aadf00ff513c40f3c"
+    }
+  ]
+}

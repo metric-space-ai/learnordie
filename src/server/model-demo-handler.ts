@@ -24,7 +24,7 @@ export async function handleModelDemoPost<S extends Session>(request: Request, d
         if (chunk.done) break;
         if (chunk.value.byteLength) {
           await reader.cancel();
-          return Response.json({ error: "Für den Beispielsatz ist kein Anfrageinhalt vorgesehen." }, { status: 400 });
+          return Response.json({ error: "Für den Originalimport ist kein Anfrageinhalt vorgesehen." }, { status: 400 });
         }
       }
     } catch {
@@ -36,6 +36,6 @@ export async function handleModelDemoPost<S extends Session>(request: Request, d
     return Response.json(result, { status: result.created ? 201 : 200 });
   } catch {
     // Database errors can contain connection details; never expose/log them here.
-    return Response.json({ error: "Modell-Beispielsatz derzeit nicht verfügbar. Bitte erneut versuchen." }, { status: 503 });
+    return Response.json({ error: "Modell-Originalvorlesung derzeit nicht verfügbar. Bitte erneut versuchen." }, { status: 503 });
   }
 }
