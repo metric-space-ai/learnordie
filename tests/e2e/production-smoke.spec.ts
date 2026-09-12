@@ -3774,6 +3774,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       hasSharedClass: ghost.classList.contains("lb-enter-shared"),
       duration: timing?.duration,
       activeSlideId: active.dataset.slideId,
+      stageSlideId: stage.dataset.slideId,
       stageEngine: stage.dataset.canvasEngine,
       ghostRadius: getComputedStyle(ghost).borderTopLeftRadius,
       ghostGrid: getComputedStyle(ghost).backgroundImage.includes("linear-gradient")
@@ -3783,6 +3784,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSharedSlideMotion.hasSharedClass).toBe(true);
   expect(studioSharedSlideMotion.duration).toBe(620);
   expect(studioSharedSlideMotion.activeSlideId).toBe(studioLecture.slides[1].id);
+  expect(studioSharedSlideMotion.stageSlideId).toBe(studioSharedSlideMotion.activeSlideId);
   expect(studioSharedSlideMotion.stageEngine).toBe("excalidraw");
   expect(studioSharedSlideMotion.ghostRadius).toBe("18px");
   expect(studioSharedSlideMotion.ghostGrid).toBe(true);
