@@ -44,6 +44,7 @@ import type {
 } from "@/lib/types";
 import { getAnalyticsRepository, type AnalyticsEventRecord } from "./analytics-repository";
 import { getDb } from "./db/client";
+import { UUID_PATTERN } from "./route-params";
 import { joinCodes, lectures as lecturesTable, lectureSeries, studentEnrollments, studentProfiles } from "./db/schema";
 import { slugify } from "./lecture-factory";
 import { computeReadinessSnapshot, type ReadinessAnswerSignal } from "./readiness";
@@ -767,8 +768,6 @@ class LocalStudentRepository implements StudentRepository {
 }
 
 // ── Postgres implementation ──────────────────────────────────────────────────
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class PostgresStudentRepository implements StudentRepository {
   private readonly db = getDb();
