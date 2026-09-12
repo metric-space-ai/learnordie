@@ -63,6 +63,16 @@ test("handler uses session identity and exposes stable result without leaking DB
   assert.doesNotMatch(await response.text(), /secret-password|private-host/);
 });
 
+test("bodyless POST represented by an empty framework stream is accepted", async () => {
+  const empty = new Request("https://example.test/api/lectures/model-demo", { method: "POST", body: "" });
+  assert.notEqual(empty.body, null);
+  const response = await handleModelDemoPost(empty, {
+    getSession: async () => ({ email: "qa@example.test" }), isValidCsrf: () => true,
+    createDemo: async () => ({ lectureId: "owned", created: true })
+  });
+  assert.equal(response.status, 201);
+});
+
 // Recording transaction double: checks the real parameterized SQL and atomic
 // service orchestration without connecting to any database. PostgreSQL locking
 // and live authorization remain integration checks for the parent QA run.

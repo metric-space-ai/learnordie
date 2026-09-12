@@ -985,7 +985,10 @@ export function LecturerDashboard({
     setModelDemoError("");
     try {
       const response = await fetch("/api/lectures/model-demo", { method: "POST", headers: csrfHeaders });
-      if (!response.ok) throw new Error("Die Modell-Slides konnten nicht geladen werden. Bitte erneut versuchen.");
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(error.error ?? "Die Modell-Slides konnten nicht geladen werden. Bitte erneut versuchen.");
+      }
       const result = await response.json() as { lectureId: string };
       const list = await fetch("/api/lectures", { cache: "no-store" });
       if (!list.ok) throw new Error("Die Vorlesungsliste konnte nicht geladen werden.");

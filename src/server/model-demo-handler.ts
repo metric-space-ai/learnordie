@@ -14,8 +14,22 @@ export async function handleModelDemoPost<S extends Session>(request: Request, d
     return Response.json({ error: "Sicherheitsprüfung fehlgeschlagen." }, { status: 403 });
   }
   // No caller-supplied owner, template, source lecture or arbitrary content.
+  // Next's Request adapter may expose an empty stream for a bodyless POST.
+  // Reject bytes, not the existence of that transport stream; never parse input.
   if (request.body !== null) {
-    return Response.json({ error: "Für den Beispielsatz ist kein Anfrageinhalt vorgesehen." }, { status: 400 });
+    const reader = request.body.getReader();
+    try {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        if (chunk.value.byteLength) {
+          await reader.cancel();
+          return Response.json({ error: "Für den Beispielsatz ist kein Anfrageinhalt vorgesehen." }, { status: 400 });
+        }
+      }
+    } catch {
+      return Response.json({ error: "Anfrage konnte nicht gelesen werden." }, { status: 400 });
+    } finally { reader.releaseLock(); }
   }
   try {
     const result = await deps.createDemo(session.email);
