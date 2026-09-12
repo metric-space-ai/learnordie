@@ -259,6 +259,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
       );
     case "law":
       return (
+        <>
         <RangeRow
           id="stiffness"
           label="Steifigkeit k"
@@ -269,6 +270,8 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
           value={state.stiffness}
           onChange={(value) => update((next) => { next.stiffness = value; })}
         />
+        <output aria-label="Kreisfrequenz" className="lb-scene3d-math">ω = {formatModellNumber(Math.sqrt(state.stiffness))} rad/s</output>
+        </>
       );
     case "limits":
       return (
