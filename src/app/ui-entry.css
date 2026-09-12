@@ -1,4 +1,4 @@
-/* UI overhaul: ui-entry */
+/* Entry surfaces share the application workspace and its theme tokens. */
 
 /* Home: nur das Beitrittsformular in der Mitte; Links oben rechts im Kopf. */
 .home-app {
@@ -36,10 +36,7 @@
 
 /* Login: plain card on the same ground as the join screen. */
 .login-screen {
-  background:
-    linear-gradient(var(--lb-stage-grid), var(--lb-stage-grid)) 0 0 / 32px 1px,
-    linear-gradient(90deg, var(--lb-stage-grid), var(--lb-stage-grid)) 0 0 / 1px 32px,
-    var(--stage);
+  background: var(--app-background);
 }
 
 .login-card::before {
@@ -68,4 +65,88 @@
 
 .readiness-action a {
   gap: 0;
+}
+
+.home-app.app-canvas,
+.join-screen.app-canvas,
+.mode-screen,
+.home-app-stage,
+.home-route-cover,
+.student-gate-cover {
+  background: var(--app-background);
+  color: var(--ink);
+}
+
+.home-app.app-canvas,
+.join-screen.app-canvas,
+.mode-screen {
+  padding-top: max(76px, calc(env(safe-area-inset-top) + 64px));
+  padding-bottom: max(32px, env(safe-area-inset-bottom));
+}
+
+.home-canvas-brand { color: var(--ink); gap: 12px; }
+.home-brand-mark { border-color: var(--line); background: var(--panel); box-shadow: none; }
+.brand-north-dot { background: var(--accent); box-shadow: none; }
+.brand-word { color: var(--ink); font-weight: 700; letter-spacing: -0.025em; }
+.brand-nord { color: inherit; }
+.brand-dot { color: var(--muted); }
+
+.join-card,
+.mode-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-island);
+}
+.home-join-island { gap: 18px; }
+.join-card h1,
+.mode-card h1 {
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.home-join-island .eyebrow,
+.mode-card .eyebrow {
+  margin-bottom: 0;
+  font-weight: 600;
+  text-transform: none;
+}
+.join-lead,
+.join-note,
+.join-hint,
+.login-support,
+.login-flow-note,
+.login-field,
+.pseudonym-custom,
+.pseudonym-choice-head,
+.join-form label { font-weight: 500; }
+.login-field,
+.join-form label,
+.pseudonym-custom { font-size: 14px; }
+.login-flow-note { border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); }
+.home-join-form label { display: grid; gap: 8px; color: var(--muted); font-size: 14px; }
+.home-join-form input { width: 100%; min-width: 0; min-height: 48px; padding: 10px 12px; }
+.home-island-links { gap: 8px 16px; padding-top: 6px; border-top: 1px solid var(--line); }
+.home-island-links .plain-button { border-color: transparent; background: transparent; padding-inline: 0; }
+.join-back,
+.home-lecturer-link,
+.login-dev-link a { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.mode-list a,
+.mode-list button { border-color: var(--line); border-radius: 8px; background: var(--panel); box-shadow: none; }
+.mode-list a::before,
+.mode-list button::before { content: none; }
+.mode-list a,
+.mode-list button { padding-left: 16px; }
+.mode-list a:hover,
+.mode-list button:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+@media (max-width: 540px) {
+  .home-app.app-canvas,
+  .join-screen.app-canvas,
+  .mode-screen { padding-inline: 16px; }
+  .home-join-island,
+  .join-card,
+  .mode-card { padding: 24px 20px; }
 }

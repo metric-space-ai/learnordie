@@ -8,13 +8,13 @@
   max-width: min(70%, 900px);
   padding: 7px 11px;
   border-radius: 6px;
-  background: #fff;
-  color: #122c3b;
+  background: var(--panel);
+  color: var(--ink);
   font-size: clamp(12px, 1.4vw, 22px);
   font-weight: 750;
   line-height: 1.25;
   overflow-wrap: anywhere;
-  box-shadow: 0 1px 8px #0002;
+  box-shadow: var(--shadow-island);
 }
 
 .lecture-join-slide {
@@ -25,8 +25,8 @@
   align-items: center;
   gap: clamp(20px, 4vw, 80px);
   padding: clamp(72px, 7vw, 120px) 7% 90px;
-  background: #f7fafb;
-  color: #122c3b;
+  background: var(--panel);
+  color: var(--ink);
 }
 .lecture-join-copy h1 { font-size: clamp(24px, 3.6vw, 60px); line-height: 1.1; margin: 12px 0 24px; }
 .lecture-join-copy p { font-size: clamp(16px, 1.6vw, 25px); }
@@ -52,14 +52,13 @@
   justify-content: center;
   height: 44px;
   padding: 0 14px;
-  border: 1px solid oklch(20% 0.03 236 / 0.22);
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: oklch(98% 0.006 230 / 0.92);
-  box-shadow: 0 12px 34px oklch(15% 0.04 235 / 0.2);
-  backdrop-filter: blur(14px);
+  background: var(--panel);
+  box-shadow: var(--shadow-island);
   color: var(--ink);
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 600;
   text-decoration: none;
   transition:
     background-color var(--lb-dur-control) var(--lb-ease-standard),
@@ -67,8 +66,8 @@
 }
 
 .action-stack .live-back-link:hover {
-  border-color: oklch(70% 0.09 72 / 0.72);
-  background: oklch(96% 0.028 74 / 0.94);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* Transcript sheet: no decorative handle bar. */
@@ -79,9 +78,9 @@
 
 /* Transcript sheet: toggles show their state instead of flipping their label. */
 .transcript-panel .plain-button[aria-pressed="true"] {
-  border-color: oklch(70% 0.09 72);
+  border-color: var(--accent);
   background: var(--accent-soft);
-  color: oklch(30% 0.09 72);
+  color: var(--app-accent-ink);
 }
 
 /* Slide editor: the AI proposal text is content, not a caption. */
@@ -94,4 +93,47 @@
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Presentation chrome, never the drawing surface or authored slide contents. */
+.slide-screen { background: var(--app-background); }
+.slide-screen::before { content: none; }
+.slide-nav,
+.learn-bar,
+.learn-more summary,
+.learn-more-panel,
+.slide-peek-return {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-island);
+  backdrop-filter: none;
+}
+.action-stack { box-shadow: none; }
+.slide-nav button,
+.slide-count { color: var(--ink); font-weight: 600; }
+.slide-nav button:hover:not(:disabled) { background: var(--accent-soft); color: var(--app-accent-ink); }
+.slide-nav button:focus-visible,
+.learn-more summary:focus-visible,
+.overlay-head button:focus-visible,
+.action-stack .live-back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.slide-nav button:disabled { opacity: 0.45; cursor: default; }
+.learn-more summary { font-weight: 600; }
+.hotspot { border-radius: 8px; border-color: var(--line); background: var(--panel); color: var(--ink); box-shadow: var(--shadow-island); }
+.hotspot::before,
+.hotspot::after { content: none; }
+.hotspot-level { padding-left: 0; font-weight: 600; }
+.overlay-panel,
+.transcript-panel,
+.chat-question-panel { border-color: var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+.overlay-head { border-bottom: 1px solid var(--line); }
+.overlay-head h2 { font-weight: 600; }
+.overlay-head button { min-width: 36px; min-height: 36px; background: var(--panel); color: var(--ink); font-weight: 500; }
+.overlay-head button:hover { background: var(--panel-soft); }
+.lecture-join-copy h1 { font-weight: 700; }
+.lecture-join-url { font-weight: 600; }
+
+@media (pointer: coarse) {
+  .overlay-head button { min-width: 44px; min-height: 44px; }
 }
