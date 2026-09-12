@@ -132,7 +132,9 @@
 }
 /* A shell can place ThemeToggle in its menu/toolbar without a duplicate dock. */
 body:has(main .app-theme-toggle) > .app-theme-control,
-body:has(.lecturer-studio .app-theme-toggle) > .app-theme-control {
+body:has(.lecturer-studio .app-theme-toggle) > .app-theme-control,
+/* Panels may live inside a lower stacking context than this body-level dock. */
+body:has(:is(.overlay-panel, .chat-question-panel, .transcript-panel, .question-drawer, [role="dialog"], [aria-modal="true"])) > .app-theme-control {
   display: none;
 }
 .app-theme-toggle {
