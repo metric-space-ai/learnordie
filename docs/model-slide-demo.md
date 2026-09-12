@@ -2,8 +2,8 @@
 
 ## Integration
 
-The parent adds the `Modell-Slides hinzufügen` button in LecturerDashboard.
-On an explicit click, send `POST /api/lectures/model-demo` with the existing
+Wire the `Modell-Slides hinzufügen` button in LecturerDashboard to an explicit
+`POST /api/lectures/model-demo` request with the existing
 lecturer session cookie and CSRF header. Omit the request body entirely.
 
 - `201 { lectureId, created: true }`: created an owned draft and eight slides.
@@ -18,15 +18,15 @@ This route requires PostgreSQL; there is no local-JSON fallback or automatic see
 
 ## Source and provenance
 
-At `9d34ea6`, `packages/slide-engine/src/scenes/modell-factories.ts` contains
+`packages/slide-engine/src/scenes/modell-factories.ts` contains
 the eight Three.js scenes `modell.morph`, `modell.miniature`, `modell.law`,
 `modell.limits`, `modell.runtime`, `modell.learning`, `modell.language`, and
 `modell.transfer`. Its header identifies a verbatim port from
-`Modellbegriff_ThreeJS_clean.html`; commit
-`5007f2aacb6353805780f0ec1f07dbb4cba30336` introduced the port.
+`Modellbegriff_ThreeJS_clean.html`.
 `modell-state.ts` contains synthetic training data, language illustration
-probabilities and didactic state logic. The tracked files do not contain the
-original HTML/full lecture deck. The existing block fixture uses only `modell.law`.
+probabilities and didactic state logic. The inspected tracked source did not
+include the original HTML/full lecture deck; this does not establish whether an
+original exists in other storage. The existing block fixture uses only `modell.law`.
 
 The new template is titled **Der Modellbegriff im Wandel – Beispielsatz**.
 It supplies newly authored German teaching text, exploration prompts, source
@@ -50,12 +50,17 @@ createLecture (which would create unrelated default content/questions).
 
 There are no schema changes, global resets, questions, join codes, enrollment
 changes or existing owner transfers. Creation is draft-only with leaderboard off.
-Dates are intentionally unscheduled. Other normal authorization/public-link
-behavior remains governed by the existing application.
+The nullable `live_at`, `exam_date` and `ai_access_until` columns are omitted on
+creation and remain NULL in storage. Existing repository read normalization can
+still supply display defaults; this endpoint does not schedule a lecture or exam.
+Slide rows use the repository's one-based `position`, `title`, and `content_json`
+fields (`eyebrow`, `topic`, `copy`, `diagram`). Their UUIDs match the canonical
+document's slide IDs. Other normal authorization/public-link behavior remains
+governed by the existing application.
 
 ## Verification boundaries
 
-The focused test command (run through the coordinated host gate) is:
+The focused test command is:
 
 ```sh
 node --experimental-strip-types --import ./scripts/alias-register.mjs --test --test-concurrency=1 src/server/model-demo.test.ts
@@ -66,10 +71,7 @@ CSRF-invalid and body-bearing requests before persistence, verify session identi
 and sanitized failures, and check SQL parameterization/owner predicates, repeated
 creation, separate owners and rollback/retry using a recording transaction double.
 The double serializes transactions; it does not prove real PostgreSQL concurrency.
-Live CSRF/session integration, real locking/rollback and visual behavior belong to
-the parent's coordinated QA run. No browser, build or live DB validation is claimed.
-
-No production database or private configuration was accessed by this sidecar.
-No database was mutated. If the parent runs persistence validation, only its
-authorized isolated `learnordie_qa_m1_20260912` database is in scope.
-Dashboard, editor, CSS and runtime changes are deliberately left to the parent.
+Integration verification must additionally cover real session/CSRF handling,
+PostgreSQL locking and rollback, and the rendered slides. These unit tests do not
+establish browser, build or live database behavior. Run persistence integration
+checks against an authorized isolated test database.
