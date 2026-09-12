@@ -1,4 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { themeBootstrap } from "@/components/theme/theme-store";
 
 import "@learnordie/slide-engine/styles/core.css";
 import "@learnordie/slide-engine/styles/themes/learnordie-north.css";
@@ -10,6 +13,7 @@ import "./ui-student.css";
 import "./ui-studio.css";
 import "./ui-present.css";
 import "./ui-live-session.css";
+import "./ui-app-design.css";
 import "./ui-excalidraw.css";
 
 export const metadata: Metadata = {
@@ -30,8 +34,18 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="de">
-      <body>{children}</body>
+    <html lang="de" suppressHydrationWarning>
+      <head>
+        <script id="app-theme-init" dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
+      <body>
+        <ThemeProvider>
+          {children}
+          <aside className="app-theme-control" aria-label="Darstellung">
+            <ThemeToggle />
+          </aside>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

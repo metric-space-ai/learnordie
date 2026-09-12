@@ -9,9 +9,9 @@
   padding: 12px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
-  color: #122c3b;
-  box-shadow: 0 8px 24px #0002;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-island);
   overflow-wrap: anywhere;
 }
 .student-connection-notice a, .student-connection-notice button { margin-left: 12px; }
@@ -38,8 +38,8 @@
 .live-controls > * { flex-shrink: 0; }
 .action-stack.live-controls > .icon-action { width: 44px; flex: 0 0 44px; }
 .action-stack.live-controls > .action-text { width: auto; flex: 0 0 auto; padding: 0 14px; font-size: 14px; }
-.live-controls label { display: grid; gap: 2px; font-size: 11px; background: white; border-radius: 8px; padding: 4px 8px; }
-.live-controls select { font: inherit; font-size: 14px; min-height: 30px; max-width: 120px; color: #122c3b; }
+.live-controls label { display: grid; gap: 2px; font-size: 12px; background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.live-controls select { font: inherit; font-size: 14px; min-height: 30px; max-width: 120px; background: var(--panel); color: var(--ink); }
 .live-identity-nudge {
   top: auto;
   bottom: 82px;
@@ -49,7 +49,7 @@
   overflow: auto;
 }
 .live-question-drawer { bottom: 82px; max-height: calc(100dvh - 150px); overflow-y: auto; }
-.live-question-drawer:focus-visible { outline: 3px solid #246f94; outline-offset: 2px; }
+.live-question-drawer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .live-question-drawer .question-feedback { overflow-wrap: anywhere; }
 .live-question-drawer .answer { min-height: 44px; }
 @media (max-width: 700px) {
