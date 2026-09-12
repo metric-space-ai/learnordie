@@ -208,6 +208,13 @@ function applyEditOperation(
   document: SlideDocument,
   operation: SlideDocumentEditOperation
 ): SlideDocumentValidationIssue | null {
+  const target = "slideId" in operation ? document.slides.find((slide) => slide.id === operation.slideId) : undefined;
+  const changesCanvasSource = ["insertBlock", "patchBlock", "replaceBlock", "deleteBlock", "moveBlock"].includes(operation.kind)
+    || (operation.kind === "updateSlide" && ["title", "layout"].some((key) => key in operation.patch));
+  const changesCanvasAsset = (operation.kind === "upsertAsset" || operation.kind === "deleteAsset") && document.slides.some((slide) => slide.canvas && slide.blocks.some((block) => "assetId" in block && block.assetId === (operation.kind === "upsertAsset" ? operation.asset.id : operation.assetId)));
+  if ((target?.canvas && changesCanvasSource) || changesCanvasAsset) {
+    return editIssue(operation, "edit.canvas_authoritative", "This slide has a native Excalidraw scene. Block/asset edits cannot replace its visible content.", ["slides"], "Edit the native scene and save it with updateSlideCanvas; metadata, notes and quiz anchors remain editable.");
+  }
   switch (operation.kind) {
     case "updateDocument":
       Object.assign(document, operation.patch);
