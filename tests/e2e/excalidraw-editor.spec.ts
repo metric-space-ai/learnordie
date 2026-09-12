@@ -200,11 +200,14 @@ test("native text is edited directly, saved in preview, reloaded and presented t
     expect((await other.request.get(`/lecturer/live/${lecture.publicToken}`)).status()).toBe(404);
     studentClean();
   } finally {
-    if (liveStarted) {
-      await page.getByRole("button", { name: "Beenden", exact: true }).click();
-      await expect(page).toHaveURL(/\/lecturer$/);
+    try {
+      if (liveStarted) {
+        await page.getByRole("button", { name: "Beenden", exact: true }).click();
+        await expect(page).toHaveURL(/\/lecturer$/);
+      }
+    } finally {
+      await Promise.all([studentContext.close(), otherContext.close()]);
     }
-    await Promise.all([studentContext.close(), otherContext.close()]);
   }
   await page.getByLabel("Studio-Menü", { exact: true }).click();
   await page.getByRole("link", { name: "Abmelden", exact: true }).click();
