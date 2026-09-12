@@ -119,6 +119,18 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     await first.getByLabel("Eigenes Pseudonym", { exact: true }).fill(`Sync Alias ${Date.now()}`);
     await first.getByRole("button", { name: "Sichern", exact: true }).click();
     await expect(first.getByLabel("Pseudonym sichern", { exact: true })).toContainText("Pseudonym gesichert");
+    // Body-level utility controls must not intercept panel actions, including
+    // when the slide surface establishes a separate stacking context.
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+      await first.setViewportSize(viewport);
+      await first.getByRole("button", { name: "Rangliste", exact: true }).click();
+      await expect(first.getByRole("complementary", { name: "Rangliste", exact: true })).toBeVisible();
+      await expect(first.locator(".app-theme-control")).toBeHidden();
+      await first.getByRole("button", { name: "Rangliste schließen", exact: true }).click();
+      await expect(first.getByRole("complementary", { name: "Rangliste", exact: true })).toHaveCount(0);
+      await expect(first.locator(".app-theme-control")).toBeVisible();
+    }
+    await first.setViewportSize({ width: 1280, height: 900 });
     await teacher.getByRole("button", { name: "Rangliste", exact: true }).click();
     await expect(teacher.locator(".leader-row")).toHaveCount(3);
     await expect(teacher.locator(".leader-row").filter({ hasText: "Sync Alias" })).toHaveCount(1);
