@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createRequire } from "node:module";
 import jsQR from "jsqr";
-import { seriesIdFromTitle } from "../../src/lib/series";
 
 const password = "e2e-only-test-password-not-for-production";
 // PNG decoding is supplied by qrcode's locked pngjs dependency.
@@ -74,7 +73,8 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
     expect((await list.json()).lectures.some((item: { id: string }) => item.id === lecture.id)).toBe(false);
     expect((await otherPage.request.get(`/lecturer/live/${lecture.publicToken}`)).status()).toBe(404);
   } finally { await other.close(); }
-  await page.goto("/lecturer");
+  await page.getByRole("button", { name: "Beenden", exact: true }).click();
+  await expect(page).toHaveURL(/\/lecturer$/);
   // Logout is tested through the application endpoint; new protected navigation must fail.
   await page.goto("/api/auth/logout");
   await page.goto("/lecturer");
@@ -96,15 +96,27 @@ test("three fresh student contexts enter by link, persist identity and enforce u
     expect(new Set(keys).size).toBe(3);
     const questionsResponse = await pages[0].request.get("/api/lecture/gleitlagerung-demo/questions");
     expect(questionsResponse.ok()).toBe(true);
-    // The fixture's title is stable; this must match server and client slug generation.
-    const seriesId = seriesIdFromTitle("Maschinenelemente I");
-    await expect.poll(async () => (await (await pages[0].request.get(`/api/student/claim?seriesId=${seriesId}`)).json()).claim?.displayName).toBeTruthy();
+    // A profile exists before its lazy enrollment. Wait for every enrollment,
+    // then use the actual UUID instead of reconstructing a title-only identity.
+    await Promise.all(pages.map((page) => expect.poll(async () =>
+      (await (await page.request.get("/api/student/dashboard")).json()).dashboard?.series?.length
+    ).toBe(1)));
+    const dashboards = await Promise.all(pages.map(async (page) =>
+      (await (await page.request.get("/api/student/dashboard")).json()).dashboard
+    ));
+    const seriesId = dashboards[0].series[0].seriesId;
+    expect(seriesId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(dashboards.every((dashboard) => dashboard.series[0].seriesId === seriesId)).toBe(true);
+    await Promise.all(pages.map((page) => expect.poll(async () =>
+      (await (await page.request.get(`/api/student/claim?seriesId=${seriesId}`)).json()).claim?.displayName
+    ).toBeTruthy()));
     const name = `Nordlicht-${Date.now()}`;
     const claims = await Promise.all(pages.slice(0, 2).map((page) => page.request.post("/api/student/claim", { data: { seriesId, displayName: name } })));
     expect(claims.map((response) => response.status()).sort()).toEqual([200, 409]);
     const winner = claims[0].status() === 200 ? 0 : 1;
     const loser = 1 - winner;
     const collision = await claims[loser].json();
+    expect(collision.code).toBe("pseudonym_taken");
     expect(collision.suggestions.length).toBeGreaterThan(0);
     await pages[winner].reload();
     expect(await pages[winner].evaluate(() => localStorage.getItem("lb_student_key"))).toBe(keys[winner]);
