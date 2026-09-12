@@ -6,7 +6,7 @@ import type { SlideAssetRef } from "@learnordie/slide-engine/schema";
 import { loadCanvasRuntime } from "@/lib/excalidraw-runtime";
 import { hydrateCanvasAssets } from "@/lib/canvas-assets";
 import { renderCanvasEmbeddable } from "./CanvasEmbed";
-import { canvasFingerprint, isCanvasGestureActive } from "@/lib/canvas-sync";
+import { canvasFingerprint, canvasFitMinimum, isCanvasGestureActive } from "@/lib/canvas-sync";
 import { useAppTheme } from "@/components/theme/ThemeProvider";
 
 export type CanvasApi = {
@@ -68,9 +68,15 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
     setReady(false);
     const fit = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => apiRef.current?.scrollToContent(undefined, {
-        fitToContent: true, viewportZoomFactor: 0.92, animate: false
-      }));
+      frame = requestAnimationFrame(() => {
+        const api = apiRef.current;
+        if (!api) return;
+        const state = api.getAppState();
+        api.scrollToContent(undefined, {
+          fitToContent: true, viewportZoomFactor: 0.92, animate: false,
+          minZoom: canvasFitMinimum(api.getSceneElements(), Number(state.width), Number(state.height))
+        });
+      });
     };
     void loadCanvasRuntime().then(async (runtime) => {
       const hydrated = await hydrateCanvasAssets(initial.current, assetsRef.current, abort.signal);
