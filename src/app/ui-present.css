@@ -32,8 +32,11 @@
 .lecture-join-copy p { font-size: clamp(16px, 1.6vw, 25px); }
 .lecture-join-url { display: block; margin: 20px 0; font-size: clamp(19px, 2.2vw, 36px); font-weight: 800; color: inherit; overflow-wrap: anywhere; }
 .lecture-join-copy .lecture-join-hint { font-size: clamp(14px, 1.2vw, 19px); margin-bottom: 24px; }
+.lecture-join-copy, .lecture-join-qr { min-width: 0; }
 .lecture-join-qr { width: 100%; max-width: min(52vh, 680px); justify-self: center; }
-.lecture-join-qr canvas { display: block; width: 100%; height: auto; background: white; }
+/* qrcode writes inline pixel sizes; preserve its high-resolution bitmap while
+   sizing the displayed square to the available slide/phone width. */
+.lecture-join-qr canvas { display: block; width: 100% !important; height: auto !important; max-width: 100%; background: white; }
 .slide-engine-stage[data-slide-id="lecture-join"] { padding: 0; overflow: auto; }
 @media (max-width: 700px) {
   .lecture-join-slide { grid-template-columns: 1fr; padding: 76px 20px 96px; gap: 16px; }

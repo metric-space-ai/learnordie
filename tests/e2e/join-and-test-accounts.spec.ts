@@ -45,6 +45,9 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
   }).toBe(url);
   const qrBox = await intro.locator("canvas").boundingBox();
   expect(qrBox!.width).toBeGreaterThan(250);
+  expect(qrBox!.x).toBeGreaterThanOrEqual(0);
+  expect(qrBox!.x + qrBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(Math.abs(qrBox!.height - qrBox!.width)).toBeLessThan(1);
   const renderedQr = PNG.sync.read(await intro.locator("canvas").screenshot());
   expect(jsQR(new Uint8ClampedArray(renderedQr.data), renderedQr.width, renderedQr.height)?.data).toBe(url);
   await testInfo.attach("qr-welcome-desktop", { body: await page.screenshot(), contentType: "image/png" });
@@ -55,10 +58,18 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
   const linkBox = await link.boundingBox();
   expect(linkBox!.x).toBeLessThan(40);
   expect(linkBox!.y).toBeLessThan(50);
+  // Normal clicks must work: a visible link must not intercept slide controls.
+  await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
+  await expect(page.locator(".slide-nav .slide-count")).toHaveText(`2 / ${lecture.slides.length}`);
+  await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
   await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
   await expect(intro).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(intro.locator("canvas")).toBeVisible();
+  const mobileBox = await intro.locator("canvas").boundingBox();
+  expect(mobileBox!.x).toBeGreaterThanOrEqual(0);
+  expect(mobileBox!.x + mobileBox!.width).toBeLessThanOrEqual(390);
+  expect(Math.abs(mobileBox!.height - mobileBox!.width)).toBeLessThan(1);
   const mobileQr = PNG.sync.read(await intro.locator("canvas").screenshot());
   expect(jsQR(new Uint8ClampedArray(mobileQr.data), mobileQr.width, mobileQr.height)?.data).toBe(url);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

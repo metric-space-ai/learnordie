@@ -15,6 +15,13 @@
   overflow-wrap: anywhere;
 }
 .student-connection-notice a, .student-connection-notice button { margin-left: 12px; }
+.slide-screen[data-live-status] .slide-engine-nav {
+  top: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 12px;
+  transform: none;
+  z-index: 32;
+}
 .action-stack.live-controls {
   top: auto;
   bottom: max(12px, env(safe-area-inset-bottom));
@@ -23,12 +30,14 @@
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - 224px);
   overflow-x: auto;
   padding: 4px;
   z-index: 32;
 }
 .live-controls > * { flex-shrink: 0; }
+.action-stack.live-controls > .icon-action { width: 44px; flex: 0 0 44px; }
+.action-stack.live-controls > .action-text { width: auto; flex: 0 0 auto; padding: 0 14px; font-size: 14px; }
 .live-controls label { display: grid; gap: 2px; font-size: 11px; background: white; border-radius: 8px; padding: 4px 8px; }
 .live-controls select { font: inherit; font-size: 14px; min-height: 30px; max-width: 120px; color: #122c3b; }
 .live-identity-nudge {
@@ -44,6 +53,8 @@
 .live-question-drawer .question-feedback { overflow-wrap: anywhere; }
 .live-question-drawer .answer { min-height: 44px; }
 @media (max-width: 700px) {
+  .slide-screen[data-live-status] .slide-engine-nav { bottom: 82px; }
+  .action-stack.live-controls { max-width: calc(100vw - 24px); }
   .live-question-drawer { left: 50%; right: auto; width: calc(100vw - 16px); max-height: calc(100dvh - 156px); min-height: 0; }
   .live-question-drawer .question-head { flex-wrap: wrap; gap: 8px; }
   .live-question-drawer .drawer-main { min-width: 0; }
