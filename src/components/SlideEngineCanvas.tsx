@@ -84,7 +84,7 @@ export function SlideEngineCanvas({
         {lectureUrl && <a className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`}>{lectureUrl}</a>}
         {showJoinIntro && lectureUrl ? (
           <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} />
-        ) : <ExcalidrawCanvas key={currentSlide.id} scene={canvasScene} title={currentSlide.title} readOnly />}
+        ) : <ExcalidrawCanvas key={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} readOnly />}
       </article>
       <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
         <button type="button" disabled={navigationDisabled} onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
