@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 
 import type { Slide } from "@/lib/types";
 import {
-  DeckRenderer,
-  legacyDiagramAssetId,
   legacySlidesToSlideDocument,
   type SlideDocument
 } from "@learnordie/slide-engine";
-import type { SlideAsset } from "@learnordie/slide-engine/components";
-import { Diagram } from "./Diagram";
+import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
+import { ExcalidrawCanvas } from "./excalidraw/ExcalidrawCanvas";
 import { LectureJoinSlide } from "./LectureJoinSlide";
 
 export function SlideEngineCanvas({
@@ -50,6 +47,9 @@ export function SlideEngineCanvas({
     }),
     [storedSlideDocument, slides]
   );
+  const canvasScene = useMemo(() => canvasSceneForSlide(
+    activeSlideDocument.slides[current] ?? activeSlideDocument.slides[0], activeSlideDocument.assets
+  ), [activeSlideDocument, current]);
 
   useEffect(() => {
     const previous = previousCurrent.current;
@@ -84,13 +84,7 @@ export function SlideEngineCanvas({
         {lectureUrl && <a className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`}>{lectureUrl}</a>}
         {showJoinIntro && lectureUrl ? (
           <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} />
-        ) : <DeckRenderer
-          className="slide-engine-deck"
-          currentSlideId={currentSlide.id}
-          document={activeSlideDocument}
-          renderAsset={renderLegacyDiagramAsset}
-          renderMode="current"
-        />}
+        ) : <ExcalidrawCanvas key={currentSlide.id} scene={canvasScene} title={currentSlide.title} readOnly />}
       </article>
       <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
         <button type="button" disabled={navigationDisabled} onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
@@ -99,11 +93,4 @@ export function SlideEngineCanvas({
       </nav>
     </>
   );
-}
-
-function renderLegacyDiagramAsset(asset: SlideAsset): ReactNode {
-  if (asset.id === legacyDiagramAssetId("bearing")) return <Diagram type="bearing" />;
-  if (asset.id === legacyDiagramAssetId("formula")) return <Diagram type="formula" />;
-  if (asset.id === legacyDiagramAssetId("ramp")) return <Diagram type="ramp" />;
-  return null;
 }

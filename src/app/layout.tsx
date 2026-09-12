@@ -10,6 +10,7 @@ import "./ui-student.css";
 import "./ui-studio.css";
 import "./ui-present.css";
 import "./ui-live-session.css";
+import "./ui-excalidraw.css";
 
 export const metadata: Metadata = {
   title: "learnordie.app",

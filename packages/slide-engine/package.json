@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./excalidraw/canvas-schema": "./src/excalidraw/canvas-schema.ts",
+    "./excalidraw/scene": "./src/excalidraw/scene.ts",
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"

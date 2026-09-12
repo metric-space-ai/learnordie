@@ -1,28 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
-
-import type { AgentThread, Lecture, PresentationAsset, Slide } from "@/lib/types";
-import {
-  DeckRenderer,
-  applySlideDocumentEdits,
-  legacyDiagramAssetId,
-  questionLevelValues,
-  slideLayoutIdValues,
-  legacySlidesToSlideDocument,
-  slideDocumentToLegacySlides,
-  type QuestionLevel,
-  type SlideAssetKind,
-  type SlideAssetRef,
-  type SlideBlock,
-  type SlideBlockPatch,
-  type SlideBlockSelection,
-  type SlideDocument,
-  type SlideDocumentEditOperation,
-  type SlideLayoutId
-} from "@learnordie/slide-engine";
-import type { SlideAsset } from "@learnordie/slide-engine/components";
-import { Diagram } from "../Diagram";
+import { useMemo, useRef, useState } from "react";
+import { legacySlidesToSlideDocument, scene3dSceneIdValues, slideDocumentToLegacySlides, type SlideDocument } from "@learnordie/slide-engine";
+import { canvasSceneForSlide, updateSlideCanvas } from "@learnordie/slide-engine/excalidraw/scene";
+import type { CanvasEmbed, CanvasScene } from "@learnordie/slide-engine/excalidraw/canvas-schema";
+import type { Lecture, PresentationAsset, Slide } from "@/lib/types";
+import { loadCanvasRuntime } from "@/lib/excalidraw-runtime";
+import { ExcalidrawCanvas, type CanvasApi } from "../excalidraw/ExcalidrawCanvas";
 
 type StudioSlideDocumentEditorProps = {
   lectureId: string;
@@ -32,729 +16,92 @@ type StudioSlideDocumentEditorProps = {
   slides: Slide[];
   slideDocument?: SlideDocument;
   presentationAssets?: PresentationAsset[];
+  readOnly?: boolean;
   onSlideDocumentChange: (document: SlideDocument, slides: Slide[]) => void;
   onLecturesChange?: (lectures: Lecture[]) => void;
 };
 
-export function StudioSlideDocumentEditor({
-  lectureId,
-  csrfToken,
-  currentIndex,
-  seriesTitle,
-  slides,
-  slideDocument,
-  presentationAssets = [],
-  onSlideDocumentChange,
-  onLecturesChange
-}: StudioSlideDocumentEditorProps) {
+const initialHtml = '<article style="font-family:system-ui;color:#243f43;padding:32px;background:#fffef8"><h2>Ein Gedanke, anschaulich erklärt</h2><p>HTML und CSS für Tabellen, Formeln und besondere Inhalte.</p><div style="height:12px;background:#dcece6;border-radius:8px"><div style="width:65%;height:100%;background:#498b79;border-radius:8px"></div></div></article>';
+
+export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle, slides, slideDocument, onSlideDocumentChange, readOnly = false }: StudioSlideDocumentEditorProps) {
   const document = useMemo(() => slideDocument ?? legacySlidesToSlideDocument(slides, {
-    id: "studio-legacy-slide-document",
-    title: seriesTitle,
-    language: "de",
-    theme: "learnordie-technical"
-  }), [seriesTitle, slideDocument, slides]);
-  const currentSlide = document.slides[currentIndex] ?? document.slides[0];
-  const firstEditableBlock = currentSlide?.blocks.find((block) => block.type !== "spacer") ?? currentSlide?.blocks[0];
-  const [selectedBlockId, setSelectedBlockId] = useState(firstEditableBlock?.id ?? "");
-  const selectedBlock = currentSlide?.blocks.find((block) => block.id === selectedBlockId) ?? firstEditableBlock;
-  const selectedField = selectedBlock ? editableField(selectedBlock, currentSlide?.id ?? "") : null;
-  const selectedTable = selectedBlock?.type === "table" ? selectedBlock : null;
-  const selectedQuizAnchor = currentSlide?.quizAnchors?.find((anchor) => anchor.blockId === selectedBlock?.id);
-  const figureAssets = useMemo(() => {
-    const merged = new Map<string, SlideAssetRef>();
-    document.assets
-      .filter((asset) => figureCompatibleAssetKinds.has(asset.kind))
-      .forEach((asset) => merged.set(asset.id, asset));
-    presentationAssets
-      .map(presentationAssetToSlideAssetRef)
-      .filter((asset): asset is SlideAssetRef => asset !== null)
-      .filter((asset) => figureCompatibleAssetKinds.has(asset.kind))
-      .forEach((asset) => merged.set(asset.id, asset));
-    return [...merged.values()];
-  }, [document.assets, presentationAssets]);
-  const [editorValue, setEditorValue] = useState(selectedField?.value ?? "");
-  const [tableRowIndex, setTableRowIndex] = useState(0);
-  const [tableColumnIndex, setTableColumnIndex] = useState(0);
-  const [tableCellValue, setTableCellValue] = useState("");
-  const [quizLevel, setQuizLevel] = useState<QuestionLevel>(selectedQuizAnchor?.level ?? "2.0");
+    id: `lecture:${lectureId}:deck`, title: seriesTitle, language: "de", theme: "learnordie-north"
+  }), [lectureId, seriesTitle, slideDocument, slides]);
+  const current = document.slides[currentIndex] ?? document.slides[0];
+  const scene = useMemo(() => canvasSceneForSlide(current, document.assets), [current, document.assets]);
+  const api = useRef<CanvasApi | null>(null);
+  const [panel, setPanel] = useState<"html" | "scene3d" | null>(null);
+  const [html, setHtml] = useState(initialHtml);
+  const [sceneId, setSceneId] = useState<(typeof scene3dSceneIdValues)[number]>("modell.morph");
   const [status, setStatus] = useState("");
-  const [issue, setIssue] = useState("");
-  const [agentPopover, setAgentPopover] = useState<{ x: number; y: number } | null>(null);
-  const [agentPrompt, setAgentPrompt] = useState("");
-  const [agentThread, setAgentThread] = useState<AgentThread | null>(null);
-  const [agentBusy, setAgentBusy] = useState(false);
-  const [agentError, setAgentError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editingElementId, setEditingElementId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const nextBlock = currentSlide?.blocks.find((block) => block.id === selectedBlockId)
-      ?? currentSlide?.blocks.find((block) => block.type !== "spacer")
-      ?? currentSlide?.blocks[0];
-    setSelectedBlockId(nextBlock?.id ?? "");
-  }, [currentSlide, selectedBlockId]);
-
-  useEffect(() => {
-    setEditorValue(selectedField?.value ?? "");
-  }, [selectedBlock?.id, selectedField?.key, selectedField?.value]);
-
-  useEffect(() => {
-    if (!selectedTable) {
-      setTableCellValue("");
-      return;
-    }
-
-    const nextRowIndex = clampIndex(tableRowIndex, selectedTable.rows.length - 1);
-    const nextColumnIndex = clampIndex(tableColumnIndex, selectedTable.columns.length - 1);
-    if (nextRowIndex !== tableRowIndex) setTableRowIndex(nextRowIndex);
-    if (nextColumnIndex !== tableColumnIndex) setTableColumnIndex(nextColumnIndex);
-    setTableCellValue(selectedTable.rows[nextRowIndex]?.[nextColumnIndex] ?? "");
-  }, [selectedTable, tableColumnIndex, tableRowIndex]);
-
-  useEffect(() => {
-    setQuizLevel(selectedQuizAnchor?.level ?? "2.0");
-  }, [selectedBlock?.id, selectedQuizAnchor?.level]);
-
-  function selectBlock(selection: SlideBlockSelection) {
-    setSelectedBlockId(selection.blockId);
-    setStatus("");
-    setIssue("");
-  }
-
-  function openAgentPopover(event: MouseEvent<HTMLElement>) {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.min(Math.max(event.clientX - rect.left, 16), Math.max(16, rect.width - 420));
-    const y = Math.min(Math.max(event.clientY - rect.top, 16), Math.max(16, rect.height - 320));
-    setAgentPopover({ x, y });
-    setAgentError("");
-    setAgentPrompt("");
-    setAgentThread(null);
-  }
-
-  async function startAgentThread() {
-    if (!agentPrompt.trim() || !currentSlide) return;
-    setAgentBusy(true);
-    setAgentError("");
-    setAgentThread(null);
-    try {
-      const response = await fetch(`/api/lectures/${lectureId}/agent-threads`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-learnbuddy-csrf": csrfToken
-        },
-        body: JSON.stringify({
-          mode: "studio_slide_edit",
-          prompt: agentPrompt,
-          slideId: currentSlide.id,
-          blockId: selectedBlock?.id
-        })
-      });
-      const payload = await response.json() as { error?: string; thread?: AgentThread; lectures?: Lecture[] };
-      if (!response.ok || !payload.thread) {
-        throw new Error(payload.error ?? "KI-Vorschlag konnte nicht erstellt werden.");
-      }
-      setAgentThread(payload.thread);
-      if (payload.lectures) onLecturesChange?.(payload.lectures);
-    } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht erstellt werden.");
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  async function acceptAgentPatch() {
-    if (!agentThread) return;
-    setAgentBusy(true);
-    setAgentError("");
-    try {
-      const response = await fetch(`/api/lectures/${lectureId}/agent-threads/${agentThread.id}/accept`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-learnbuddy-csrf": csrfToken
-        },
-        body: JSON.stringify({})
-      });
-      const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
-      if (!response.ok || !payload.lecture) {
-        throw new Error(payload.error ?? "KI-Vorschlag konnte nicht übernommen werden.");
-      }
-      if (payload.lecture.slideDocument) {
-        onSlideDocumentChange(payload.lecture.slideDocument, payload.lecture.slides);
-      }
-      if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setAgentThread((thread) => thread ? { ...thread, status: "accepted" } : thread);
-      setStatus("KI-Vorschlag übernommen.");
-    } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht übernommen werden.");
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  async function rejectAgentPatch() {
-    if (!agentThread) {
-      setAgentPopover(null);
-      return;
-    }
-    setAgentBusy(true);
-    setAgentError("");
-    try {
-      const response = await fetch(`/api/lectures/${lectureId}/agent-threads/${agentThread.id}/reject`, {
-        method: "POST",
-        headers: {
-          "x-learnbuddy-csrf": csrfToken
-        }
-      });
-      const payload = await response.json() as { error?: string; lecture?: Lecture; lectures?: Lecture[] };
-      if (!response.ok || !payload.lecture) {
-        throw new Error(payload.error ?? "KI-Vorschlag konnte nicht verworfen werden.");
-      }
-      if (payload.lectures) onLecturesChange?.(payload.lectures);
-      setAgentThread((thread) => thread ? { ...thread, status: "rejected" } : thread);
-      setAgentPopover(null);
-      setStatus("KI-Vorschlag verworfen.");
-    } catch (error) {
-      setAgentError(error instanceof Error ? error.message : "KI-Vorschlag konnte nicht verworfen werden.");
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  function applyOperations(operations: SlideDocumentEditOperation[], message: string) {
-    const result = applySlideDocumentEdits(document, operations);
-    if (!result.ok) {
-      const firstIssue = result.issues[0];
-      setIssue(firstIssue ? firstIssue.repairHint : "Diese Änderung ist ungültig.");
-      setStatus("Nicht gespeichert.");
-      return false;
-    }
-
-    onSlideDocumentChange(result.document, slideDocumentToLegacySlides(result.document, slides));
-    setStatus(message);
-    setIssue("");
-    return true;
-  }
-
-  function updateLayout(layout: SlideLayoutId) {
-    if (!currentSlide) return;
-    applyOperations([
-      {
-        operationId: `studio-engine-layout-${currentSlide.id}`,
-        kind: "updateSlide",
-        slideId: currentSlide.id,
-        patch: { layout }
-      }
-    ], "Layout geändert. Mit „Speichern“ sichern.");
-  }
-
-  function saveSelectedBlock() {
-    if (!currentSlide || !selectedBlock || !selectedField) return;
-    applyOperations(selectedField.operations(editorValue), "Text geändert. Mit „Speichern“ sichern.");
-  }
-
-  function updateFigureAsset(assetId: string) {
-    if (!currentSlide || selectedBlock?.type !== "figure") return;
-    const asset = figureAssets.find((candidate) => candidate.id === assetId);
-    if (!asset) return;
-    const operations: SlideDocumentEditOperation[] = [];
-    if (!document.assets.some((candidate) => candidate.id === asset.id)) {
-      operations.push({
-        operationId: `studio-engine-upsert-asset-${asset.id}`,
-        kind: "upsertAsset",
-        asset
-      });
-    }
-    operations.push(
-      {
-        operationId: `studio-engine-asset-${selectedBlock.id}`,
-        kind: "patchBlock",
-        slideId: currentSlide.id,
-        blockId: selectedBlock.id,
-        patch: {
-          assetId: asset.id,
-          altText: asset.altText ?? selectedBlock.altText
-        }
-      }
+  function openEmbedPanel(kind: "html" | "scene3d") {
+    if (panel === kind) { setPanel(null); return; }
+    const selected = api.current?.getAppState().selectedElementIds;
+    const element = api.current?.getSceneElements().find((candidate) =>
+      selected && typeof selected === "object" && (selected as Record<string, unknown>)[candidate.id]
+      && candidate.customData?.learnordie?.type === kind
     );
-    applyOperations(operations, "Grafik geändert. Mit „Speichern“ sichern.");
+    const embed = element?.customData?.learnordie;
+    setEditingElementId(element?.id ?? null);
+    if (embed?.type === "html") setHtml(embed.html);
+    if (embed?.type === "scene3d") setSceneId(embed.sceneId);
+    setPanel(kind);
   }
 
-  function saveTableCell() {
-    if (!currentSlide || !selectedTable) return;
-    const columnCount = selectedTable.columns.length;
-    const rows = selectedTable.rows.map((row, rowIndex) => (
-      normalizeTableRow(row, columnCount).map((cell, columnIndex) => (
-        rowIndex === tableRowIndex && columnIndex === tableColumnIndex ? tableCellValue : cell
-      ))
-    ));
-    applyOperations([
-      {
-        operationId: `studio-engine-table-cell-${selectedTable.id}`,
-        kind: "patchBlock",
-        slideId: currentSlide.id,
-        blockId: selectedTable.id,
-        patch: { rows }
-      }
-    ], "Zelle geändert. Mit „Speichern“ sichern.");
-  }
-
-  function addTableRow() {
-    if (!currentSlide || !selectedTable) return;
-    const nextRowIndex = selectedTable.rows.length;
-    const nextRow = selectedTable.columns.map((_, index) => (index === 0 ? "Neue Zeile" : ""));
-    const saved = applyOperations([
-      {
-        operationId: `studio-engine-table-row-${selectedTable.id}`,
-        kind: "patchBlock",
-        slideId: currentSlide.id,
-        blockId: selectedTable.id,
-        patch: { rows: [...selectedTable.rows, nextRow] }
-      }
-    ], "Zeile ergänzt. Mit „Speichern“ sichern.");
-    if (saved) {
-      setTableRowIndex(nextRowIndex);
-      setTableColumnIndex(0);
+  function changed(next: CanvasScene) {
+    try {
+      const updated = updateSlideCanvas(document, current.id, next);
+      onSlideDocumentChange(updated, slideDocumentToLegacySlides(updated, slides));
+      setStatus("");
+    } catch {
+      setStatus("Diese Änderung kann nicht gespeichert werden. Bitte kleinere Bilder oder weniger Elemente verwenden.");
     }
   }
 
-  function addTableColumn() {
-    if (!currentSlide || !selectedTable || selectedTable.columns.length >= 8) return;
-    const nextColumnIndex = selectedTable.columns.length;
-    const columns = [...selectedTable.columns, `Spalte ${nextColumnIndex + 1}`];
-    const rows = selectedTable.rows.map((row) => [...normalizeTableRow(row, selectedTable.columns.length), ""]);
-    const saved = applyOperations([
-      {
-        operationId: `studio-engine-table-column-${selectedTable.id}`,
-        kind: "patchBlock",
-        slideId: currentSlide.id,
-        blockId: selectedTable.id,
-        patch: { columns, rows }
-      }
-    ], "Spalte ergänzt. Mit „Speichern“ sichern.");
-    if (saved) setTableColumnIndex(nextColumnIndex);
+  async function insertEmbed(embed: CanvasEmbed) {
+    if (!api.current || busy) return;
+    setBusy(true);
+    try {
+      const runtime = await loadCanvasRuntime();
+      const existing = api.current.getSceneElements().find((element) => element.id === editingElementId);
+      const id = existing?.id ?? `embed-${crypto.randomUUID()}`;
+      const elements = existing ? api.current.getSceneElements().map((element) => element.id === id ? {
+        ...element, customData: { ...element.customData, learnordie: embed }, version: Number(element.version ?? 0) + 1, updated: Date.now()
+      } : element) : [...api.current.getSceneElements(), ...runtime.convertToExcalidrawElements([{
+        id, type: "embeddable", x: 640, y: 260, width: 720, height: 460,
+        link: `https://learnordie.invalid/embed/${id}`, customData: { learnordie: embed }
+      }])];
+      api.current.updateScene({ elements, appState: { selectedElementIds: { [id]: true } }, captureUpdate: "IMMEDIATELY" });
+      setPanel(null);
+    } catch { setStatus("Element konnte nicht eingefügt werden. Bitte erneut versuchen."); }
+    finally { setBusy(false); }
   }
 
-  function upsertQuizAnchor() {
-    if (!currentSlide || !selectedBlock) return;
-    applyOperations([
-      {
-        operationId: `studio-engine-quiz-anchor-${selectedBlock.id}`,
-        kind: "upsertQuizAnchor",
-        slideId: currentSlide.id,
-        anchor: {
-          id: selectedQuizAnchor?.id ?? `anchor-${selectedBlock.id}`,
-          level: quizLevel,
-          blockId: selectedBlock.id,
-          label: quizAnchorLabel(selectedBlock)
-        }
-      }
-    ], "Quizpunkt gesetzt. Mit „Speichern“ sichern.");
-  }
-
-  if (!currentSlide) {
-    return null;
-  }
-
-  return (
-    <aside
-      aria-label="Folie bearbeiten"
-      className="studio-engine-editor"
-      data-selected-block-id={selectedBlock?.id ?? ""}
-      data-studio-engine-editor="true"
-    >
-      <div className="studio-engine-editor-preview" onContextMenu={openAgentPopover}>
-        <DeckRenderer
-          currentSlideId={currentSlide.id}
-          document={document}
-          renderAsset={renderLegacyDiagramAsset}
-          renderMode="current"
-          selectedBlockId={selectedBlock?.id}
-          onBlockSelect={selectBlock}
-        />
-        {agentPopover ? (
-          <div
-            aria-label="Mit KI bearbeiten"
-            className="studio-agent-popover"
-            role="dialog"
-            style={{ left: agentPopover.x, top: agentPopover.y }}
-          >
-            <div className="studio-agent-popover-head">
-              <strong>Mit KI bearbeiten</strong>
-              <button type="button" aria-label="Schließen" title="Schließen" onClick={() => setAgentPopover(null)}>×</button>
-            </div>
-            <label>
-              <span>Was soll die KI ändern?</span>
-              <textarea
-                aria-label="Was soll die KI ändern?"
-                rows={3}
-                value={agentPrompt}
-                onChange={(event) => setAgentPrompt(event.currentTarget.value)}
-              />
-            </label>
-            <div className="studio-agent-actions">
-              <button type="button" disabled={agentBusy || !agentPrompt.trim()} onClick={startAgentThread}>
-                {agentBusy && !agentThread ? "KI arbeitet …" : "Vorschlag holen"}
-              </button>
-              <button type="button" onClick={rejectAgentPatch}>Verwerfen</button>
-            </div>
-            {agentThread ? (
-              <div className="studio-agent-result">
-                <strong>Vorschlag</strong>
-                {agentThread.reviewPatch ? (
-                  proposedTexts(agentThread).map((text, index) => (
-                    <p className="studio-agent-proposal" key={index}>{text}</p>
-                  ))
-                ) : (
-                  <p>Die KI hat keinen Vorschlag erstellt.</p>
-                )}
-                {agentThread.reviewPatch?.qa.warnings.length ? (
-                  <p className="studio-agent-warning">{agentThread.reviewPatch.qa.warnings.join(" ")}</p>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={agentBusy || !agentThread.reviewPatch || agentThread.status === "accepted"}
-                  onClick={acceptAgentPatch}
-                >
-                  Änderung übernehmen
-                </button>
-              </div>
-            ) : null}
-            {agentError ? <p role="alert" className="form-error">{agentError}</p> : null}
-          </div>
-        ) : null}
-      </div>
-      <div className="studio-engine-editor-panel">
-        <label>
-          <span>Layout</span>
-          <select
-            aria-label="Engine Layout"
-            value={currentSlide.layout}
-            onChange={(event) => updateLayout(event.currentTarget.value as SlideLayoutId)}
-          >
-            {slideLayoutIdValues.map((layout) => (
-              <option key={layout} value={layout}>{formatLayoutLabel(layout)}</option>
-            ))}
-          </select>
-        </label>
-
-        {selectedField ? (
-          <label>
-            <span>{selectedField.label}</span>
-            <textarea
-              aria-label={selectedField.ariaLabel}
-              rows={4}
-              value={editorValue}
-              onChange={(event) => setEditorValue(event.currentTarget.value)}
-            />
-          </label>
-        ) : null}
-
-        {selectedBlock?.type === "figure" ? (
-          <label>
-            <span>Grafik</span>
-            <select
-              aria-label="Engine Asset"
-              value={selectedBlock.assetId}
-              onChange={(event) => updateFigureAsset(event.currentTarget.value)}
-            >
-              {figureAssets.map((asset) => (
-                <option key={asset.id} value={asset.id}>{asset.title}</option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {selectedTable ? (
-          <div className="studio-engine-editor-group" aria-label="Tabelle">
-            <label>
-              <span>Zeile</span>
-              <select
-                aria-label="Engine Tabellenzeile"
-                value={tableRowIndex}
-                onChange={(event) => setTableRowIndex(Number(event.currentTarget.value))}
-              >
-                {selectedTable.rows.map((_, rowIndex) => (
-                  <option key={rowIndex} value={rowIndex}>Zeile {rowIndex + 1}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Spalte</span>
-              <select
-                aria-label="Engine Tabellenspalte"
-                value={tableColumnIndex}
-                onChange={(event) => setTableColumnIndex(Number(event.currentTarget.value))}
-              >
-                {selectedTable.columns.map((column, columnIndex) => (
-                  <option key={`${column}-${columnIndex}`} value={columnIndex}>{column}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Zelle</span>
-              <input
-                aria-label="Engine Tabellenzelle"
-                value={tableCellValue}
-                onChange={(event) => setTableCellValue(event.currentTarget.value)}
-              />
-            </label>
-            <div className="studio-engine-editor-actions split">
-              <button type="button" onClick={saveTableCell}>Zelle speichern</button>
-              <button type="button" onClick={addTableRow}>Zeile hinzufügen</button>
-              <button type="button" disabled={selectedTable.columns.length >= 8} onClick={addTableColumn}>
-                Spalte hinzufügen
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {selectedBlock ? (
-          <div className="studio-engine-editor-group" aria-label="Quizpunkt">
-            <label>
-              <span>Quizniveau</span>
-              <select
-                aria-label="Engine Quizanker Niveau"
-                value={quizLevel}
-                onChange={(event) => setQuizLevel(event.currentTarget.value as QuestionLevel)}
-              >
-                {questionLevelValues.map((level) => (
-                  <option key={level} value={level}>{level}</option>
-                ))}
-              </select>
-            </label>
-            <button type="button" onClick={upsertQuizAnchor}>
-              {selectedQuizAnchor ? "Quizpunkt ändern" : "Quizpunkt setzen"}
-            </button>
-          </div>
-        ) : null}
-
-        <div className="studio-engine-editor-actions">
-          <button type="button" disabled={!selectedField} onClick={saveSelectedBlock}>
-            Übernehmen
-          </button>
-          <button type="button" onClick={() => setAgentPopover({ x: 24, y: 24 })}>
-            Mit KI bearbeiten
-          </button>
-        </div>
-        <p aria-live="polite">{status}</p>
-        {issue ? <p role="alert" className="form-error">{issue}</p> : null}
-      </div>
-    </aside>
-  );
-}
-
-function editableField(block: SlideBlock, slideId: string): {
-  key: string;
-  label: string;
-  ariaLabel: string;
-  value: string;
-  operations: (value: string) => SlideDocumentEditOperation[];
-} | null {
-  switch (block.type) {
-    case "heading":
-      return {
-        key: "heading",
-        label: "Folientitel",
-        ariaLabel: "Folientitel",
-        value: block.text,
-        operations: (text) => [
-          {
-            operationId: `studio-engine-title-${slideId}`,
-            kind: "updateSlide",
-            slideId,
-            patch: { title: text }
-          },
-          {
-            operationId: `studio-engine-heading-${block.id}`,
-            kind: "patchBlock",
-            slideId,
-            blockId: block.id,
-            patch: { text }
-          }
-        ]
-      };
-    case "paragraph":
-      return {
-        key: "text",
-        label: "Folientext",
-        ariaLabel: "Engine Folientext",
-        value: block.text,
-        operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
-      };
-    case "figure":
-      return {
-        key: "caption",
-        label: "Bildunterschrift",
-        ariaLabel: "Bildunterschrift",
-        value: block.caption ?? "",
-        operations: (caption) => [patchBlockOperation(slideId, block.id, { caption })]
-      };
-    case "formula":
-      return {
-        key: "latex",
-        label: "Formel",
-        ariaLabel: "Engine Formel",
-        value: block.latex ?? block.mathMl ?? "",
-        operations: (latex) => [patchBlockOperation(slideId, block.id, { latex, mathMl: undefined })]
-      };
-    case "callout":
-      return {
-        key: "callout",
-        label: "Hinweistext",
-        ariaLabel: "Hinweistext",
-        value: block.text,
-        operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
-      };
-    case "definition":
-      return {
-        key: "definition",
-        label: "Definition",
-        ariaLabel: "Definition",
-        value: block.definition,
-        operations: (definition) => [patchBlockOperation(slideId, block.id, { definition })]
-      };
-    case "quote":
-      return {
-        key: "quote",
-        label: "Zitat",
-        ariaLabel: "Zitat",
-        value: block.text,
-        operations: (text) => [patchBlockOperation(slideId, block.id, { text })]
-      };
-    case "code":
-      return {
-        key: "code",
-        label: "Code",
-        ariaLabel: "Code",
-        value: block.code,
-        operations: (code) => [patchBlockOperation(slideId, block.id, { code })]
-      };
-    default:
-      return null;
-  }
-}
-
-const proposalTextKeys = ["text", "definition", "caption", "latex", "code"] as const;
-
-function proposedTexts(thread: AgentThread): string[] {
-  return (thread.reviewPatch?.operations ?? []).flatMap((operation) => {
-    const fields: Record<string, unknown> | undefined = operation.kind === "patchBlock"
-      ? operation.patch
-      : operation.kind === "insertBlock" || operation.kind === "replaceBlock"
-        ? operation.block
-        : undefined;
-    if (!fields) return [];
-    for (const key of proposalTextKeys) {
-      const value = fields[key];
-      if (typeof value === "string" && value.trim()) return [value.trim()];
-    }
-    const items = Array.isArray(fields.items) ? fields.items.filter((item): item is string => typeof item === "string") : [];
-    return items.length ? [items.join("\n")] : [];
-  });
-}
-
-function patchBlockOperation(slideId: string, blockId: string, patch: SlideBlockPatch): SlideDocumentEditOperation {
-  return {
-    operationId: `studio-engine-patch-${blockId}`,
-    kind: "patchBlock",
-    slideId,
-    blockId,
-    patch
-  };
-}
-
-const layoutLabels: Record<SlideLayoutId, string> = {
-  title_statement: "Titel mit Aussage",
-  section_divider: "Kapiteltrenner",
-  technical_one_column: "Eine Spalte",
-  technical_two_column: "Zwei Spalten",
-  technical_figure_right: "Grafik rechts",
-  technical_figure_left: "Grafik links",
-  definition_with_example: "Definition mit Beispiel",
-  formula_derivation: "Formel",
-  table_focus: "Tabelle",
-  chart_focus: "Diagramm",
-  comparison_split: "Vergleich",
-  process_steps: "Ablauf",
-  case_study: "Fallbeispiel",
-  quiz_transition: "Quiz"
-};
-
-function formatLayoutLabel(layout: SlideLayoutId) {
-  return layoutLabels[layout] ?? layout;
-}
-
-const figureCompatibleAssetKinds = new Set<SlideAssetKind>(["figure", "photo", "diagram", "chart"]);
-const stableEngineIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-
-function stableEngineId(value: string, fallbackPrefix = "asset") {
-  const sanitized = value.trim().replace(/[^A-Za-z0-9.:-]/g, "-").replace(/-+/g, "-");
-  if (stableEngineIdPattern.test(sanitized)) return sanitized;
-  return `${fallbackPrefix}-${sanitized.replace(/^[^A-Za-z0-9]+/, "") || "generated"}`;
-}
-
-function boundedText(value: string | undefined, max: number) {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return trimmed.length > max ? `${trimmed.slice(0, max - 3)}...` : trimmed;
-}
-
-function presentationAssetToSlideAssetRef(asset: PresentationAsset): SlideAssetRef | null {
-  if (!figureCompatibleAssetKinds.has(asset.kind)) return null;
-  const id = stableEngineId(asset.id);
-  const sourceId = stableEngineId(`source-${asset.id}`, "source");
-  const materialId = asset.source.materialId && stableEngineIdPattern.test(asset.source.materialId)
-    ? asset.source.materialId
-    : undefined;
-  return {
-    id,
-    kind: asset.kind,
-    title: boundedText(asset.title, 160) ?? "Grafik",
-    description: boundedText(asset.description, 500),
-    storageKey: boundedText(asset.storageKey, 500),
-    previewKey: boundedText(asset.previewKey, 500),
-    altText: boundedText(asset.description ?? asset.title, 320),
-    extractedText: boundedText(asset.extractedText, 10000),
-    structuredData: asset.structuredData,
-    source: {
-      id: sourceId,
-      sourceType: materialId ? "material" : "asset",
-      label: boundedText(asset.source.originalName, 220) ?? asset.title,
-      materialId,
-      assetId: id,
-      locator: boundedText(asset.source.sourceRef, 180),
-      page: asset.source.page,
-      slide: asset.source.slide,
-      bbox: asset.source.bbox
-    },
-    tags: asset.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
-    quality: asset.quality
-  };
-}
-
-function clampIndex(index: number, max: number) {
-  if (max <= 0) return 0;
-  return Math.max(0, Math.min(index, max));
-}
-
-function normalizeTableRow(row: string[], columnCount: number) {
-  return Array.from({ length: columnCount }, (_, index) => row[index] ?? "");
-}
-
-function quizAnchorLabel(block: SlideBlock) {
-  if ("text" in block && typeof block.text === "string") return block.text.slice(0, 120);
-  if (block.type === "definition") return block.term;
-  if (block.type === "figure") return block.caption ?? block.altText;
-  if (block.type === "formula") return block.caption ?? block.latex ?? "Formel";
-  if (block.type === "table") return block.caption ?? "Tabelle";
-  return `Frage zu ${block.id}`;
-}
-
-function renderLegacyDiagramAsset(asset: SlideAsset): ReactNode {
-  if (asset.id === legacyDiagramAssetId("bearing")) return <Diagram type="bearing" />;
-  if (asset.id === legacyDiagramAssetId("formula")) return <Diagram type="formula" />;
-  if (asset.id === legacyDiagramAssetId("ramp")) return <Diagram type="ramp" />;
-  return null;
+  return <section className="native-studio-editor" aria-label="Folie mit Excalidraw bearbeiten">
+    {!readOnly && <div className="native-studio-tools" role="toolbar" aria-label="Folienelemente">
+      <span className="native-studio-title">Zeichenfläche</span>
+      <button type="button" onClick={() => api.current?.setActiveTool({ type: "text" })}>Text</button>
+      <button type="button" onClick={() => api.current?.setActiveTool({ type: "rectangle" })}>Form</button>
+      <button type="button" onClick={() => openEmbedPanel("scene3d")} aria-expanded={panel === "scene3d"}>3D-Szene</button>
+      <button type="button" onClick={() => openEmbedPanel("html")} aria-expanded={panel === "html"}>HTML</button>
+      <button type="button" onClick={() => api.current?.scrollToContent(undefined, { fitToContent: true, viewportZoomFactor: 0.92, animate: true })}>Einpassen</button>
+    </div>}
+    <ExcalidrawCanvas key={`${lectureId}:${current.id}`} title={current.title} scene={scene} readOnly={readOnly} onReady={(value) => { api.current = value; }} onChange={changed} />
+    {!readOnly && panel && <aside className="native-insert-panel" aria-label={panel === "html" ? "HTML einbetten" : "3D-Szene einfügen"}>
+      <div className="native-insert-heading"><h2>{panel === "html" ? "HTML einbetten" : "3D-Szene"}</h2><button type="button" aria-label="Einfügen schließen" onClick={() => setPanel(null)}>×</button></div>
+      {panel === "html" ? <>
+        <label>HTML und CSS<textarea aria-label="HTML und CSS" spellCheck={false} rows={9} value={html} maxLength={65536} onChange={(event) => setHtml(event.target.value)} /></label>
+        <p>Isoliert eingebettet. Eigene Skripte, externe Verbindungen und Formulare werden nicht ausgeführt.</p>
+        <button type="button" className="primary-button" disabled={busy || !html.trim()} onClick={() => void insertEmbed({ type: "html", html, title: "HTML-Inhalt" })}>{editingElementId ? "HTML aktualisieren" : "HTML einfügen"}</button>
+      </> : <>
+        <label>Szene<select aria-label="3D-Szene auswählen" value={sceneId} onChange={(event) => setSceneId(event.target.value as typeof sceneId)}>{scene3dSceneIdValues.map((id) => <option key={id} value={id}>{id.replace("modell.", "Modell · ")}</option>)}</select></label>
+        <p>Interaktive three.js-Szene. Größe und Position lassen sich auf der Zeichenfläche ändern.</p>
+        <button type="button" className="primary-button" disabled={busy} onClick={() => void insertEmbed({ type: "scene3d", sceneId })}>{editingElementId ? "3D-Szene aktualisieren" : "3D-Szene einfügen"}</button>
+      </>}
+    </aside>}
+    {status && <p className="native-editor-status" role="alert">{status}</p>}
+  </section>;
 }
