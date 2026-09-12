@@ -1,4 +1,7 @@
 import { z, type ZodIssue } from "zod";
+import { canvasSceneSchema } from "./excalidraw/canvas-schema";
+export { canvasSceneSchema, canvasElementSchema, canvasEmbedSchema } from "./excalidraw/canvas-schema";
+export type { CanvasScene, CanvasElement, CanvasEmbed } from "./excalidraw/canvas-schema";
 
 export const SLIDE_DOCUMENT_SCHEMA_VERSION = "learnordie.slide.v1" as const;
 
@@ -360,6 +363,7 @@ export const slideNodeSchema = z
     layout: z.enum(slideLayoutIdValues),
     intent: z.enum(slideIntentValues),
     blocks: z.array(slideBlockSchema).min(1).max(24),
+    canvas: canvasSceneSchema.optional(),
     speakerNotes: z.array(speakerNoteSchema).max(12).optional(),
     quizAnchors: z.array(quizAnchorSchema).max(12).optional(),
     sourceRefs: z.array(sourceReferenceSchema).min(1).max(20)

@@ -7,6 +7,7 @@ import {
   type SlideThemeId,
   validateSlideDocument
 } from "./schema";
+import { canvasTextForBlock } from "./excalidraw/scene";
 
 export type LegacySlide = {
   id: string;
@@ -143,7 +144,7 @@ export function slideDocumentToLegacySlides(
     const figureBlock = slide.blocks.find((block) => block.type === "figure");
     const copy = slide.blocks
       .filter((block) => block.type === "paragraph")
-      .map((block) => block.text.trim())
+      .map((block) => (canvasTextForBlock(slide, block.id) ?? block.text).trim())
       .filter(Boolean)
       .slice(0, 4);
 
@@ -152,7 +153,7 @@ export function slideDocumentToLegacySlides(
       eyebrow: fallback?.eyebrow?.trim() || legacyEyebrowFromSlide(slide, index),
       title: slide.title.trim() || fallback?.title || `Folie ${index + 1}`,
       topic: figureBlock?.caption?.trim() || fallback?.topic || slide.title.trim() || `Folie ${index + 1}`,
-      copy: copy.length > 0 ? copy : fallback?.copy ?? [" "],
+      copy: slide.canvas ? copy : copy.length > 0 ? copy : fallback?.copy ?? [" "],
       diagram: legacyDiagramFromSlideNode(slide, fallback?.diagram ?? "bearing")
     };
   });
