@@ -7,6 +7,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   production-smoke:
     name: Production smoke
@@ -53,6 +57,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Identity and test-account unit contracts
+        run: node scripts/run-unit-identity.mjs
 
       - name: Lint
         run: npm run lint

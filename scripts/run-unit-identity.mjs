@@ -11,8 +11,10 @@ const child = spawn(
     "--import",
     path.join(root, "scripts/alias-register.mjs"),
     "--test",
+    "--test-concurrency=2",
     "src/lib/student-pseudonym.test.ts",
-    "src/server/student-claims.test.ts"
+    "src/server/student-claims.test.ts",
+    "src/server/test-accounts.test.ts"
   ],
   { stdio: "inherit", cwd: root }
 );
