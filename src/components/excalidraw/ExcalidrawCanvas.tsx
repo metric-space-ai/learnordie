@@ -17,11 +17,12 @@ export type CanvasApi = {
   setActiveTool: (tool: { type: string }) => void;
 };
 
-export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, onChange, onReady }: {
+export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, slideId, onChange, onReady }: {
   scene: CanvasScene;
   assets?: SlideAssetRef[];
   readOnly?: boolean;
   title: string;
+  slideId?: string;
   onChange?: (scene: CanvasScene) => void;
   onReady?: (api: CanvasApi | null) => void;
 }) {
@@ -123,7 +124,7 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
     apiRef.current?.updateScene({ elements: scene.elements, appState: { viewBackgroundColor: scene.backgroundColor } });
   }, [scene]);
 
-  return <div className={`native-canvas ${readOnly ? "native-canvas-view" : "native-canvas-edit"}`} data-canvas-engine="excalidraw" data-canvas-ready={ready} aria-label={readOnly ? `Folie: ${title}` : "Excalidraw-Folieneditor"}>
+  return <div className={`native-canvas ${readOnly ? "native-canvas-view" : "native-canvas-edit"}`} data-canvas-engine="excalidraw" data-canvas-ready={ready} data-slide-id={slideId} aria-label={readOnly ? `Folie: ${title}` : "Excalidraw-Folieneditor"}>
     <div className="native-canvas-host" ref={host} />
     {assetWarning && ready && <p className="native-asset-warning" role="status">{assetWarning}</p>}
     {failure ? <div className="native-canvas-notice" role="alert">{failure}<button type="button" onClick={() => setAttempt((value) => value + 1)}>Erneut laden</button></div>

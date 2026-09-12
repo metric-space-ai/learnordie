@@ -89,7 +89,7 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
       <button type="button" onClick={() => openEmbedPanel("html")} aria-expanded={panel === "html"}>HTML</button>
       <button type="button" onClick={() => api.current?.scrollToContent(undefined, { fitToContent: true, viewportZoomFactor: 0.92, animate: true })}>Einpassen</button>
     </div>}
-    <ExcalidrawCanvas key={`${lectureId}:${current.id}`} title={current.title} scene={scene} assets={document.assets} readOnly={readOnly} onReady={(value) => { api.current = value; }} onChange={changed} />
+    <ExcalidrawCanvas key={`${lectureId}:${current.id}`} slideId={current.id} title={current.title} scene={scene} assets={document.assets} readOnly={readOnly} onReady={(value) => { api.current = value; }} onChange={changed} />
     {!readOnly && panel && <aside className="native-insert-panel" aria-label={panel === "html" ? "HTML einbetten" : "3D-Szene einfügen"}>
       <div className="native-insert-heading"><h2>{panel === "html" ? "HTML einbetten" : "3D-Szene"}</h2><button type="button" aria-label="Einfügen schließen" onClick={() => setPanel(null)}>×</button></div>
       {panel === "html" ? <>
