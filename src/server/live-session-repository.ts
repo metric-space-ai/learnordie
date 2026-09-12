@@ -32,7 +32,9 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
   const db = getDb();
   await db.transaction(async (tx) => {
     // Locks the existing parent too, making concurrent first-session creation safe.
-    await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lecture.id)).for("update");
+    // NO KEY UPDATE serializes first creation without blocking the KEY SHARE
+    // FK checks of an answer transaction already holding the session row.
+    await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lecture.id)).for("no key update");
     const [current] = await tx.select().from(liveSessions).where(eq(liveSessions.lectureId, lecture.id)).for("update");
     if ((current?.revision ?? 0) !== command.revision) throw new LiveSessionError(409, "Sitzung wurde geändert. Bitte erneut versuchen.");
     const now = await databaseNow(tx);

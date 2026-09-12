@@ -197,7 +197,17 @@ test("Private presenter route rejects another lecturer; DB lock cannot extend an
     } finally { release(); await lock; }
     expect((await pendingAnswer).status()).toBe(409);
     expect(Number((await sql`select count(*) from live_answers where round_id = ${state.round!.id}`)[0].count)).toBe(0);
-    const end = await owner.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "end", revision: state.revision } });
+    const fired = await owner.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "fire", familyIndex: 0, durationSeconds: 60, revision: state.revision } });
+    expect(fired.status()).toBe(200);
+    const fresh = await fired.json() as LiveSessionView;
+    // Closing and answering concurrently must serialize, never FK-lock deadlock.
+    const [closed, racedAnswer] = await Promise.all([
+      owner.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "close", revision: fresh.revision } }),
+      student.request.post(`/api/lecture/${lecture.publicToken}/live`, { data: { sessionId: fresh.sessionId, roundId: fresh.round!.id, level: "2.0", selected: "A" } })
+    ]);
+    expect(closed.status()).toBe(200);
+    expect([200, 409]).toContain(racedAnswer.status());
+    const end = await owner.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "end", revision: (await closed.json()).revision } });
     expect(end.status()).toBe(200);
   } finally { await Promise.all([ownerContext.close(), otherContext.close(), studentContext.close()]); await sql.end(); }
 });
