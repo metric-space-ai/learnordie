@@ -285,7 +285,8 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
             />
             <span className="lb-scene3d-math">{state.description === "energy" ? "E = ½mv² + ½kx²" : "F = −k · x"}</span>
           </div>
-          <p className="lb-scene3d-explain">Zwei Beschreibungen. Dasselbe idealisierte Geschehen.</p>
+          <p className="lb-scene3d-explain">{state.description === "energy" ? "Die Energie wechselt ihre Form; die Summe bleibt konstant." : "Die Rückstellkraft wirkt der Auslenkung entgegen."}</p>
+          {state.description === "energy" && <div className="lb-scene3d-row" aria-label="Energielegende"><span><span style={{ color: "#d5adf2" }} aria-hidden="true">●</span> Bewegungsenergie</span><span><span style={{ color: "#e5c48c" }} aria-hidden="true">●</span> Federenergie</span></div>}
         </>
       );
     case "runtime":
@@ -324,6 +325,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
     case "learning":
       return (
         <>
+          <div className="lb-scene3d-row" aria-label="Diagrammlegende"><span><span style={{ color: "#8fcfc2" }} aria-hidden="true">●</span> Beispieldaten</span><span><span style={{ color: "#d5adf2" }} aria-hidden="true">━</span> Modell</span><span><span style={{ color: "#e5c48c" }} aria-hidden="true">●</span> Auswertung</span></div>
           <div className="lb-scene3d-row">
             <button
               className="lb-scene3d-button"

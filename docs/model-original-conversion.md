@@ -87,10 +87,9 @@ contexts, token step and illustrative candidates; all five transfer steps and
 their exact explanations. Pause/reset-camera remain existing scene-host actions.
 This conversion does not alter any renderer, runtime or general CSS.
 
-The port does not show the original law scene's **dynamic ω readout**. Static
-solution, m and A are retained; this existing runtime discrepancy remains explicit.
-The force/energy explanations are both retained as static text rather than
-conditionally changing native text with the mode. HTML emphasis becomes editable
+The integration restores the original law scene's dynamic ω readout, conditional
+force/energy explanation, energy legend and learning plot legend. Static
+solution, m and A are retained as editable native text. HTML emphasis becomes editable
 plain text; θ subscript becomes explicit `p_θ` notation, with original markup in
 provenance. These are known typography/dynamic-display differences, not a claim
 of pixel-identical reproduction.
