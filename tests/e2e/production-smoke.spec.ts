@@ -15,7 +15,8 @@ import { audioFileExtension, encodePcm16Wav } from "../../src/lib/audio-capture"
 
 const execFileAsync = promisify(execFile);
 const e2eDatabaseUrl = process.env.E2E_DATABASE_URL ?? "postgres://michaelwelsch@127.0.0.1:55432/learnbuddy_e2e_smoke";
-const e2eAuthSecret = "learnbuddy-e2e-secret-with-more-than-32-characters";
+// Exact isolated fixture secret configured by scripts/e2e-server.mjs.
+const e2eAuthSecret = "learnordie-e2e-secret-with-more-than-32-characters";
 const lecturerSessionCookie = "lb_lecturer_session";
 const e2eBaseUrl = process.env.E2E_BASE_URL ?? `http://${process.env.E2E_HOST ?? "127.0.0.1"}:${process.env.E2E_PORT ?? "3070"}`;
 const e2eBaseOrigin = new URL(e2eBaseUrl).origin;
@@ -63,8 +64,35 @@ async function loginLecturer(page: Page) {
   const magicLink = await requestMagicLink(page);
   await page.goto(magicLink);
   await expect(page).toHaveURL(/\/lecturer$/);
-  await expect(page.getByRole("textbox", { name: "Folientitel" })).toContainText("Hydrodynamische Gleitlagerung");
+  await expectDemoStudio(page);
   return magicLink;
+}
+
+async function expectNativeCanvas(page: Page, editable = false) {
+  const canvas = editable
+    ? page.getByLabel("Excalidraw-Folieneditor", { exact: true })
+    : page.locator('[data-canvas-engine="excalidraw"]');
+  await expect(canvas).toHaveAttribute("data-canvas-ready", "true");
+  await expect(canvas.locator("canvas").first()).toBeVisible();
+  if (editable) await expect(page.getByRole("toolbar", { name: "Folienelemente" })).toBeVisible();
+  return canvas;
+}
+
+async function expectDemoStudio(page: Page) {
+  await expectNativeCanvas(page, true);
+  // Canvas text is not a DOM textbox. Correlate the visible filmstrip selection
+  // with the actual owner-scoped document instead of asserting removed markup.
+  const response = await page.request.get(new URL("/api/lectures", page.url()).href);
+  expect(response.ok()).toBe(true);
+  const { lectures } = await response.json() as { lectures: Lecture[] };
+  const lecture = lectures.find((item) => item.publicToken === "gleitlagerung-demo");
+  expect(lecture).toBeTruthy();
+  expect(lecture!.slides[0].title).toBe("Hydrodynamische Gleitlagerung");
+  expect(lecture!.seriesTitle).toBe("Maschinenelemente I");
+  const active = page.locator('.studio-filmstrip-list button[aria-current="true"]');
+  await expect(active).toHaveAttribute("data-slide-id", lecture!.slides[0].id);
+  await expect(active).toContainText(lecture!.slides[0].title);
+  return lecture!;
 }
 
 async function lecturerCsrfToken(page: Page) {
@@ -2444,7 +2472,8 @@ MISTRAL_API_KEY=replace-with-mistral-key
   expect(sessionPayload.expiresAt).toBeGreaterThan(Date.now() + 29 * 24 * 60 * 60 * 1000);
   await expectMagicLinkCannotBeReused(browser, magicLink);
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Vorlesungsreihe" })).toContainText("Maschinenelemente I");
+  const reloadedLecture = await expectDemoStudio(page);
+  expect(reloadedLecture.seriesTitle).toBe("Maschinenelemente I");
 
   const lecturesResponse = await page.request.get("/api/lectures");
   expect(lecturesResponse.ok()).toBe(true);
@@ -3246,7 +3275,7 @@ test("Materialverarbeitung lehnt doppelte KI-Fragevarianten ab", async ({ page }
     }]);
 
     await page.goto(`${app.url}/lecturer`);
-    await expect(page.getByRole("textbox", { name: "Folientitel" })).toContainText("Hydrodynamische Gleitlagerung");
+    await expectDemoStudio(page);
     const csrfToken = await lecturerCsrfToken(page);
     const lecturesResponse = await page.request.get(`${app.url}/api/lectures`);
     expect(lecturesResponse.ok()).toBe(true);
@@ -3299,7 +3328,7 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
 
   await page.goto(`/l/${lecture.publicToken}`);
   await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
   await page.getByRole("button", { name: "Frage stellen" }).click();
@@ -3429,7 +3458,7 @@ test("Historische Lern-Rangliste: 30 Studierende, Top10 und eigene Position blei
   expect(lowerSelf?.rank).toBeGreaterThan(10);
 
   await page.goto(`/learn/${lecture.publicToken}`);
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
   await page.getByRole("button", { name: "Rangliste" }).click();
   await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.locator(".leader-row")).toHaveCount(10);
@@ -3488,7 +3517,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
 
   const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
   await expect(hotspots).toHaveCount(4);
@@ -3557,7 +3586,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   assertClean();
 });
 
-test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows", async ({ page }) => {
+test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows", async ({ page }, testInfo) => {
   const assertClean = attachBrowserDiagnostics(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -3600,7 +3629,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.goto("/learn/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
 
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
   await expect(page.locator(".learn-hotspot-shared-ghost[data-shared-element='learn-hotspot']")).toBeAttached();
@@ -3692,7 +3721,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
   const mobileLearnFit = await page.evaluate(() => {
@@ -3718,6 +3747,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await loginLecturer(page);
+  const studioLecture = await expectDemoStudio(page);
   const studioStageMotion = await page.evaluate(() => {
     const stage = document.querySelector<HTMLElement>(".studio-slide-stage");
     if (!stage) throw new Error("Studio stage missing.");
@@ -3733,7 +3763,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator(".studio-slide-shared-ghost")).toBeAttached();
   const studioSharedSlideMotion = await page.evaluate(() => {
     const ghost = document.querySelector<HTMLElement>(".studio-slide-shared-ghost");
-    const stage = document.querySelector<HTMLElement>(".dashboard-slide-preview[data-slide-id]");
+    const stage = document.querySelector<HTMLElement>('.native-studio-frame [data-canvas-engine="excalidraw"]');
     const active = document.querySelector<HTMLButtonElement>(".studio-filmstrip-list button[aria-current='true']");
     if (!ghost) throw new Error("Studio shared slide ghost missing.");
     if (!stage) throw new Error("Studio stage slide missing.");
@@ -3745,6 +3775,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       duration: timing?.duration,
       activeSlideId: active.dataset.slideId,
       stageSlideId: stage.dataset.slideId,
+      stageEngine: stage.dataset.canvasEngine,
       ghostRadius: getComputedStyle(ghost).borderTopLeftRadius,
       ghostGrid: getComputedStyle(ghost).backgroundImage.includes("linear-gradient")
     };
@@ -3752,10 +3783,15 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSharedSlideMotion.sharedElement).toBe("studio-slide");
   expect(studioSharedSlideMotion.hasSharedClass).toBe(true);
   expect(studioSharedSlideMotion.duration).toBe(620);
-  expect(studioSharedSlideMotion.activeSlideId).toBe(studioSharedSlideMotion.stageSlideId);
+  expect(studioSharedSlideMotion.activeSlideId).toBe(studioLecture.slides[1].id);
+  expect(studioSharedSlideMotion.stageSlideId).toBe(studioSharedSlideMotion.activeSlideId);
+  expect(studioSharedSlideMotion.stageEngine).toBe("excalidraw");
   expect(studioSharedSlideMotion.ghostRadius).toBe("18px");
   expect(studioSharedSlideMotion.ghostGrid).toBe(true);
   await expect(page.locator(".studio-slide-shared-ghost")).toHaveCount(0, { timeout: 1500 });
+  await expectNativeCanvas(page, true);
+  await expect(page.locator('.studio-filmstrip-list button[aria-current="true"]')).toContainText(studioLecture.slides[1].title);
+  await testInfo.attach("native-filmstrip-selection", { body: await page.screenshot(), contentType: "image/png" });
 
   await page.getByLabel("Folienwerkzeuge öffnen").click();
   await expect(page.getByLabel("Folienwerkzeuge", { exact: true })).toBeVisible();
@@ -3862,6 +3898,9 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.goto("/lecturer/live/gleitlagerung-demo");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vorlesung beitreten", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
+  await expectNativeCanvas(page);
   await expect(page.getByLabel("Transkriptstatus")).toHaveCount(0);
   await page.getByRole("button", { name: "Transkript und Mikrofon" }).click();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
@@ -3894,5 +3933,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(lecturerLiveSttMotion.panelWidth).toBeLessThanOrEqual(420);
   expect(lecturerLiveSttMotion.panelRight).toBeGreaterThanOrEqual(-4);
 
+  await page.getByRole("button", { name: "Beenden", exact: true }).click();
+  await expect(page).toHaveURL(/\/lecturer$/);
   assertClean();
 });

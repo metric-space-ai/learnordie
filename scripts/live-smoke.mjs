@@ -367,11 +367,30 @@ async function checkHealth(timeoutMs) {
   }
 }
 
+async function waitForNativeCanvas(page, timeoutMs) {
+  const canvas = page.locator('[data-canvas-engine="excalidraw"][data-canvas-ready="true"]');
+  await canvas.waitFor({ state: "visible", timeout: timeoutMs });
+  await canvas.locator("canvas").first().waitFor({ state: "visible", timeout: timeoutMs });
+}
+
+async function waitForLiveSurface(page, timeoutMs) {
+  // The QR welcome slide intentionally precedes native content. Do not claim
+  // that its QR canvas proves the Excalidraw engine loaded.
+  const native = page.locator('[data-canvas-engine="excalidraw"][data-canvas-ready="true"]');
+  const intro = page.locator(".lecture-join-qr canvas");
+  await native.or(intro).first().waitFor({ state: "visible", timeout: timeoutMs });
+  if (await native.isVisible()) {
+    await waitForNativeCanvas(page, timeoutMs);
+    return "excalidraw";
+  }
+  return "join-intro";
+}
+
 async function checkStudentLive(page, token, timeoutMs) {
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl(`/l/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
+  const initialSurface = await waitForLiveSurface(page, timeoutMs);
   if (await visible(page.getByRole("button", { name: "Teilnehmen", exact: true }), 500)) throw new Error("Live viewing unexpectedly requires an identity gate.");
   await page.locator(".slide-lecture-link").waitFor({ state: "visible", timeout: timeoutMs });
   const response = await page.request.get(appUrl(`/api/lecture/${token}/live`));
@@ -380,7 +399,7 @@ async function checkStudentLive(page, token, timeoutMs) {
   if (!["waiting", "active", "ended"].includes(liveState.status)) throw new Error("Invalid authoritative live status.");
   await page.locator(`main[data-live-status='${liveState.status}']`).waitFor({ state: "visible", timeout: timeoutMs });
   await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
-  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
+  const reloadedSurface = await waitForLiveSurface(page, timeoutMs);
 
   const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
@@ -392,7 +411,9 @@ async function checkStudentLive(page, token, timeoutMs) {
   if (!failOnDiagnostics("student_live_browser", problems)) return;
   pass("student_live_browser", "Fresh student entry, authoritative state and reload verified. Does not verify answering/presentation control; use owned live-session suite.", {
     lectureToken: token,
-    slideEngine: "v1",
+    slideEngine: reloadedSurface,
+    initialSurface,
+    nativeCanvasChecked: initialSurface === "excalidraw" || reloadedSurface === "excalidraw",
     leaderboardChecked: leaderboardAvailable,
     liveStatus: liveState.status,
     answersSubmitted: 0,
@@ -405,7 +426,7 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   let aiState = null;
   await page.goto(appUrl(`/learn/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
+  await waitForNativeCanvas(page, timeoutMs);
   const hotspot = page.getByLabel(/Frage Niveau .* anzeigen/).first();
   await page.getByLabel("Fragen-Hotspots").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
   await openQuizDrawer(page, hotspot, timeoutMs);
@@ -468,7 +489,7 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   if (!failOnDiagnostics("learn_browser", problems)) return;
   pass("learn_browser", "Learn mode flow works in a fresh browser context.", {
     lectureToken: token,
-    slideEngine: "v1",
+    slideEngine: "excalidraw",
     aiRequested: includeAI,
     requireAIProvider,
     aiAnswerState: aiState?.answerState ?? null,
@@ -508,11 +529,15 @@ async function checkLecturerAssistant(page, timeoutMs, requireProvider) {
 
 async function waitForLecturerStudio(page, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
-  const editorTitle = page.getByRole("textbox", { name: "Folientitel" });
+  const editor = page.locator('.native-studio-frame [data-canvas-engine="excalidraw"][data-canvas-ready="true"]');
   const createDialog = page.getByRole("dialog", { name: "Neue Vorlesung anlegen" });
 
   while (Date.now() < deadline) {
-    if (await visible(editorTitle, 500)) return "lecture-editor";
+    if (await visible(editor, 500)) {
+      await editor.locator("canvas").first().waitFor({ state: "visible", timeout: Math.max(1, deadline - Date.now()) });
+      await page.getByRole("toolbar", { name: "Folienelemente", exact: true }).waitFor({ state: "visible", timeout: Math.max(1, deadline - Date.now()) });
+      return "lecture-editor";
+    }
     if (await visible(createDialog, 500)) {
       await page.getByRole("textbox", { name: "Titel" }).waitFor({ state: "visible", timeout: 2_000 });
       return "create-lecture";
@@ -526,12 +551,12 @@ async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth,
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl("/lecturer/login"), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   if (email) {
-    await page.getByLabel("E-Mail").fill(email);
-    await page.getByRole("button", { name: "Magic Link senden" }).click();
+    await page.getByLabel("E-Mail", { exact: true }).fill(email);
+    await page.getByRole("button", { name: "Code senden", exact: true }).click();
   }
 
   let link = magicLink;
-  const localLink = page.getByRole("link", { name: "Referentenbereich öffnen" });
+  const localLink = page.getByRole("link", { name: "Direkt zum Dozentenbereich", exact: true });
   if (!link && await visible(localLink, 1500)) {
     const href = await localLink.getAttribute("href");
     if (href) link = new URL(href, page.url()).toString();
