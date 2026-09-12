@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { buildStandaloneCanvasRuntime, encodeStandaloneDownload } from "../../src/server/standalone-canvas-runtime";
 import { renderStandaloneSlideDocumentHtml, standaloneScript, standaloneStyles } from "../../packages/slide-engine/src/standalone";
-import { renderStandaloneCanvas, STANDALONE_CANVAS_CSP } from "../../packages/slide-engine/src/standalone-canvas";
+import { renderStandaloneCanvas, rewriteStandaloneSvg, STANDALONE_CANVAS_CSP } from "../../packages/slide-engine/src/standalone-canvas";
 import { legacySlidesToSlideDocument } from "../../packages/slide-engine/src/legacy";
 import { canvasSceneForSlide } from "../../packages/slide-engine/src/excalidraw/scene";
 
@@ -109,4 +109,80 @@ test("native download negotiation preserves exact decoded bytes and enforces res
   assert.equal(unsupported.encoding, undefined);
   assert.equal(unsupported.tooLarge, true);
   assert.deepEqual(unsupported.body, bytes);
+});
+
+// No DOM parser dependency is installed. This small structural fixture exercises
+// the production tree-mutation algorithm; the browser test verifies real pixels.
+class SvgNode {
+  parent: SvgNode | null = null;
+  childNodes: SvgNode[] = [];
+  attributes: Map<string, string>;
+  localName: string;
+  constructor(localName: string, attributes: Record<string, string> = {}, children: SvgNode[] = []) {
+    this.localName = localName;
+    this.attributes = new Map(Object.entries(attributes));
+    for (const child of children) { child.parent = this; this.childNodes.push(child); }
+  }
+  getAttribute(name: string) { return this.attributes.get(name) ?? null; }
+  removeAttribute(name: string) { this.attributes.delete(name); }
+  contains(node: SvgNode): boolean { return node === this || this.childNodes.some((child) => child.contains(node)); }
+  querySelectorAll(selector: string): SvgNode[] {
+    return this.childNodes.flatMap((child) => [
+      ...(selector === "*" || selector === child.localName || (selector === "[id]" && child.getAttribute("id") !== null) ? [child] : []),
+      ...child.querySelectorAll(selector),
+    ]);
+  }
+  querySelector(selector: string) { return this.querySelectorAll(selector)[0] ?? null; }
+  replaceWith(...nodes: SvgNode[]) {
+    const owner = this.parent;
+    if (!owner) return;
+    let position = owner.childNodes.indexOf(this);
+    owner.childNodes.splice(position, 1);
+    this.parent = null;
+    for (const node of nodes) {
+      if (node.parent) node.parent.childNodes.splice(node.parent.childNodes.indexOf(node), 1);
+      owner.childNodes.splice(position++, 0, node);
+      node.parent = owner;
+    }
+  }
+}
+
+test("nested native anchors preserve their transformed group, z-order and exactly one embed", () => {
+  const href = "https://learnordie.invalid/embed/native-html";
+  const inner = new SvgNode("a", { href });
+  const transformed = new SvgNode("g", { transform: "translate(750 150) rotate(12 325 125)", "clip-path": "url(#clip)" }, [inner]);
+  const outer = new SvgNode("a", { href }, [transformed]);
+  const before = new SvgNode("path");
+  const after = new SvgNode("text");
+  const svg = new SvgNode("svg", {}, [before, outer, after]);
+  const foreign = new SvgNode("foreignObject");
+  const calls: string[] = [];
+  const count = rewriteStandaloneSvg(svg as unknown as SVGSVGElement, (id) => { calls.push(id); return foreign as unknown as SVGElement; });
+  assert.equal(count, 1);
+  assert.deepEqual(calls, ["native-html"]);
+  assert.deepEqual(svg.childNodes, [before, transformed, after]);
+  assert.equal(transformed.getAttribute("transform"), "translate(750 150) rotate(12 325 125)");
+  assert.equal(transformed.getAttribute("clip-path"), "url(#clip)");
+  assert.deepEqual(transformed.childNodes, [foreign]);
+  assert.equal(svg.contains(inner), false);
+  assert.equal(svg.querySelectorAll("a").length, 0);
+});
+
+test("native symbol/use references survive href cleanup but external and missing references do not", () => {
+  const image = new SvgNode("image", { href: "data:image/png;base64,aGVsbG8=" });
+  const symbol = new SvgNode("symbol", { id: "image:K_1-test" }, [image]);
+  const use = new SvgNode("use", { href: "#image:K_1-test" });
+  const xlinkUse = new SvgNode("use", { "xlink:href": "#image:K_1-test" });
+  const external = new SvgNode("use", { href: "https://denied.invalid/file.svg#image:K_1-test", "xlink:href": "javascript:alert(1)" });
+  const missing = new SvgNode("use", { href: "#missing" });
+  const unsafeImage = new SvgNode("image", { href: "data:text/html;base64,aGVsbG8=" });
+  const svg = new SvgNode("svg", {}, [new SvgNode("defs", {}, [symbol]), use, xlinkUse, external, missing, unsafeImage]);
+  assert.equal(rewriteStandaloneSvg(svg as unknown as SVGSVGElement, () => null), 0);
+  assert.equal(use.getAttribute("href"), "#image:K_1-test");
+  assert.equal(xlinkUse.getAttribute("xlink:href"), "#image:K_1-test");
+  assert.equal(image.getAttribute("href"), "data:image/png;base64,aGVsbG8=");
+  for (const node of [external, missing, unsafeImage]) {
+    assert.equal(node.getAttribute("href"), null);
+    assert.equal(node.getAttribute("xlink:href"), null);
+  }
 });

@@ -1,11 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { createRequire } from "node:module";
 import { buildStandaloneCanvasRuntime } from "../../src/server/standalone-canvas-runtime";
 import { renderStandaloneSlideDocumentHtml } from "../../packages/slide-engine/src/standalone";
 import { legacySlidesToSlideDocument } from "../../packages/slide-engine/src/legacy";
 import { canvasSceneForSlide } from "../../packages/slide-engine/src/excalidraw/scene";
 import type { CanvasElement } from "../../packages/slide-engine/src/excalidraw/canvas-schema";
 
-async function offlineHtml() {
+// Same already-locked PNG decoder used by the QR screenshot regression suite.
+const { PNG } = createRequire(import.meta.url)("pngjs") as { PNG: { sync: { read(bytes: Buffer): { data: Buffer } } } };
+
+async function offlineHtml(imageData?: string) {
   const document = legacySlidesToSlideDocument([{ id: "offline-native", title: "Native Offline QA", eyebrow: "QA", topic: "Export", copy: ["Stale block must not reappear"], diagram: "bearing" }]);
   const slide = document.slides[0];
   const scene = canvasSceneForSlide(slide, document.assets);
@@ -19,7 +23,7 @@ async function offlineHtml() {
     native("offline-html", "embeddable", { x: 750, y: 150, width: 650, height: 250, customData: { learnordie: { type: "html", title: "Offline HTML/CSS", html: '<style>h2{color:rgb(120,30,80)}</style><h2>Native HTML/CSS</h2><script>parent.pwned=true</script><a href="https://offline-denied.invalid">Unsafe link</a><iframe src="https://offline-denied.invalid"></iframe><meta http-equiv="refresh" content="0;url=https://offline-denied.invalid">' } } }),
     native("offline-3d", "embeddable", { x: 40, y: 440, width: 650, height: 380, customData: { learnordie: { type: "scene3d", sceneId: "modell.learning", caption: "Lernmodell" } } }),
   ]));
-  scene.files = { "offline-png": { id: "offline-png", created: 0, mimeType: "image/png", dataURL: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" } };
+  scene.files = { "offline-png": { id: "offline-png", created: 0, mimeType: "image/png", dataURL: imageData ?? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" } };
   slide.canvas = scene;
   return renderStandaloneSlideDocumentHtml({ document, metadata: { version: "native-offline-qa", exportedAt: "2026-09-12" }, dataJson: JSON.stringify({ lecture: { slideDocument: document } }), manifestJson: "{}", nativeCanvasRuntime: await buildStandaloneCanvasRuntime() });
 }
@@ -32,13 +36,35 @@ test("downloaded native standalone renders true SVG, images, isolated HTML and s
     if (/^https?:/.test(route.request().url())) { requests.push(route.request().url()); return route.abort(); }
     return route.continue();
   });
-  await page.setContent(await offlineHtml(), { waitUntil: "load" });
+  const imageData = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 4; canvas.height = 4;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#e60026";
+    context.fillRect(0, 0, 4, 4);
+    return canvas.toDataURL("image/png");
+  });
+  await page.setContent(await offlineHtml(imageData), { waitUntil: "load" });
   const root = page.locator(".ld-native-export");
   await expect(root).toHaveAttribute("data-native-export-status", "ready", { timeout: 25000 });
   await expect(root.locator("[data-native-export-view] svg")).toBeVisible();
   await expect(root.locator("svg text").filter({ hasText: "Canvas-Text äöü" })).toBeVisible();
   await expect(root.locator("svg image")).toHaveCount(1);
+  const imageUse = root.locator("svg use[href^='#']").first();
+  await expect(imageUse).toBeVisible();
+  expect(await imageUse.evaluate((element) => {
+    const href = element.getAttribute("href")!;
+    const svg = element.closest("svg")!;
+    return Array.from(svg.querySelectorAll("symbol[id]")).some((symbol) => symbol.id === href.slice(1) && Boolean(symbol.querySelector("image")));
+  })).toBe(true);
+  // Actual rendered use-instance pixels, not just an unused image in <defs>.
+  const { data: pixels } = PNG.sync.read(await imageUse.screenshot());
+  let redPixels = 0;
+  for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 190 && pixels[i + 1] < 60 && pixels[i + 2] < 90 && pixels[i + 3] > 200) redPixels++;
+  expect(redPixels).toBeGreaterThan(100);
   await expect(root.locator("[data-native-embed-id]")).toHaveCount(2);
+  await expect(root.locator('[data-native-embed-id="offline-html"]')).toHaveCount(1);
+  expect(await root.locator('[data-native-embed-id="offline-html"]').evaluate((element) => element.parentElement?.getAttribute("transform"))).toContain("translate(");
   const html = page.frameLocator('iframe[title="Offline HTML/CSS"]');
   await expect(html.getByRole("heading", { name: "Native HTML/CSS" })).toHaveCSS("color", "rgb(120, 30, 80)");
   await expect(html.locator("script,a,iframe,meta[http-equiv=refresh]")).toHaveCount(0);

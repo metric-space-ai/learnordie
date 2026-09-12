@@ -84,3 +84,23 @@ a full semantic typecheck.
 browser run: true native SVG, raster, safe HTML/CSS, static3D, no network,
 mobile overflow and unsupported-browser failure. **Not yet browser-verified**
 by this worker; parent integration/release gates remain required.
+
+## PR17 review corrections
+
+The SVG rewrite preserves local `href`/`xlink:href` fragments only when the
+referenced ID exists in the same SVG. Native `<symbol><image/></symbol>` +
+`<use href="#symbol">` raster instances therefore remain drawable. External,
+dangling and active references are removed; raster data stays on image nodes.
+
+Native embeds may have both an outer hyperlink and an inner placeholder.
+The outer anchor is unwrapped while keeping its transformed/clipped group and
+sibling order; only the still-attached innermost placeholder is replaced.
+Each embed ID is counted once, and an unexpected duplicate leaf fails visibly.
+
+Nine focused unit contracts now pass, including exact nested-anchor tree
+mutation and local symbol/use reference retention. No lightweight DOM parser
+is installed, so those tests use a small structural fixture, not a simulated
+claim of browser rendering. The actual browser suite additionally checks red
+pixels from a screenshot of the native `<use>` instance (using the existing
+locked PNG decoder), plus retained native embed transform and one instance.
+That pixel/browser regression remains unexecuted until the parent's gated run.

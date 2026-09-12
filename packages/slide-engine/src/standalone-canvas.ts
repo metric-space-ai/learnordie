@@ -34,10 +34,45 @@ export function renderStandaloneCanvas(input: CanvasScene, runtimeAvailable: boo
 
 /** Trusted offline glue. It has no outer-scope dependencies after serialization. */
 export function standaloneCanvasScript() {
-  return `(${hydrateStandaloneCanvas.toString()})();`;
+  return `(${hydrateStandaloneCanvas.toString()})(${rewriteStandaloneSvg.toString()});`;
 }
 
-function hydrateStandaloneCanvas() {
+/** Native SVG may wrap an embed twice; only its innermost anchor is a placeholder. */
+export function rewriteStandaloneSvg(svg: SVGSVGElement, createEmbed: (id: string) => SVGElement | null): number {
+  const rendered = new Set<string>();
+  for (const anchor of Array.from(svg.querySelectorAll("a"))) {
+    if (!svg.contains(anchor)) continue;
+    // The outer hyperlink wrapper owns the transformed native group. Unwrap it
+    // without replacing or detaching that group; process the still-attached leaf.
+    if (anchor.querySelector("a")) { anchor.replaceWith(...Array.from(anchor.childNodes)); continue; }
+    const link = anchor.getAttribute("href") ?? anchor.getAttribute("xlink:href") ?? "";
+    const prefix = "https://learnordie.invalid/embed/";
+    let id = "";
+    if (link.startsWith(prefix)) {
+      try { id = decodeURIComponent(link.slice(prefix.length)); } catch { /* Invalid markers are inert links. */ }
+    }
+    if (id && rendered.has(id)) throw new Error("Doppelter nativer Embed-Platzhalter.");
+    const replacement = id ? createEmbed(id) : null;
+    if (!replacement) { anchor.replaceWith(...Array.from(anchor.childNodes)); continue; }
+    anchor.replaceWith(replacement);
+    rendered.add(id);
+  }
+  // A <use href="#symbol"> is an image instance, not an outbound hyperlink.
+  // Validate fragments against IDs in THIS SVG, without interpolating selectors.
+  const localIds = new Set(Array.from(svg.querySelectorAll("[id]")).map((element) => element.getAttribute("id")));
+  for (const element of Array.from(svg.querySelectorAll("*"))) {
+    for (const attribute of ["href", "xlink:href"]) {
+      const value = element.getAttribute(attribute);
+      if (value === null) continue;
+      const local = /^#[A-Za-z0-9_:.~-]+$/.test(value) && localIds.has(value.slice(1));
+      const image = element.localName === "image" && /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(value);
+      if (!local && !image) element.removeAttribute(attribute);
+    }
+  }
+  return rendered.size;
+}
+
+function hydrateStandaloneCanvas(rewriteSvg: typeof rewriteStandaloneSvg) {
   const browser = window as Window & { __learnordieOfflineSvg?: (options: object) => Promise<SVGSVGElement> };
   const policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'";
   const allowedTags = new Set("div span section article aside header footer main nav p h1 h2 h3 h4 h5 h6 strong b em i u s del small sub sup mark code pre blockquote q abbr time address br hr ul ol li dl dt dd table caption thead tbody tfoot tr th td colgroup col figure figcaption img details summary progress meter style svg g path circle ellipse rect line polyline polygon text tspan defs lineargradient radialgradient stop clippath title desc".split(" "));
@@ -86,15 +121,12 @@ function hydrateStandaloneCanvas() {
           browser.__learnordieOfflineSvg({ elements, files: scene.files, renderEmbeddables: false, appState: { viewBackgroundColor: scene.backgroundColor, exportBackground: true }, exportPadding: 24 }),
           new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error("Native Darstellung überschreitet das Zeitlimit.")), 20000); }),
         ]);
-        let renderedEmbeds = 0;
         // Native SVG preserves each anchor's exact transform, bounds, order and
         // frame clipping. Replace that inert placeholder in-place, not an overlay
         // with guessed coordinates or a second legacy renderer.
-        for (const anchor of Array.from(svg.querySelectorAll("a"))) {
-          const link = anchor.getAttribute("href") ?? "";
-          const id = link.startsWith("https://learnordie.invalid/embed/") ? decodeURIComponent(link.slice("https://learnordie.invalid/embed/".length)) : "";
+        const renderedEmbeds = rewriteSvg(svg, (id) => {
           const element = embeds.get(id);
-          if (!element) { anchor.replaceWith(...Array.from(anchor.childNodes)); continue; }
+          if (!element) return null;
           const embed = element.customData!.learnordie!;
           const foreign = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
           foreign.setAttribute("width", String(element.width));
@@ -121,14 +153,9 @@ function hydrateStandaloneCanvas() {
             box.append(image, caption);
           }
           foreign.append(box);
-          anchor.replaceWith(foreign);
-          renderedEmbeds++;
-        }
-        if (renderedEmbeds !== embeds.size) throw new Error("Nicht alle Einbettungen konnten nativ dargestellt werden.");
-        // Imported scene links cannot turn an offline document into a remote viewer.
-        svg.querySelectorAll("[href]").forEach((element) => {
-          if (!element.getAttribute("href")?.startsWith("data:")) element.removeAttribute("href");
+          return foreign;
         });
+        if (renderedEmbeds !== embeds.size) throw new Error("Nicht alle Einbettungen konnten nativ dargestellt werden.");
         svg.style.cssText = "display:block;width:100%;height:auto;max-width:100%";
         root.querySelector("[data-native-export-view]")!.replaceChildren(svg);
         root.dataset.nativeExportStatus = "ready";
