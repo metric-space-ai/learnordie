@@ -20,7 +20,6 @@ import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { buildLegacyLectureSlideDocument, hasEngineOnlyBlocks, mergeLegacySlideEditsIntoDocument } from "@/lib/slide-documents";
 import { JoinCodeEditor } from "./lecturer/JoinCodeEditor";
 import { StudioSlideDocumentEditor } from "./lecturer/StudioSlideDocumentEditor";
-import { Diagram } from "./Diagram";
 import { Presence } from "./Presence";
 import type { PresenceState } from "./Presence";
 import type {
@@ -39,8 +38,7 @@ import type {
   StandaloneExportJob,
   StudentChatQuestion
 } from "@/lib/types";
-import { DeckRenderer } from "@learnordie/slide-engine";
-import type { SlideAssetRef, SlideDocument } from "@learnordie/slide-engine";
+import type { SlideDocument } from "@learnordie/slide-engine";
 import type { FormEvent, KeyboardEvent } from "react";
 
 const statusOptions: Array<{ value: LectureStatus; label: string }> = [
@@ -207,13 +205,6 @@ function assetPreview(asset: PresentationAsset) {
 function presentationAssetPreviewUrl(asset: PresentationAsset) {
   if (!asset.previewKey) return "";
   return ["figure", "photo", "diagram", "chart"].includes(asset.kind) ? asset.previewKey : "";
-}
-
-function mergeSlideDocumentAssets(base: SlideDocument, previous?: SlideDocument): SlideDocument {
-  if (!previous || previous.assets.length === 0) return base;
-  const assets = new Map<string, SlideAssetRef>();
-  [...base.assets, ...previous.assets].forEach((asset) => assets.set(asset.id, asset));
-  return { ...base, assets: [...assets.values()] };
 }
 
 function isTechnicalProviderMessage(message: string) {
@@ -523,7 +514,7 @@ export function LecturerDashboard({
   const sourceFileRef = useRef<File | null>(null);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
-  const [engineEditorOpen, setEngineEditorOpen] = useState(false);
+  const [engineEditing, setEngineEditing] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [reviewFocusId, setReviewFocusId] = useState("");
   const [reviewLevel, setReviewLevel] = useState<QuestionLevel>("2.0");
@@ -598,7 +589,7 @@ export function LecturerDashboard({
     sourceFileRef.current = null;
     setCommandMenuOpen(false);
     setToolMenuOpen(false);
-    setEngineEditorOpen(false);
+    setEngineEditing(true);
     setShowCreateForm(false);
     setAssistantError("");
   }, [initialTool, selectedLectureId]);
@@ -894,42 +885,18 @@ export function LecturerDashboard({
   }
 
   function visibleStageEditDraft(current: typeof edit): typeof edit {
-    const root = stageFrameRef.current;
-    if (!root || !selected || !studioSlide || showCreateForm) return current;
-
-    const readText = (selector: string, fallback: string) => {
-      const value = root.querySelector<HTMLElement>(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "";
-      return value || fallback;
-    };
-
-    const slides = current.slides.map((slide) => {
-      if (slide.id !== studioSlide.id) return slide;
-      return {
-        ...slide,
-        eyebrow: readText('[data-slide-field="eyebrow"]', slide.eyebrow),
-        title: readText('[data-slide-field="title"]', slide.title),
-        topic: readText('[data-slide-field="topic"]', slide.topic),
-        copy: slide.copy.map((line, index) => readText(`[data-slide-copy-index="${index}"]`, line))
-      };
-    });
-
-    const rebuiltSlideDocument = buildLegacyLectureSlideDocument({
-      id: selected.id,
-      title: current.title,
-      seriesTitle: current.seriesTitle,
-      language: selected.language,
-      slides
-    });
-
+    // The native canvas is authoritative, including while preview mode is active.
+    // Never reconstruct an edited scene from its legacy text projection.
+    if (current.slideDocument || !selected) return current;
     return {
       ...current,
-      seriesTitle: readText('[data-lecture-field="seriesTitle"]', current.seriesTitle),
-      slides,
-      slideDocument: engineEditorOpen && current.slideDocument
-        ? current.slideDocument
-        : hasEngineOnlyBlocks(current.slideDocument)
-          ? mergeLegacySlideEditsIntoDocument(current.slideDocument, slides)
-          : mergeSlideDocumentAssets(rebuiltSlideDocument, current.slideDocument)
+      slideDocument: buildLegacyLectureSlideDocument({
+        id: selected.id,
+        title: current.title,
+        seriesTitle: current.seriesTitle,
+        language: selected.language,
+        slides: current.slides
+      })
     };
   }
 
@@ -986,36 +953,8 @@ export function LecturerDashboard({
     setPlanEditor(null);
   }
 
-  function updateSlideDraft(slideId: string, updater: (slide: Slide) => Slide) {
-    setSaveStatus("unsaved");
-    setEdit((current) => ({
-      ...current,
-      slides: current.slides.map((slide) => (slide.id === slideId ? updater(slide) : slide))
-    }));
-  }
-
-  function updateSlideCopy(slideId: string, lineIndex: number, value: string) {
-    updateSlideDraft(slideId, (slide) => ({
-      ...slide,
-      copy: slide.copy.map((line, index) => (index === lineIndex ? value : line))
-    }));
-  }
-
-  function addSlideCopyLine(slideId: string) {
-    updateSlideDraft(slideId, (slide) => ({
-      ...slide,
-      copy: [...slide.copy, "Neuer Stichpunkt"].slice(0, 4)
-    }));
-  }
-
-  function removeSlideCopyLine(slideId: string, lineIndex: number) {
-    updateSlideDraft(slideId, (slide) => ({
-      ...slide,
-      copy: slide.copy.length <= 1 ? slide.copy : slide.copy.filter((_, index) => index !== lineIndex)
-    }));
-  }
-
   function updateSlideDocumentFromEngine(document: SlideDocument, slides: Slide[]) {
+    setSaveStatus("unsaved");
     setEdit((current) => ({
       ...current,
       slides,
@@ -1042,10 +981,6 @@ export function LecturerDashboard({
       return fallback;
     }
     return value;
-  }
-
-  function inlineDraftValue(element: HTMLElement) {
-    return element.textContent?.replace(/\s+/g, " ").trim() ?? "";
   }
 
   function finishInlineEdit(event: KeyboardEvent<HTMLElement>) {
@@ -2636,168 +2571,20 @@ export function LecturerDashboard({
                 </div>
               ) : studioSlide ? (
                 <>
-                  <div className="slide-preview-frame editable-slide-frame studio-editor-frame" ref={stageFrameRef}>
-                    {hasEngineOnlyBlocks(edit.slideDocument) ? (
-                    <article
-                      className="slide-engine-stage studio-engine-stage lb-enter-stage"
-                      data-slide-engine="v1"
-                      data-slide-id={studioSlide.id}
-                      key={studioSlide.id}
-                    >
-                      <DeckRenderer
-                        className="slide-engine-deck"
-                        currentSlideId={edit.slideDocument.slides[activeStudioSlideIndex]?.id ?? studioSlide.id}
-                        document={edit.slideDocument}
-                        renderMode="current"
-                      />
-                    </article>
-                    ) : (
-                    <article className="dashboard-slide-preview editable-slide studio-editor-slide lb-enter-stage" data-slide-id={studioSlide.id} key={studioSlide.id}>
-                    <div className="slide-meta editable-meta lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
-                      <span
-                        aria-label="Folienkennung"
-                        contentEditable
-                        data-slide-field="eyebrow"
-                        onInput={(event) => {
-                          const value = inlineDraftValue(event.currentTarget);
-                          if (value) updateSlideDraft(studioSlide.id, (slide) => ({ ...slide, eyebrow: value }));
-                        }}
-                        onBlur={(event) => {
-                          const value = editableValue(event.currentTarget, studioSlide.eyebrow);
-                          updateSlideDraft(studioSlide.id, (slide) => ({ ...slide, eyebrow: value }));
-                        }}
-                        onKeyDown={finishInlineEdit}
-                        role="textbox"
-                        suppressContentEditableWarning
-                        tabIndex={0}
-                      >
-                        {studioSlide.eyebrow}
-                      </span>
-                      <span
-                        aria-label="Vorlesungsreihe"
-                        contentEditable
-                        data-lecture-field="seriesTitle"
-                        onInput={(event) => {
-                          const value = inlineDraftValue(event.currentTarget);
-                          if (value) setEdit((current) => ({ ...current, seriesTitle: value }));
-                        }}
-                        onBlur={(event) => {
-                          const value = editableValue(event.currentTarget, edit.seriesTitle);
-                          setEdit((current) => ({ ...current, seriesTitle: value }));
-                        }}
-                        onKeyDown={finishInlineEdit}
-                        role="textbox"
-                        suppressContentEditableWarning
-                        tabIndex={0}
-                      >
-                        {edit.seriesTitle}
-                      </span>
-                    </div>
-                    <h1
-                      className="slide-title-editor lb-enter-row"
-                      style={{ "--lb-i": 1 } as MotionStyle}
-                      aria-label="Folientitel"
-                      contentEditable
-                      data-slide-field="title"
-                      onInput={(event) => {
-                        const value = inlineDraftValue(event.currentTarget);
-                        if (value) updateSlideDraft(studioSlide.id, (slide) => ({ ...slide, title: value }));
-                      }}
-                      onBlur={(event) => {
-                        const value = editableValue(event.currentTarget, studioSlide.title);
-                        updateSlideDraft(studioSlide.id, (slide) => ({ ...slide, title: value }));
-                      }}
-                      onKeyDown={finishInlineEdit}
-                      role="textbox"
-                      suppressContentEditableWarning
-                      tabIndex={0}
-                    >
-                      {studioSlide.title}
-                    </h1>
-                    <div className="dashboard-slide-body">
-                      <div className="slide-copy editable-copy">
-                        {studioSlide.copy.map((line, index) => (
-                          <div className="copy-line-editor" key={`${studioSlide.id}-${index}`}>
-                            <p
-                              className="lb-enter-row"
-                              aria-label={`Folientext ${index + 1}`}
-                              contentEditable
-                              data-slide-copy-index={index}
-                              onInput={(event) => {
-                                const value = inlineDraftValue(event.currentTarget);
-                                if (value) updateSlideCopy(studioSlide.id, index, value);
-                              }}
-                              onBlur={(event) => {
-                                const value = editableValue(event.currentTarget, line);
-                                updateSlideCopy(studioSlide.id, index, value);
-                              }}
-                              onKeyDown={finishInlineEdit}
-                              role="textbox"
-                              suppressContentEditableWarning
-                              tabIndex={0}
-                            >
-                              {line}
-                            </p>
-                            <button
-                              type="button"
-                              aria-label={`Folientext ${index + 1} entfernen`}
-                              title={`Folientext ${index + 1} entfernen`}
-                              onClick={() => removeSlideCopyLine(studioSlide.id, index)}
-                              disabled={studioSlide.copy.length <= 1}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                        {studioSlide.copy.length < 4 && (
-                          <button className="inline-add-button" type="button" onClick={() => addSlideCopyLine(studioSlide.id)}>
-                            Textzeile hinzufügen
-                          </button>
-                        )}
-                      </div>
-                      <div className="diagram dashboard-diagram editable-diagram lb-enter-panel">
-                        <Diagram type={studioSlide.diagram} />
-                        <select
-                          aria-label="Diagrammtyp"
-                          value={studioSlide.diagram}
-                          onChange={(event) =>
-                            updateSlideDraft(studioSlide.id, (slide) => ({
-                              ...slide,
-                              diagram: event.target.value as Slide["diagram"]
-                            }))
-                          }
-                          suppressHydrationWarning
-                        >
-                          <option value="bearing">Lager</option>
-                          <option value="formula">Formel</option>
-                          <option value="ramp">Anlauf</option>
-                        </select>
-                      </div>
-                    </div>
-                    <footer className="slide-foot editable-foot">
-                      <span
-                        aria-label="Folienthema"
-                        contentEditable
-                        data-slide-field="topic"
-                        onInput={(event) => {
-                          const value = inlineDraftValue(event.currentTarget);
-                          if (value) updateSlideDraft(studioSlide.id, (slide) => ({ ...slide, topic: value }));
-                        }}
-                        onBlur={(event) => {
-                          const value = editableValue(event.currentTarget, studioSlide.topic);
-                          updateSlideDraft(studioSlide.id, (slide) => ({ ...slide, topic: value }));
-                        }}
-                        onKeyDown={finishInlineEdit}
-                        role="textbox"
-                        suppressContentEditableWarning
-                        tabIndex={0}
-                      >
-                        {studioSlide.topic}
-                      </span>
-                      <span>{activeStudioSlideIndex + 1} / {studioSlides.length}</span>
-                    </footer>
-                    </article>
-                    )}
+                  <div className="slide-preview-frame editable-slide-frame studio-editor-frame native-studio-frame" ref={stageFrameRef}>
+                    <StudioSlideDocumentEditor
+                      key={selected.id}
+                      csrfToken={csrfToken}
+                      currentIndex={activeStudioSlideIndex}
+                      lectureId={selected.id}
+                      presentationAssets={selected.presentationAssets}
+                      readOnly={!engineEditing}
+                      seriesTitle={edit.seriesTitle}
+                      slideDocument={edit.slideDocument}
+                      slides={studioSlides}
+                      onLecturesChange={applyAgentLecturesChange}
+                      onSlideDocumentChange={updateSlideDocumentFromEngine}
+                    />
                   </div>
                   <Presence show={workspaceTool === "materials"}>
                     {(motionState) => renderSlideSourceOverlay(motionState)}
@@ -2814,19 +2601,6 @@ export function LecturerDashboard({
                   <Presence show={workspaceTool === "analytics"}>
                     {(motionState) => renderSlideAnalyticsOverlay(motionState)}
                   </Presence>
-                  {engineEditorOpen && (
-                    <StudioSlideDocumentEditor
-                      csrfToken={csrfToken}
-                      currentIndex={activeStudioSlideIndex}
-                      lectureId={selected.id}
-                      presentationAssets={selected.presentationAssets}
-                      seriesTitle={edit.seriesTitle}
-                      slideDocument={edit.slideDocument}
-                      slides={studioSlides}
-                      onLecturesChange={applyAgentLecturesChange}
-                      onSlideDocumentChange={updateSlideDocumentFromEngine}
-                    />
-                  )}
                 </>
               ) : null}
             </div>
@@ -2858,12 +2632,12 @@ export function LecturerDashboard({
                 {renderPlanEditor()}
                 {renderSlideToolMenu()}
                 <button
-                  aria-pressed={engineEditorOpen}
+                  aria-pressed={engineEditing}
                   className="plain-button studio-engine-toggle"
                   type="button"
-                  onClick={() => setEngineEditorOpen((open) => !open)}
+                  onClick={() => setEngineEditing((editing) => !editing)}
                 >
-                  Bearbeiten
+                  {engineEditing ? "Vorschau" : "Bearbeiten"}
                 </button>
                 {selected && (
                   <a className="primary-button studio-present-link" href={`/lecturer/live/${selected.publicToken}`}>
