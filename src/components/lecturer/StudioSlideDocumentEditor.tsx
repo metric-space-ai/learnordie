@@ -56,8 +56,10 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
       const updated = updateSlideCanvas(document, current.id, next);
       onSlideDocumentChange(updated, slideDocumentToLegacySlides(updated, slides));
       setStatus("");
+      return true;
     } catch {
-      setStatus("Diese Änderung kann nicht gespeichert werden. Bitte kleinere Bilder oder weniger Elemente verwenden.");
+      setStatus("Änderung zurückgesetzt: Dieses Element kann nicht gespeichert werden. Bitte kleinere PNG-, JPEG-, WebP- oder GIF-Bilder oder weniger Elemente verwenden. Der letzte gültige Stand bleibt erhalten.");
+      return false;
     }
   }
 

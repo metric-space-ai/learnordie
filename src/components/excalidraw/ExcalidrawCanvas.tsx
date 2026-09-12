@@ -23,7 +23,7 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
   readOnly?: boolean;
   title: string;
   slideId?: string;
-  onChange?: (scene: CanvasScene) => void;
+  onChange?: (scene: CanvasScene) => boolean | void;
   onReady?: (api: CanvasApi | null) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -90,14 +90,24 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
         },
         onChange: (elements: readonly CanvasElement[], state: Record<string, unknown>, files: CanvasScene["files"]) => {
           if (cancelled || readOnly) return;
-          const next = { ...currentScene, elements: [...elements], files, backgroundColor: typeof state.viewBackgroundColor === "string" ? state.viewBackgroundColor : currentScene.backgroundColor };
+          // Excalidraw retains unused files for undo. Persist only files that
+          // belong to visible images; the runtime still owns its undo cache.
+          const usedFiles = new Set(elements.filter((element) => element.type === "image" && !element.isDeleted).map((element) => element.fileId));
+          const next = { ...currentScene, elements: [...elements], files: Object.fromEntries(Object.entries(files).filter(([id]) => usedFiles.has(id))), backgroundColor: typeof state.viewBackgroundColor === "string" ? state.viewBackgroundColor : currentScene.backgroundColor };
           const serialized = JSON.stringify(next);
           if (serialized === lastScene.current) return;
+          const previous = lastScene.current;
           lastScene.current = serialized;
           // The native runtime includes optional fields with value undefined.
           // Normalize to the same JSON boundary used by the save API before
           // schema validation; undefined is not a persisted element value.
-          callbacks.current.onChange?.(JSON.parse(serialized) as CanvasScene);
+          if (callbacks.current.onChange?.(JSON.parse(serialized) as CanvasScene) === false) {
+            // Never leave an unpersistable drawing on screen while Save writes
+            // an older document. The editor explains why this edit was rejected.
+            lastScene.current = previous;
+            const accepted = JSON.parse(previous) as CanvasScene;
+            apiRef.current?.updateScene({ elements: accepted.elements, appState: { viewBackgroundColor: accepted.backgroundColor }, captureUpdate: "NEVER" });
+          }
         }
       });
       resize = new ResizeObserver(fit);
