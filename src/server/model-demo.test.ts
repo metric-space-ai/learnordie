@@ -6,6 +6,8 @@ import { scene3dSceneIdValues, validateSlideDocument } from "@learnordie/slide-e
 import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
 import { canvasSceneSchema } from "@learnordie/slide-engine/excalidraw/canvas-schema";
 import { createModelDemoDocument, MODEL_DEMO_NOTICE } from "@/lib/model-demo-template";
+import { MODEL_ORIGINAL_KEY, MODEL_ORIGINAL_TITLE } from "@/lib/model-original-template";
+import { createHash } from "node:crypto";
 import { ensureModelDemo } from "./model-demo";
 import { handleModelDemoPost } from "./model-demo-handler";
 
@@ -136,6 +138,8 @@ test("scoped creation is atomic, repeatable, concurrent-safe in the transaction 
   const own = db.committed.get(first.lectureId)!;
   assert.equal(own.slides.length, 8);
   const document = JSON.parse(own.document);
+  assert.equal(document.title, MODEL_ORIGINAL_TITLE);
+  assert.equal(document.createdBy.promptVersion, MODEL_ORIGINAL_KEY);
   assert.equal(validateSlideDocument(document).ok, true);
   assert.deepEqual(document.slides.map((slide: { id: string }) => slide.id), own.slides.map((row) => row[0]));
   assert.deepEqual(own.slides.map((row) => row[2]), [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -162,4 +166,18 @@ test("failed slide creation rolls back and permits a clean retry; foreign series
   assert.equal(foreign.committed.size, 0);
   assert.ok(!foreign.statements.some((s) => s.sql.startsWith("insert into lectures")));
   await assert.rejects(ensureModelDemo(" ", db.database), /authenticated owner/);
+});
+
+test("new original version cannot adopt or overwrite the previous eight-slide example", async () => {
+  const bytes = createHash("sha256").update(JSON.stringify(["learnordie:model-demo:v1", "qa@example.test", "lecture"])).digest();
+  bytes[6] = (bytes[6] & 0x0f) | 0x80; bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.subarray(0, 16).toString("hex");
+  const exampleId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  const db = recordingDb();
+  const previous = { owner: "qa@example.test", document: "user-edited example", slides: [] };
+  db.committed.set(exampleId, previous);
+  const original = await ensureModelDemo("qa@example.test", db.database);
+  assert.notEqual(original.lectureId, exampleId);
+  assert.equal(db.committed.get(exampleId), previous);
+  assert.equal(db.committed.size, 2);
 });

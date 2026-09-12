@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { slideDocumentToLegacySlides } from "@learnordie/slide-engine/legacy";
-import { createModelDemoDocument, MODEL_DEMO_KEY, MODEL_DEMO_SERIES_TITLE, MODEL_DEMO_TITLE } from "@/lib/model-demo-template";
+import { createOriginalModelDocument, MODEL_ORIGINAL_KEY, MODEL_ORIGINAL_SERIES_TITLE, MODEL_ORIGINAL_TITLE, MODEL_ORIGINAL_SLIDE_COUNT } from "@/lib/model-original-template";
 import { getDb } from "./db/client";
 
 export type ModelDemoResult = { lectureId: string; created: boolean };
 
 function scopedId(ownerEmail: string, resource: string) {
-  const bytes = createHash("sha256").update(JSON.stringify([MODEL_DEMO_KEY, ownerEmail, resource])).digest();
+  const bytes = createHash("sha256").update(JSON.stringify([MODEL_ORIGINAL_KEY, ownerEmail, resource])).digest();
   bytes[6] = (bytes[6] & 0x0f) | 0x80;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.subarray(0, 16).toString("hex");
@@ -23,7 +23,7 @@ export async function ensureModelDemo(ownerEmail: string, database = getDb()): P
   if (!owner) throw new Error("Model demo requires an authenticated owner.");
   const lectureId = scopedId(owner, "lecture");
   const seriesId = scopedId(owner, "series");
-  const document = createModelDemoDocument(lectureId, Array.from({ length: 8 }, (_, i) => scopedId(owner, `slide:${i}`)));
+  const document = createOriginalModelDocument(lectureId, Array.from({ length: MODEL_ORIGINAL_SLIDE_COUNT }, (_, i) => scopedId(owner, `slide:${i}`)));
   const legacySlides = slideDocumentToLegacySlides(document);
 
   return database.transaction(async (tx) => {
@@ -42,7 +42,7 @@ export async function ensureModelDemo(ownerEmail: string, database = getDb()): P
     // Reuse only our stable series after deletion of its demo lecture.
     await tx.execute(sql`
       insert into lecture_series (id, title, language, owner_id)
-      select ${seriesId}::uuid, ${MODEL_DEMO_SERIES_TITLE}, 'de', id from users where email = ${owner}
+      select ${seriesId}::uuid, ${MODEL_ORIGINAL_SERIES_TITLE}, 'de', id from users where email = ${owner}
       on conflict (id) do nothing
     `);
     const ownedSeries = await tx.execute(sql`
@@ -52,7 +52,7 @@ export async function ensureModelDemo(ownerEmail: string, database = getDb()): P
     if (!ownedSeries.length) throw new Error("Model demo series ownership mismatch.");
     await tx.execute(sql`
       insert into lectures (id, series_id, public_token, title, status, leaderboard_enabled, slide_document_json)
-      values (${lectureId}::uuid, ${seriesId}::uuid, ${randomUUID()}, ${MODEL_DEMO_TITLE}, 'draft', false, ${JSON.stringify(document)}::jsonb)
+      values (${lectureId}::uuid, ${seriesId}::uuid, ${randomUUID()}, ${MODEL_ORIGINAL_TITLE}, 'draft', false, ${JSON.stringify(document)}::jsonb)
     `);
     for (const [index, slide] of legacySlides.entries()) {
       const { eyebrow, topic, copy, diagram } = slide;
