@@ -165,6 +165,10 @@ export async function POST(request: Request) {
   const lecture = await getLectureRepository().getLectureByToken(parsed.data.lectureToken);
   if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
 
+  if (parsed.data.eventType === "answer_selected" && mode(parsed.data.payload.mode) === "live") {
+    return NextResponse.json({ error: "Live-Antworten müssen zur aktuellen Fragerunde gehören." }, { status: 409 });
+  }
+
   const claimNeeded = parsed.data.eventType === "answer_selected" || parsed.data.eventType === "student_joined";
   let claimName = parsed.data.pseudonym;
   if (claimNeeded) {

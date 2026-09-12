@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 
 /** No third-party QR service: the public lecture URL stays in this browser. */
 export function LectureJoinSlide({ url, title, onStart }: {
-  url: string; title: string; onStart: () => void;
+  url: string; title: string; onStart?: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
@@ -27,7 +27,7 @@ export function LectureJoinSlide({ url, title, onStart }: {
         <p>QR-Code scannen oder diesen Link öffnen.</p>
         <a className="lecture-join-url" href={url}>{url}</a>
         <p className="lecture-join-hint">Direkt dabei. Kein Konto nötig. Dein Pseudonym kannst du später wählen.</p>
-        <button className="primary-button" type="button" onClick={onStart}>Präsentation starten</button>
+        {onStart && <button className="primary-button" type="button" onClick={onStart}>Präsentation starten</button>}
       </div>
       <div className="lecture-join-qr">
         <canvas ref={canvas} width={768} height={768} role="img" aria-label={`QR-Code zur Vorlesung: ${url}`} />
