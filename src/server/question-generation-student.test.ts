@@ -276,6 +276,25 @@ test("draft failure diagnostics distinguish schema and source review without exp
   assert.ok(!JSON.stringify(studentDraftDiagnostic(providerFailure)).includes(secret));
 });
 
+test("student draft length constraints are explicit and repair can rewrite an overlong core statement", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  const overlong = validPayload();
+  overlong.coreStatement = "x".repeat(241);
+  const { provider, requests, reviews } = makeProvider([JSON.stringify(overlong), JSON.stringify(validPayload())]);
+  const generated = await generateStudentExamDraft(input(), provider);
+  assert.equal(generated.supported, true);
+  if (!generated.supported) return;
+  assert.equal(generated.coreStatement, validPayload().coreStatement, "use the complete regenerated statement, never a clipped version");
+  assert.equal(requests.length, 2);
+  assert.equal(reviews.length, 1, "invalid structure must not reach independent factual review");
+  assert.match(requests[0].user, /coreStatement.*8 bis 240 Zeichen/);
+  assert.match(requests[0].user, /topic 2 bis 5 Wörter und 3 bis 80 Zeichen/);
+  assert.match(requests[1].user, /core statement: 241 characters; expected 8 to 240/);
+  assert.match(requests[1].user, /Formuliere überlange Felder als vollständige kürzere Aussagen/);
+  assert.doesNotMatch(requests[1].user, /Kürze keine Felder/);
+});
+
 test("transcript shortcut generation is MiniMax-only and retries strict grounded four-by-four output without clipping", async (t) => {
   restoreGeneratorEnvironment(t);
   process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
