@@ -565,7 +565,8 @@
 .lb-scene3d-steps button {
   flex: 0 0 auto;
   min-height: 44px;
-  padding: 0.65em 0.3em;
+  font-size: 0.8em;
+  padding: 0.45em 0.3em;
   border: 0;
   border-top: 2px solid var(--lb-scene-line);
   background: transparent;

@@ -132,7 +132,8 @@
 .native-canvas-mobile > h2 { font-size: 34px; line-height: 1.18; }
 .native-canvas-mobile > p:empty { display: none; }
 .native-canvas-mobile .mobile-slide-embed { height: 460px; width: 100%; min-width: 0; margin-block: 18px 28px; }
-.native-canvas-mobile .lb-scene3d-controls { font-size: 18px; padding: 8px; max-height: 45%; }
+.native-canvas-mobile .learnordie-canvas-scene .lb-scene3d-controls { font-size: 18px; padding: 8px; max-height: 45%; }
+.native-canvas-mobile .lb-scene3d-steps button { font-size: inherit; }
 .native-canvas-mobile .lb-scene3d { font-size: 18px; }
 .native-canvas-mobile .lb-scene3d-stage { min-height: 240px; }
 .native-canvas-mobile .lb-scene3d-tool { min-width: 44px; min-height: 44px; }
