@@ -326,9 +326,11 @@ test("one presenter synchronizes three independent guests, timed questions and s
     await page.getByLabel("Vorbereitete Frage", { exact: true }).click();
     for (const [i, student] of students.entries()) {
       await expect(student.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
+      await student.getByRole("button", { name: "Pseudonym", exact: true }).click();
       await student.getByLabel("Eigenes Pseudonym", { exact: true }).fill(`Guest ${lecture.id.slice(0, 6)} ${i + 1}`);
       await student.getByRole("button", { name: "Sichern", exact: true }).click();
       await expect(student.getByText("Pseudonym gesichert", { exact: true })).toBeVisible();
+      await student.getByRole("button", { name: "Pseudonym schließen", exact: true }).click();
     }
     // A fresh, unanswered round must disappear on all clients without a close command.
     await page.getByLabel("Fragezeit", { exact: true }).selectOption("5");

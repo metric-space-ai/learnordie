@@ -4,7 +4,6 @@ import { demoLecture } from "../../src/lib/demo-data";
 const token = "gleitlagerung-demo";
 
 async function more(page: Page) {
-  if (page.viewportSize()!.width > 900) return;
   const menu = page.locator(".learn-more");
   if (!await menu.evaluate((node) => (node as HTMLDetailsElement).open)) await menu.locator("summary").click();
 }
@@ -36,7 +35,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
     await expect(stage).not.toHaveAttribute("data-slide-id", firstSlide!);
     await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
-    await expect(page.locator(".slide-nav")).toContainText("3 / 3");
+    await expect(page.getByRole("navigation", { name: "Foliennavigation" })).toContainText("3 / 3");
     await page.reload();
     await more(page);
     await expect(density).toHaveValue("3");
@@ -80,6 +79,7 @@ test("Learning does not report saved points when the event request fails", async
   await page.getByRole("button", { name: question.answers.find((item) => item.correct)!.text, exact: false }).click();
   await expect(page.locator(".learn-save-status")).toContainText("Antwort gespeichert");
   await page.getByRole("button", { name: "Weiterlernen", exact: true }).click();
+  await more(page);
   await page.getByRole("button", { name: "Rangliste", exact: true }).click();
   await expect(page.locator(".leader-row.self strong")).toHaveText(String(question.points));
 });
