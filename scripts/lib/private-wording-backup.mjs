@@ -4,7 +4,15 @@ const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
 /** Refuse application unless a non-overwritten private backup was read back intact. */
 export async function savePrivateWordingBackup(pathname, backup, dependencies = {}) {
-  if (!/^maintenance\/question-wording\/[a-zA-Z0-9_-]+\.json$/.test(pathname)) throw new Error("Invalid private backup path");
+  return savePrivateBackup(pathname, backup, dependencies, "question-wording");
+}
+
+export async function savePrivateScriptBackup(pathname, backup, dependencies = {}) {
+  return savePrivateBackup(pathname, backup, dependencies, "lecture-script");
+}
+
+async function savePrivateBackup(pathname, backup, dependencies, category) {
+  if (!new RegExp(`^maintenance/${category}/[a-zA-Z0-9_-]+\\.json$`).test(pathname)) throw new Error("Invalid private backup path");
   const sdk = dependencies.sdk ?? await import("@vercel/blob");
   const bytes = Buffer.from(JSON.stringify(backup));
   if (bytes.length > 5_000_000) throw new Error("Private backup is too large");
@@ -28,6 +36,6 @@ export async function savePrivateWordingBackup(pathname, backup, dependencies = 
     return { provider: "vercel-blob", access: "private", pathname, sha256: digest(bytes), bytes: bytes.length, readBackVerified: true };
   } catch {
     // Provider errors can embed credentials or private payloads; never print them.
-    throw new Error("Private backup failed; question bank was not changed");
+    throw new Error(category === "question-wording" ? "Private backup failed; question bank was not changed" : "Private backup failed; manuscript was not changed");
   }
 }

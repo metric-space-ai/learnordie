@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { canvasReadingElements } from "@/lib/canvas-reading-layout";
 import { createOriginalModelDocument } from "@/lib/model-original-template";
+import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
 
 test("all eight original slides reflow their actual editable elements without mutating the deck", () => {
   const document = createOriginalModelDocument("test", Array.from({ length: 8 }, (_, i) => `s${i}`));
@@ -30,4 +31,15 @@ test("current edits are used and deleted text is not resurrected from semantic b
   const result = canvasReadingElements(scene, slide.id)!;
   assert.ok(result.some(item => item.originalText === "Aktuell bearbeiteter Titel"));
   assert.ok(!result.some(item => item.id === scene.elements[1].id));
+});
+
+test("legacy generated prose callouts reflow, but an added rectangle is not discarded", () => {
+  const scene = canvasSceneForSlide({ id: "legacy", title: "Begriff", layout: "technical_figure_right", intent: "explanation",
+    blocks: [{ id: "callout", type: "callout", tone: "info", text: "Abbild → Beziehung → Funktion" }], speakerNotes: [], sourceRefs: [] });
+  const result = canvasReadingElements(scene, "legacy");
+  assert.ok(result?.some(item => item.text === "Abbild → Beziehung → Funktion"));
+  assert.ok(result?.every(item => item.type === "text"));
+  const rectangle = scene.elements.find(item => item.type === "rectangle")!;
+  rectangle.id = "user-rectangle";
+  assert.equal(canvasReadingElements(scene, "legacy"), null);
 });

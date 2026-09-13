@@ -1,24 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { savePrivateWordingBackup } from "../../scripts/lib/private-wording-backup.mjs";
+import { savePrivateWordingBackup, savePrivateScriptBackup } from "../../scripts/lib/private-wording-backup.mjs";
 
 const pathname = "maintenance/question-wording/test-only.json";
-function fixture({ anonymousStatus = 403, corrupt = false, publicResult = false, duplicate = false } = {}) {
+function fixture({ anonymousStatus = 403, corrupt = false, publicResult = false, duplicate = false, pathname: expectedPath = pathname } = {}) {
   let bytes;
   return {
     sdk: {
       async put(name, content, options) {
-        assert.equal(name, pathname);
+        assert.equal(name, expectedPath);
         assert.equal(options.access, "private");
         assert.equal(options.allowOverwrite, false);
         assert.equal(options.addRandomSuffix, false);
         assert.ok(options.abortSignal instanceof AbortSignal);
         if (duplicate) throw new Error("SECRET provider token");
         bytes = content;
-        return { pathname, url: `https://test.${publicResult ? "public" : "private"}.blob.vercel-storage.com/${pathname}` };
+        return { pathname: expectedPath, url: `https://test.${publicResult ? "public" : "private"}.blob.vercel-storage.com/${expectedPath}` };
       },
       async get(name, options) {
-        assert.equal(name, pathname);
+        assert.equal(name, expectedPath);
         assert.equal(options.access, "private");
         assert.equal(options.useCache, false);
         return { statusCode: 200, stream: new Response(corrupt ? "corrupt" : bytes).body };
@@ -44,4 +44,11 @@ for (const [name, options] of Object.entries({ corrupt: { corrupt: true }, publi
 }
 test("backup refuses an out-of-scope pathname before invoking storage", async () => {
   await assert.rejects(savePrivateWordingBackup("public/answers.json", {}, {}), /Invalid private backup path/);
+});
+test("manuscript backup uses an isolated private namespace with the same readback guarantees", async () => {
+  const scriptPath = "maintenance/lecture-script/test-only.json";
+  const result = await savePrivateScriptBackup(scriptPath, { originalDocument: {} }, fixture({ pathname: scriptPath }));
+  assert.equal(result.readBackVerified, true);
+  await assert.rejects(savePrivateScriptBackup(pathname, {}, {}), /Invalid private backup path/);
+  await assert.rejects(savePrivateScriptBackup(scriptPath, {}, fixture({ pathname: scriptPath, corrupt: true })), /manuscript was not changed/);
 });
