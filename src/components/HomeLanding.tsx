@@ -41,19 +41,14 @@ export function HomeLanding() {
   return (
     <main className="home-app app-canvas lb-motion-root" aria-label="learnordie.app Start">
       <header className="home-canvas-brand lb-enter-row">
-        <span className="home-brand-mark" aria-hidden="true">
-          <span className="brand-loop" />
-          <span className="brand-north-dot" />
-        </span>
         <strong className="brand-word" aria-label="learnordie.app">
-          <span>lear</span><span className="brand-nord">nord</span><span>ie</span><span className="brand-dot">.app</span>
+          learnordie<span className="brand-dot">.app</span>
         </strong>
       </header>
 
       <section className="join-card app-island home-join-island lb-enter-panel" aria-label="An Vorlesung teilnehmen">
-        <p className="eyebrow">Studierende</p>
-        <h1>Vorlesungscode rein, Lernrunde starten</h1>
-        <p className="join-lead">Ein Code reicht. Der Anzeigename gilt nur in dieser Vorlesung.</p>
+        <h1>Vorlesung beitreten</h1>
+        <p className="join-lead">Live dabei sein oder später in Ruhe lernen. Du brauchst kein Konto.</p>
         <form className="home-join-form" onSubmit={joinByCode}>
           <label>
             Vorlesungscode

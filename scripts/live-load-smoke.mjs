@@ -50,6 +50,7 @@ async function command(body) {
   state = (await request(`/api/lectures/${lecture.id}/live-session`, { ...body, revision: state.revision }, teacher.cookie, teacher.csrfToken)).payload;
 }
 async function fireAndAnswer(items, answer, latencies) {
+  if (state.round) await command({ action: "close" });
   await command({ action: "fire", familyIndex: 0, durationSeconds: 180 });
   if (!state.round) throw new Error("Presenter command did not open a round.");
   await pool(items, async (participant) => {

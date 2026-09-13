@@ -14,6 +14,7 @@ import { MarkdownContent } from "./MarkdownContent";
 import { Presence } from "./Presence";
 import { QuizDrawer } from "./QuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
+import { ThemeToggle } from "./theme/ThemeToggle";
 
 const hotspotLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0", "3.0", "2.0", "1.0"];
 const hotspotClasses = ["one", "two", "three", "four", "five", "six", "seven"];
@@ -71,7 +72,17 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const evaluationConfig = lecture.evaluationConfig;
   const [slide, setSlide] = useState(0);
   const [density, setDensity] = useState(() => normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
-  function updateDensity(value: string) { setDensity(normalizeLearnQuestionDensity(value)); }
+  function updateDensity(value: string) {
+    const next = normalizeLearnQuestionDensity(value);
+    setDensity(next);
+    try { window.localStorage.setItem(`lb_learn_density_${lecture.publicToken}`, String(next)); } catch { /* Learning works without local storage. */ }
+  }
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(`lb_learn_density_${lecture.publicToken}`);
+      if (saved !== null) setDensity(normalizeLearnQuestionDensity(saved, lecture.learnQuestionDensity));
+    } catch { /* Keep the lecture default if storage is unavailable. */ }
+  }, [lecture.publicToken, lecture.learnQuestionDensity]);
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionOrigin, setQuestionOrigin] = useState<QuestionOrigin>("control");
   const [activeHotspotIndex, setActiveHotspotIndex] = useState<number | null>(null);
@@ -79,6 +90,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const [learningSaveState, setLearningSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [learningSaveMessage, setLearningSaveMessage] = useState("");
+  useEffect(() => {
+    if (learningSaveState !== "saved") return;
+    const timeout = window.setTimeout(() => setLearningSaveMessage(""), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [learningSaveState, learningSaveMessage]);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatAnswer, setChatAnswer] = useState("");
   const [chatSources, setChatSources] = useState<ChatSource[]>([]);
@@ -224,9 +242,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     try {
       const response = await fetch(`/api/lecture/${lecture.publicToken}/leaderboard?anonymousKey=${encodeURIComponent(key)}`);
       const payload = (await response.json()) as { entries?: LeaderboardEntry[] };
+      if (!response.ok) throw new Error("Rangliste konnte nicht geladen werden.");
       setLeaderboardEntries(Array.isArray(payload.entries) ? payload.entries : []);
+      return true;
     } catch {
-      setLeaderboardEntries([]);
+      setLearningSaveState("error");
+      setLearningSaveMessage("Rangliste konnte nicht geladen werden. Bitte erneut öffnen.");
+      return false;
     } finally {
       setLeaderboardLoading(false);
     }
@@ -235,8 +257,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   async function recordLearnEvent(eventType: string, payload: Record<string, unknown>) {
     try {
       await ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link" });
-    } catch { return; }
-    await fetch("/api/events", {
+    } catch (error) {
+      if (eventType === "answer_selected") throw error;
+      return;
+    }
+    const response = await fetch("/api/events", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -246,9 +271,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         pseudonym: getLearnPseudonym(),
         payload
       })
-    }).catch(() => {
-      // Analytics must never block the learning flow.
+    }).catch((error) => {
+      if (eventType === "answer_selected") throw error;
+      return undefined;
     });
+    if (eventType === "answer_selected" && !response?.ok) throw new Error("Antwort konnte nicht gespeichert werden.");
   }
 
   function openChat() {
@@ -421,6 +448,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       data-question-origin={questionOrigin}
       style={originStyle}
     >
+      {learningSaveMessage && <p className="learn-save-status" role="status" data-state={learningSaveState}>{learningSaveMessage}</p>}
       <SlideEngineCanvas
         lectureToken={lecture.publicToken}
         current={slide}
@@ -464,6 +492,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         <label>
           Fragedichte
           <input
+            aria-label="Fragedichte"
             type="range"
             min={MIN_LEARN_QUESTION_DENSITY}
             max={MAX_LEARN_QUESTION_DENSITY}
@@ -528,6 +557,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             <label className="learn-more-density">
               Fragedichte
               <input
+                aria-label="Fragedichte"
                 type="range"
                 min={MIN_LEARN_QUESTION_DENSITY}
                 max={MAX_LEARN_QUESTION_DENSITY}
@@ -555,6 +585,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             Feedback
           </button>
         )}
+        <ThemeToggle />
       </div>
       <Presence show={questionOpen}>
         {(motionState) => (
@@ -583,6 +614,9 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
               const selectedAnswer = question.answers.find((answer) => answer.key === selected);
               const correctAnswer = question.answers.find((answer) => answer.correct);
               void (async () => {
+                setLearningSaveState("saving");
+                setLearningSaveMessage("Antwort wird gespeichert …");
+                try {
                 await recordLearnEvent("answer_selected", {
                   mode: "learn",
                   level: question.level,
@@ -597,7 +631,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                   correctAnswerText: correctAnswer?.text,
                   correct
                 });
-                await loadLeaderboard();
+                setLearningSaveState("saved");
+                setLearningSaveMessage("Antwort gespeichert");
+                if (lecture.leaderboardEnabled && await loadLeaderboard()) setLearningSaveMessage("Antwort gespeichert · Rangliste aktualisiert");
+                } catch {
+                  setLearningSaveState("error");
+                  setLearningSaveMessage("Speichern nicht bestätigt. Bitte Verbindung und Rangliste prüfen, bevor du erneut antwortest.");
+                }
               })();
             }}
           />

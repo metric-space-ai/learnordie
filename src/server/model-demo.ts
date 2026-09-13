@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { slideDocumentToLegacySlides } from "@learnordie/slide-engine/legacy";
 import { createOriginalModelDocument, MODEL_ORIGINAL_KEY, MODEL_ORIGINAL_SERIES_TITLE, MODEL_ORIGINAL_TITLE, MODEL_ORIGINAL_SLIDE_COUNT } from "@/lib/model-original-template";
+import { createModelQuestionBank } from "@/lib/model-question-bank";
 import { getDb } from "./db/client";
 
 export type ModelDemoResult = { lectureId: string; created: boolean };
@@ -52,7 +53,7 @@ export async function ensureModelDemo(ownerEmail: string, database = getDb()): P
     if (!ownedSeries.length) throw new Error("Model demo series ownership mismatch.");
     await tx.execute(sql`
       insert into lectures (id, series_id, public_token, title, status, leaderboard_enabled, slide_document_json)
-      values (${lectureId}::uuid, ${seriesId}::uuid, ${randomUUID()}, ${MODEL_ORIGINAL_TITLE}, 'draft', false, ${JSON.stringify(document)}::jsonb)
+      values (${lectureId}::uuid, ${seriesId}::uuid, ${randomUUID()}, ${MODEL_ORIGINAL_TITLE}, 'draft', true, ${JSON.stringify(document)}::jsonb)
     `);
     for (const [index, slide] of legacySlides.entries()) {
       const { eyebrow, topic, copy, diagram } = slide;
@@ -60,6 +61,17 @@ export async function ensureModelDemo(ownerEmail: string, database = getDb()): P
         insert into slides (id, lecture_id, position, title, content_json)
         values (${slide.id}::uuid, ${lectureId}::uuid, ${index + 1}, ${slide.title}, ${JSON.stringify({ eyebrow, topic, copy, diagram })}::jsonb)
       `);
+    }
+    const bank = createModelQuestionBank(document.slides.map((slide) => slide.id));
+    for (const [index, slide] of document.slides.entries()) {
+      const questionId = scopedId(owner, `question:${index}`);
+      await tx.execute(sql`insert into questions (id, lecture_id, slide_id, source)
+        values (${questionId}::uuid, ${lectureId}::uuid, ${slide.id}::uuid, 'reviewed-model-v1')`);
+      for (const variant of bank.filter((item) => item.slideId === slide.id)) {
+        await tx.execute(sql`insert into question_variants (question_id, level, points, text, answers_json, correct_answer_key, explanation, prompt_version)
+          values (${questionId}::uuid, ${variant.level}, ${variant.points}, ${variant.text}, ${JSON.stringify(variant.answers)}::jsonb,
+          ${variant.answers.find((answer) => answer.correct)!.key}, ${variant.explanation}, 'reviewed-model-v1')`);
+      }
     }
     return { lectureId, created: true };
   });

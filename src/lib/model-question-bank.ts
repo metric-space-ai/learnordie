@@ -98,7 +98,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
         text: "Du untersuchst die Schwingungsdauer einer idealen Feder mit Masse. Welches Detail kannst du dafür weglassen?",
         choices: [
           "Die Farbe des Gestells.",
-          "Die Größe der Masse.",
+          "Den Wert der Masse m.",
           "Die Steifigkeit der Feder.",
           "Die Verbindung von Feder und Masse."
         ],
@@ -142,7 +142,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
         explanation: "Die Vorhersage beruht auf erfassten Beziehungen. Für einen konkreten Verlauf braucht es auch passende Anfangsbedingungen."
       },
       "2.0": {
-        text: "Für die ideale Feder gilt ω = √(k/m). Die Masse bleibt gleich, k steigt auf das Vierfache. Wie ändert sich ω?",
+        text: "Die Eigenkreisfrequenz einer idealen Feder ist ω = √(k/m). Die Masse m bleibt gleich, die Steifigkeit k vervierfacht sich. Wie ändert sich ω?",
         choices: [
           "ω steigt auf das Doppelte.",
           "ω steigt auf das Vierfache.",

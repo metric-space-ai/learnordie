@@ -309,7 +309,7 @@ test("one presenter synchronizes three independent guests, timed questions and s
     await page.getByLabel("Vorbereitete Frage", { exact: true }).click();
     for (const student of students) {
       await expect(student.getByLabel("Quizfrage", { exact: true })).toBeVisible();
-      await student.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
+      await student.getByRole("button", { name: /Ein Schmierfilm trägt teilweise/ }).click();
       await expect(student.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
     }
     await page.getByLabel("Vorbereitete Frage", { exact: true }).click();

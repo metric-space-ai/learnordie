@@ -1153,6 +1153,7 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/create-test-account.mjs", "Usage: node scripts/create-test-account.mjs"],
     ["scripts/identity-gates.mjs", "Usage: node scripts/identity-gates.mjs"],
     ["scripts/import-model-original.mjs", "Usage: node scripts/import-model-original.mjs"],
+    ["scripts/patch-excalidraw-image-import.mjs", "Usage: node scripts/patch-excalidraw-image-import.mjs"],
     ["scripts/run-unit-identity.mjs", "Usage: node scripts/run-unit-identity.mjs"],
     ["scripts/admin.mjs", "learnordie.app Admin CLI"],
     ["scripts/backup-restore-smoke.mjs", "Usage: npm run smoke:backup-restore -- [options]"],
@@ -3402,7 +3403,7 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
   expect(blockedResponse.status()).toBe(429);
   expect(blockedResponse.headers()["retry-after"]).toBe("900");
 
-  await page.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
+  await page.getByRole("button", { name: /Ein Schmierfilm trägt teilweise/ }).click();
   await expect(page.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
   await command({ action: "close" });
   await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
@@ -3601,7 +3602,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vorlesung beitreten" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer/login");
   await expect(page.getByText("Hydrodynamische Gleitlagerung")).toHaveCount(0);
   await page.getByRole("link", { name: "Dozentenlogin" }).click();

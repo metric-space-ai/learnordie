@@ -41,8 +41,8 @@ export type QuestionGenerationMetadata = {
 function learningObjectiveForLevel(level: QuestionVariant["level"]) {
   return ({
     "4.0": "Begriff und Zuordnung sicher erkennen.",
-    "3.0": "Bekannte Anwendungssituation einordnen.",
-    "2.0": "Ursache, Wirkung und Auslegungsentscheidung erklären.",
+    "3.0": "Ursache, Wirkung und fachliche Zusammenhänge verstehen.",
+    "2.0": "Eine Aussage oder Beziehung auf einen konkreten Fall anwenden.",
     "1.0": "Konzept auf einen neuen technischen Fall übertragen."
   } as const)[level];
 }

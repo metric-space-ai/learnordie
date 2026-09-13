@@ -58,7 +58,7 @@ test("Dozent setzt Code, Student tritt mit Pseudonym bei und sieht das Dashboard
 
   await page.goto("/");
   await expect(page.getByRole("region", { name: "An Vorlesung teilnehmen" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vorlesung beitreten" })).toBeVisible();
   // Root must not be a demo slide / fake lecture.
   await expect(page.locator(".slide-screen")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Gleitlagerung" })).toHaveCount(0);

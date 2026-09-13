@@ -77,6 +77,9 @@ for (const variant of variants) {
       const assertClean = diagnostics(page);
       await page.goto("/");
       await panelContract(page, page.locator(".home-join-island"));
+      await expect(page.locator(".home-app")).toHaveCSS("border-radius", "0px");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-size", "24px");
+      await expect(page.getByRole("button", { name: "Runde starten" })).toHaveCSS("background-color", "rgb(105, 101, 219)");
       await expect(page.locator(".home-join-form")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await expect(page.locator(".home-join-form")).toHaveCSS("border-radius", "0px");
       const code = page.getByLabel("Vorlesungscode", { exact: true });

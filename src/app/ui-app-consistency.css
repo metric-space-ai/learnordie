@@ -8,7 +8,20 @@
   color: var(--app-text);
 }
 .home-app .home-join-form { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.home-app.app-canvas { min-height: 100svh; width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; gap: 24px; }
+.home-app .home-canvas-brand { padding: 0; margin: 0; }
+.home-app .brand-word { font-size: 30px; line-height: 1.2; font-weight: 700; }
+.home-app .brand-dot { color: var(--app-accent-ink); }
+.home-app .home-join-island { width: min(440px, 100%); padding: 28px; gap: 20px; }
+.home-app .home-join-island h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+.home-app .join-lead { margin: 0; font-size: 16px; font-weight: 400; color: var(--app-text-muted); }
+.home-app .primary-button { background: #6965db; border-color: #6965db; color: #fff; }
+.home-app .primary-button:hover { background: #5753c6; border-color: #5753c6; color: #fff; }
+.home-app .home-island-links { justify-content: space-between; gap: 8px; }
+@media (max-width: 540px) { .home-app .home-join-island { padding: 24px 20px; } }
 :is(.home-app, .join-screen, .student-app) :is(h1, h2) { hyphens: none; text-wrap: balance; }
+.join-screen .join-card { grid-template-columns: minmax(0, 1fr); }
+.join-screen .join-card > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 
 /* Grid/flex children must shrink before long names, codes or emails overflow. */
 :is(.home-app, .join-screen, .student-app) :is(
@@ -135,6 +148,12 @@
 .student-app .readiness-action a { min-height: 44px; }
 
 /* Learn menus and overlays: explicit chrome roots never style the slide tree. */
+.learn-shell .slide-lecture-link { max-width: min(30%, 360px); padding: 4px 6px; font: 400 11px/1.4 var(--app-font), sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none; }
+.learn-shell .action-stack .app-theme-toggle { width: 44px; padding: 8px; box-shadow: none; }
+.learn-shell .action-stack .app-theme-toggle span { display: none; }
+@media (max-width: 900px) { .learn-shell .slide-lecture-link { max-width: calc(100% - 196px); } }
+.learn-save-status { position: fixed; z-index: 70; top: max(68px, calc(env(safe-area-inset-top) + 56px)); left: 16px; width: max-content; max-width: min(380px, calc(100vw - 32px)); margin: 0; padding: 8px 12px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); color: var(--app-text); box-shadow: var(--app-shadow); font: 400 14px/1.4 var(--app-font), sans-serif; pointer-events: none; }
+.learn-save-status[data-state="error"] { color: var(--app-danger); }
 .learn-shell :is(.learn-more, .learn-bar, .overlay-panel) { font-family: var(--app-font), system-ui, sans-serif; }
 .learn-shell .learn-more-panel {
   min-width: 0;

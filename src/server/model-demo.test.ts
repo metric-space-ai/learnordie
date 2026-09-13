@@ -109,7 +109,7 @@ function recordingDb(options: { failSlide?: number; wrongOwner?: boolean } = {})
             return options.wrongOwner ? [] : [{ id: params[0] }];
           }
           if (sql.startsWith("insert into lectures")) {
-            assert.match(sql, /'draft', false/);
+            assert.match(sql, /'draft', true/);
             pending = { id: String(params[0]), document: String(params[4]), slides: [] };
           }
           if (sql.startsWith("insert into slides")) {
@@ -151,7 +151,9 @@ test("scoped creation is atomic, repeatable, concurrent-safe in the transaction 
   const other = await ensureModelDemo("other@example.test", db.database);
   assert.notEqual(other.lectureId, first.lectureId);
   assert.equal(db.committed.size, 2);
-  assert.ok(!db.statements.some((s) => /delete|update|insert into questions/i.test(s.sql)));
+  assert.ok(!db.statements.some((s) => /delete|update/i.test(s.sql)));
+  assert.equal(db.statements.filter((s) => s.sql.startsWith("insert into questions")).length, 16);
+  assert.equal(db.statements.filter((s) => s.sql.startsWith("insert into question_variants")).length, 64);
 });
 
 test("failed slide creation rolls back and permits a clean retry; foreign series is never adopted", async () => {
