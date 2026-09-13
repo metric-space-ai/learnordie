@@ -428,8 +428,11 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   await waitForInteractivePage(page, timeoutMs);
   await waitForNativeCanvas(page, timeoutMs);
   const hotspot = page.getByLabel(/Frage Niveau .* anzeigen/).first();
+  const learnMenu = page.locator(".learn-more");
+  if (!await hotspot.isVisible()) await learnMenu.locator("summary").click();
   await page.getByLabel("Fragen-Hotspots").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
   await openQuizDrawer(page, hotspot, timeoutMs);
+  if (await learnMenu.getAttribute("open") !== null) await learnMenu.locator("summary").click();
   await page.locator(".question-drawer .answer").first().click();
   await page.locator(".question-drawer[data-answer-state='answered']").waitFor({ state: "visible", timeout: timeoutMs });
   await page.getByRole("button", { name: "KI fragen" }).click();
@@ -484,6 +487,9 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   await page.locator(".question-drawer").waitFor({ state: "hidden", timeout: timeoutMs });
 
   const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
+  if (await leaderboardButton.count() && !await leaderboardButton.isVisible()) {
+    await learnMenu.locator("summary").click();
+  }
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
   if (leaderboardAvailable) {
     await leaderboardButton.click();

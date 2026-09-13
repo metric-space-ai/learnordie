@@ -3541,6 +3541,7 @@ test("Historische Lern-Rangliste: 30 Studierende, Top10 und eigene Position blei
 
   await page.goto(`/learn/${lecture.publicToken}`);
   await expectNativeCanvas(page);
+  await page.locator(".learn-more summary").click();
   await page.getByRole("button", { name: "Rangliste" }).click();
   await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.locator(".leader-row")).toHaveCount(10);
@@ -3604,8 +3605,10 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
   await expect(hotspots).toHaveCount(4);
 
+  await page.locator(".learn-more summary").click();
   await page.getByLabel("Frage Niveau 1.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
+  await page.locator(".learn-more summary").click();
   await expect(page.getByText("Eine stark belastete Welle läuft häufig langsam an. Welche Maßnahme schützt das Gleitlager beim Start am besten?", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
@@ -3701,6 +3704,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
   await expectNativeCanvas(page);
 
+  await page.locator(".learn-more summary").click();
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
   await expect(page.locator(".learn-hotspot-shared-ghost[data-shared-element='learn-hotspot']")).toBeAttached();
   const hotspotSharedMotion = await page.evaluate(() => {
@@ -3774,6 +3778,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(learnMotion.hotspotHasOvershoot).toBe(false);
   await expect(page.locator(".learn-hotspot-shared-ghost")).toHaveCount(0, { timeout: 1500 });
 
+  await page.locator(".learn-more summary").click();
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
   const chatMotion = await page.evaluate(() => {
@@ -3793,8 +3798,10 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
   await expectNativeCanvas(page);
+  await page.locator(".learn-more summary").click();
   await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
+  await page.locator(".learn-more summary").click();
   const mobileLearnFit = await page.evaluate(() => {
     const drawer = document.querySelector<HTMLElement>(".question-drawer");
     const slide = document.querySelector<HTMLElement>(".slide-screen");
