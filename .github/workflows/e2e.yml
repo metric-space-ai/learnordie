@@ -158,14 +158,11 @@ jobs:
           LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: ai
           LEARNBUDDY_CHAT_MODERATION_PROVIDER: ai
           LEARNBUDDY_QUESTION_GENERATOR: ai
-          LEARNBUDDY_EMBEDDING_PROVIDER: openai-compatible
-          LEARNBUDDY_EMBEDDING_BASE_URL: "https://embedding.learnordie.app"
-          LEARNBUDDY_EMBEDDING_API_KEY: "emb_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_EMBEDDING_PROVIDER: disabled
           LEARNBUDDY_OCR_PROVIDER: http
           LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnordie.app"
           LEARNBUDDY_OCR_API_KEY: "ocr_live_like_abcdefghijklmnopqrstuvwxyz123456"
           LEARNBUDDY_OCR_MODEL: "learnbuddy-ocr"
-          LEARNBUDDY_STT_PROVIDER: mistral-voxtral
-          LEARNBUDDY_STT_MODEL: voxtral-mini-latest
+          LEARNBUDDY_STT_PROVIDER: minimax
+          LEARNBUDDY_STT_MODEL: asr-1.0
           LEARNBUDDY_STT_LANGUAGE: de
-          MISTRAL_API_KEY: "mistral_live_like_abcdefghijklmnopqrstuvwxyz123456"
