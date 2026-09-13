@@ -488,7 +488,7 @@ export async function generateLiveQuestionFamily(input: {
   // Ein zweiter Versuch, falls die KI eine schon gestellte Frage wiederholt.
   const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
   const deadlineAt = Date.now() + 50_000;
-  const reviewSources = [input.scriptContext, ...input.slide.lines, input.transcript, input.latestTranscript].filter(Boolean).join("\n");
+  const reviewSources = [input.latestTranscript, input.slide.lines.join("\n"), input.transcript, input.scriptContext].filter((source): source is string => Boolean(source));
   let variants: QuestionVariant[] = [];
   let validationError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -669,10 +669,16 @@ export function parseStudentExamDraft(answer: string, input: { lectureId: string
 
 function isConfiguredMiniMaxM3(provider: AIProvider) {
   if (!/^MiniMax-M3(?:$|[-/])/i.test(provider.info.model)) return false;
-  if (provider.info.provider === "learnordie-responses") return true;
+  if (provider.info.provider === "learnordie-responses") {
+    try {
+      const endpoint = new URL(process.env.LEARNORDIE_LLM_PROXY_BASE_URL ?? process.env.LEARNBUDDY_LLM_PROXY_BASE_URL ?? process.env.CTOX_LLM_PROXY_BASE_URL ?? process.env.LEARNBUDDY_AI_BASE_URL ?? "https://llm.learnordie.app");
+      return endpoint.protocol === "https:" && endpoint.hostname === "llm.learnordie.app" && !endpoint.username && !endpoint.password;
+    } catch { return false; }
+  }
   if (provider.info.provider !== "openai-compatible") return false;
   try {
-    return new URL(process.env.LEARNBUDDY_AI_BASE_URL ?? "").hostname === "api.minimax.io";
+    const endpoint = new URL(process.env.LEARNBUDDY_AI_BASE_URL ?? "");
+    return endpoint.protocol === "https:" && endpoint.hostname === "api.minimax.io" && !endpoint.username && !endpoint.password;
   } catch {
     return false;
   }
@@ -747,8 +753,8 @@ export async function generateStudentExamDraft(input: {
     ...input
   });
   const deadlineAt = input.deadlineAt ?? Date.now() + 50_000;
-  const reviewSources = [input.scriptContext, ...input.slide.lines, input.transcriptContext,
-    ...input.lecture.slides.flatMap((slide) => liveQuestionSlideContext(input.lecture, slide.id)?.lines ?? [])].filter(Boolean).join("\n");
+  const reviewSources = [input.latestTranscript, input.slide.lines.join("\n"), input.transcriptContext, input.scriptContext,
+    ...input.lecture.slides.map((slide) => (liveQuestionSlideContext(input.lecture, slide.id)?.lines ?? []).join("\n"))].filter(Boolean);
   let lastValidationError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     let result;

@@ -20,6 +20,8 @@ test("grounding approval requires all four levels and an actual source quote for
   assert.throws(() => parseQuestionGroundingReview(JSON.stringify(wrongBoolean), sources), /Fachprüfung/);
   assert.throws(() => parseQuestionGroundingReview("null", sources), /vier Einzelprüfungen/);
   assert.throws(() => parseQuestionGroundingReview("not json", sources));
+  const boundary = valid(); boundary.reviews[0].sourceQuote = "Ende der Quelle Anfang der anderen Quelle";
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify(boundary), ["Ende der Quelle", "Anfang der anderen Quelle", sources]), /Beleg fehlt/);
 });
 
 test("review fails closed for provider failure, malformed approval and elapsed deadline", async () => {
@@ -29,4 +31,14 @@ test("review fails closed for provider failure, malformed approval and elapsed d
   await assert.rejects(reviewQuestionGrounding(provider, [], sources, Date.now() - 1), /Zeitlimit/);
   await assert.rejects(reviewQuestionGrounding(provider, [], "", Date.now() + 2000), /Vorlesungsquelle/);
   assert.equal(calls, 1);
+});
+
+test("long sources never displace the latest passage and over-budget sources fail without a call", async () => {
+  let submitted: { sources: string[] } | undefined;
+  const provider = { complete: async (input: {user:string}) => { submitted = JSON.parse(input.user); return {answer:JSON.stringify(valid())}; } } as unknown as AIProvider;
+  await reviewQuestionGrounding(provider, [], ["x".repeat(30_000), sources], Date.now()+2000);
+  assert.deepEqual(submitted?.sources, ["x".repeat(30_000), sources]);
+  submitted=undefined;
+  await assert.rejects(reviewQuestionGrounding(provider, [], ["x".repeat(120_001)], Date.now()+2000), /Anfragebudget/);
+  assert.equal(submitted, undefined);
 });

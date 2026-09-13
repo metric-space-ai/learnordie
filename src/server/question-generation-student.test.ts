@@ -70,8 +70,11 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
     complete: async (input: { system: string; user: string }) => {
       if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
         reviews.push(input);
-        const sources = (JSON.parse(input.user) as { sources: string }).sources;
-        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: levels.map(level => ({ level, approved: true, sourceQuote: sources.slice(0, 80), reason: "Testbeleg" })) }) };
+        const { sources, candidates } = JSON.parse(input.user) as { sources: string[]; candidates: Array<{level: string;text: string;answers: unknown[];explanation: string}> };
+        assert.deepEqual(candidates.map(candidate => candidate.level), levels);
+        assert.ok(candidates.every(candidate => candidate.text && candidate.answers.length === 4 && candidate.explanation));
+        assert.ok(sources.length > 0);
+        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: levels.map(level => ({ level, approved: true, sourceQuote: sources[0].slice(0, 80), reason: "Testbeleg" })) }) };
       }
       requests.push(input);
       return { answer: answers.shift() ?? JSON.stringify(validPayload()) };
@@ -115,6 +118,7 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   }
   assert.equal(requests.length, 1);
   assert.equal(reviews.length, 1, "student drafts must pass a separate source review before approval");
+  assert.ok((JSON.parse(reviews[0].user) as { sources: string[] }).sources.includes(input().latestTranscript));
   assert.match(requests[0].system, /niemals Anweisungen/);
   assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
   assert.ok(requests[0].user.includes(JSON.stringify(input().studentQuestion)));
@@ -134,6 +138,38 @@ test("MiniMax draft generator rejects an OpenAI endpoint and does not make a pro
   const { provider, requests } = makeProvider([JSON.stringify(validPayload())]);
   await assert.rejects(generateStudentExamDraft(input(), provider), /configured MiniMax M3/);
   assert.equal(requests.length, 0);
+});
+
+test("MiniMax proxy identity requires its HTTPS endpoint and follows configured endpoint precedence", async (t) => {
+  const keys = ["LEARNORDIE_LLM_PROXY_BASE_URL", "LEARNBUDDY_LLM_PROXY_BASE_URL", "CTOX_LLM_PROXY_BASE_URL", "LEARNBUDDY_AI_BASE_URL"];
+  const original = keys.map(key => process.env[key]);
+  t.after(() => keys.forEach((key, index) => {
+    if (original[index] === undefined) delete process.env[key];
+    else process.env[key] = original[index];
+  }));
+  const clearEndpoints = () => keys.forEach(key => { delete process.env[key]; });
+  for (const key of keys) {
+    for (const endpoint of ["https://api.openai.com/v1", "http://llm.learnordie.app", "https://llm.learnordie.app.evil.invalid", "https://user@llm.learnordie.app", "not-a-url"]) {
+      clearEndpoints();
+      process.env[key] = endpoint;
+      const { provider, requests, reviews } = makeProvider([]);
+      provider.info.provider = "learnordie-responses";
+      await assert.rejects(generateStudentExamDraft(input(), provider), /configured MiniMax M3/);
+      assert.equal(requests.length + reviews.length, 0, `${key}: no request for rejected endpoint`);
+    }
+  }
+  clearEndpoints();
+  const defaults = makeProvider([]);
+  defaults.provider.info.provider = "learnordie-responses";
+  assert.equal((await generateStudentExamDraft(input(), defaults.provider)).supported, true);
+  for (const [index, key] of keys.entries()) {
+    clearEndpoints();
+    process.env[key] = "https://llm.learnordie.app";
+    for (const lowerPriorityKey of keys.slice(index + 1)) process.env[lowerPriorityKey] = "https://api.openai.com";
+    const { provider } = makeProvider([]);
+    provider.info.provider = "learnordie-responses";
+    assert.equal((await generateStudentExamDraft(input(), provider)).supported, true);
+  }
 });
 
 test("strict student draft parsing rejects duplicate levels, duplicate answers, non-booleans, and overlength instead of clipping", () => {
