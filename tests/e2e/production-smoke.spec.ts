@@ -477,7 +477,7 @@ async function runAdminCommandAllowFailure(args: string[], extraEnv: Record<stri
     });
     return JSON.parse(result.stdout) as {
       ok: boolean;
-      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string }>;
+      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
       blockers?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
     };
   } catch (error) {
@@ -485,7 +485,7 @@ async function runAdminCommandAllowFailure(args: string[], extraEnv: Record<stri
     if (!stdout) throw error;
     return JSON.parse(stdout) as {
       ok: boolean;
-      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string }>;
+      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
       blockers?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
     };
   }
