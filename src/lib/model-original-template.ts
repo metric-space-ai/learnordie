@@ -1,4 +1,4 @@
-import { parseSlideDocument, type SlideBlock, type SlideDocument, type SlideNode, type CanvasElement } from "@learnordie/slide-engine/schema";
+import { parseSlideDocument, type SlideBlock, type SlideDocument, type SlideNode, type CanvasElement, type SpeakerNote } from "@learnordie/slide-engine/schema";
 import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
 import { originalModelSlides, originalModelCompanion, originalModelSourcesHtml, originalModelProvenance } from "./model-original-source";
 import { createModelDemoDocument, MODEL_DEMO_KEY } from "./model-demo-template";
@@ -151,6 +151,7 @@ export type OriginalModelUpgradePlan = {
 
 const originalSourceFields = ["nav", "kicker", "title", "lead", "formula", "takeaway", "question", "scene", "sceneTitle", "sceneSub", "accent", "source", "notes"] as const;
 const nativeBlockFields = ["kicker", "lead", "formula", "takeaway", "question", "sceneTitle", "sceneSub", "source"] as const;
+const MODEL_ORIGINAL_LEGACY_LANGUAGE_FORMULA = originalModelText(originalModelSlides.find((source) => source.scene === "language")!.formula).replace("p_θ", "pθ");
 
 function jsonEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
@@ -176,7 +177,7 @@ function sceneBlock(slide: SlideNode) {
   return slide.blocks.find((block) => block.type === "scene3d");
 }
 
-function fieldBlockIds(slide: SlideNode, scene: string): Partial<Record<(typeof nativeBlockFields)[number], string>> {
+function fieldBlockIds(slide: SlideNode, scene: string, source?: (typeof originalModelSlides)[number]): Partial<Record<(typeof nativeBlockFields)[number], string>> {
   const result: Partial<Record<(typeof nativeBlockFields)[number], string>> = {};
   const canonicalPrefix = `original-${scene}-`;
   for (const field of nativeBlockFields) {
@@ -187,13 +188,24 @@ function fieldBlockIds(slide: SlideNode, scene: string): Partial<Record<(typeof 
   const legacyTask = slide.blocks.find((block) => block.id === `${scene}-task`);
   if (legacyText && !result.lead) result.lead = legacyText.id;
   if (legacyTask && !result.question) result.question = legacyTask.id;
-  if (Object.keys(result).length) return result;
+  for (const field of nativeBlockFields) {
+    if (result[field]) continue;
+    const suffixed = slide.blocks.find((block) => block.id.endsWith(`-${field}`));
+    if (suffixed) result[field] = suffixed.id;
+  }
+  if (source) {
+    for (const field of nativeBlockFields) {
+      if (result[field]) continue;
+      const matching = slide.blocks.find((block) => blockText(block) === expectedBlockText(source, field));
+      if (matching) result[field] = matching.id;
+    }
+  }
   const heading = slide.blocks.find((block) => block.type === "heading");
   const paragraph = slide.blocks.find((block) => block.type === "paragraph");
   const callout = slide.blocks.find((block) => block.type === "callout");
-  if (heading) result.kicker = heading.id;
-  if (paragraph) result.lead = paragraph.id;
-  if (callout) result.formula = callout.id;
+  if (heading && !result.kicker) result.kicker = heading.id;
+  if (paragraph && !result.lead) result.lead = paragraph.id;
+  if (callout && !result.formula) result.formula = callout.id;
   return result;
 }
 
@@ -228,6 +240,42 @@ function mergeById<T extends { id: string }>(existing: T[] | undefined, addition
     }
   }
   return result;
+}
+
+function mergeSpeakerNotes(existing: SpeakerNote[] | undefined, additions: SpeakerNote[], conflicts: OriginalModelUpgradeConflict[], path: string): SpeakerNote[] {
+  const result = [...(existing ?? [])];
+  const byId = new Map(result.map((note) => [note.id, note]));
+  const existingTexts = new Set(result.flatMap((note) => [note.text, ...note.text.split("\n\n")]));
+  const pending: SpeakerNote[] = [];
+  for (const addition of additions) {
+    const prior = byId.get(addition.id);
+    if (prior) {
+      if (!jsonEqual(prior, addition)) conflicts.push({ code: "source_edit", path: `${path}.${addition.id}`, message: `Existing authored note ${addition.id} differs from the original source.` });
+    } else if (!existingTexts.has(addition.text)) {
+      pending.push(addition);
+      existingTexts.add(addition.text);
+    }
+  }
+  const bundledGroups: SpeakerNote[][] = [];
+  for (const note of pending) {
+    const previous = bundledGroups[bundledGroups.length - 1]?.[0];
+    if (previous && previous.kind === note.kind && !previous.blockId && !note.blockId && `${bundledGroups[bundledGroups.length - 1].map((item) => item.text).join("\n\n")}\n\n${note.text}`.length <= 1600) {
+      bundledGroups[bundledGroups.length - 1].push(note);
+      continue;
+    }
+    bundledGroups.push([note]);
+  }
+  const usedIds = new Set([...result, ...pending].map((note) => note.id));
+  const bundled = bundledGroups.map((group) => {
+    if (group.length === 1) return { ...group[0] };
+    let id = `${group[0].id}-bundle`;
+    let suffix = 2;
+    while (usedIds.has(id)) id = `${group[0].id}-bundle-${suffix++}`;
+    usedIds.add(id);
+    return { id, kind: group[0].kind, text: group.map((item) => item.text).join("\n\n") };
+  });
+  if (result.length + bundled.length > 12) conflicts.push({ code: "capacity", path, message: "Preserving existing notes and complete authored notes exceeds the native note limit." });
+  return [...result, ...bundled];
 }
 
 function mergeAssets(existing: SlideDocument["assets"], additions: SlideDocument["assets"], conflicts: OriginalModelUpgradeConflict[]): SlideDocument["assets"] {
@@ -329,7 +377,7 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
     const baseline = legacyBaseline?.slides[index];
     const mapping = new Map<string, string>();
     const statuses: Partial<Record<OriginalModelSourceField, OriginalModelCoverageStatus>> = {};
-    const fieldIds = fieldBlockIds(current, expectedSource.scene);
+    const fieldIds = fieldBlockIds(current, expectedSource.scene, expectedSource);
     if (baseline) {
       for (const block of baseline.blocks) {
         const actual = current.blocks.find((candidate) => candidate.id === block.id);
@@ -352,7 +400,8 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
         const existingId = fieldIds[field];
         const currentBlock = existingId ? current.blocks.find((block) => block.id === existingId) : undefined;
         if (currentBlock) {
-          const matches = blockText(currentBlock) === expectedBlockText(expectedSource, field);
+          const matches = blockText(currentBlock) === expectedBlockText(expectedSource, field)
+            || (existing.createdBy.promptVersion === MODEL_ORIGINAL_LEGACY_IMPORT_KEY && field === "formula" && expectedSource.scene === "language" && blockText(currentBlock) === MODEL_ORIGINAL_LEGACY_LANGUAGE_FORMULA);
           if (!matches) {
             conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks.${currentBlock.id}`, slideId: current.id, message: `Existing authored field ${field} differs from the original source.` });
             statuses[field] = "conflict";
@@ -393,7 +442,8 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
     const extras = current.blocks.filter((block) => !mappedBlockIds.has(block.id));
     const mergedBlocks = [...mapped.blocks, ...extras];
     if (!current.canvas && extras.length) conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks`, slideId: current.id, message: "Existing semantic blocks have no saved native canvas and require review before upgrade." });
-    const mergedNotes = mergeById(current.speakerNotes, authored.speakerNotes ?? [], conflicts, `slides.${current.id}.speakerNotes`);
+    const mergedNotes = mergeSpeakerNotes(current.speakerNotes, authored.speakerNotes ?? [], conflicts, `slides.${current.id}.speakerNotes`);
+    if ((authored.speakerNotes ?? []).every((note) => current.speakerNotes?.some((existingNote) => existingNote.text === note.text))) statuses.notes = "preserved";
     const mergedRefs = mergeById(current.sourceRefs, authored.sourceRefs, conflicts, `slides.${current.id}.sourceRefs`);
     const quizAnchors = current.quizAnchors?.map((anchor) => {
       preservedQuizAnchorIds.push(anchor.id);
@@ -407,10 +457,10 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
       blocks: mergedBlocks,
       canvas: mergeCanvas(current.canvas, mapped.canvas, conflicts, current.id, preservedCanvasElementIds),
       speakerNotes: mergedNotes,
-      quizAnchors,
       sourceRefs: mergedRefs
     };
-    coverage.push(...originalCoverage(index, slide, fieldBlockIds(slide, expectedSource.scene), statuses));
+    if (quizAnchors) slide.quizAnchors = quizAnchors;
+    coverage.push(...originalCoverage(index, slide, fieldBlockIds(slide, expectedSource.scene, expectedSource), statuses));
     return slide;
   });
   const assets = mergeAssets(existing.assets, candidateBase.assets, conflicts);

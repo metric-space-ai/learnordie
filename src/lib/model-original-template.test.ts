@@ -114,6 +114,7 @@ test("the planner upgrades the abbreviated generated deck without losing slide i
   assert.equal(JSON.stringify(abbreviated), before, "planning must not mutate the source document");
   assert.equal(plan.coverage.length, 8 * 13);
   assert.ok(plan.coverage.every((evidence) => evidence.target.length > 0));
+  assert.equal(planOriginalModelUpgrade(parseSlideDocument(JSON.parse(JSON.stringify(upgraded)))).status, "noop");
 });
 
 test("a source-import shaped deck gets missing authored fields while retaining existing source blocks", () => {
@@ -144,6 +145,66 @@ test("a source-import shaped deck gets missing authored fields while retaining e
   assert.equal(upgraded.assets.some((asset) => asset.id === "model-original-html"), true);
   assert.ok(plan.coverage.filter((evidence) => evidence.field === "nav").every((evidence) => evidence.status === "added"));
   assert.ok(plan.coverage.some((evidence) => evidence.field === "sceneTitle" && evidence.target.includes("sceneTitle")));
+});
+
+test("the recognized historical import keeps 4/5 existing notes, bundles missing source notes, and upgrades the flattened language formula", () => {
+  const source = doc();
+  const noteCounts = [4, 4, 5, 4, 4, 5, 5, 4];
+  const historical = parseSlideDocument({
+    ...source,
+    id: "historical-import",
+    title: "Der Modellbegriff im Wandel",
+    createdBy: { mode: "import", promptVersion: "modellbegriff-threejs-html-import-v1" },
+    assets: [source.assets[1]],
+    slides: source.slides.map((slide, index) => {
+      const notes = Array.from({ length: noteCounts[index] }, (_, note) => ({ id: `uuid-${index}-${note}`, kind: "talkingPoint" as const, text: `Historische Zusatznotiz ${index}-${note}` }));
+      return {
+        ...slide,
+        title: originalModelText(originalModelSlides[index].title).replace(/\n/g, " "),
+        canvas: undefined,
+        speakerNotes: notes,
+        blocks: slide.blocks
+          .filter((block) => ["kicker", "lead", "formula", "scene"].some((field) => block.id.endsWith(`-${field}`)))
+          .map((block) => {
+            const id = `${slide.id}-${block.id.split("-").at(-1)}`;
+            if (block.id.endsWith("-kicker")) return { ...block, id, type: "heading" as const };
+            if (block.id.endsWith("-formula")) return { ...block, id, type: "callout" as const, tone: "key" as const, text: index === 6 ? "pθ(nächstes Token | Kontext)" : ("text" in block ? block.text : "") };
+            if (block.id.endsWith("-scene") && block.type === "scene3d") return { ...block, id, altText: `${block.altText}. ${block.caption}`, caption: undefined };
+            return { ...block, id };
+          })
+      };
+    })
+  });
+  const plan = planOriginalModelUpgrade(historical);
+  if (plan.status !== "ready") console.log("historical-plan-conflicts", plan.conflicts.map(({ code, path }) => ({ code, path })));
+  assert.equal(plan.status, "ready");
+  assert.deepEqual(plan.conflicts, []);
+  const upgraded = applyOriginalModelUpgrade(plan);
+  const upgradedFormula = upgraded.slides[6].blocks.find((block) => block.id.endsWith("-formula"));
+  assert.equal(upgradedFormula && "text" in upgradedFormula ? upgradedFormula.text : undefined, "p_θ(nächstes Token | Kontext)");
+  for (const [index, slide] of historical.slides.entries()) {
+    assert.equal(upgraded.slides[index].speakerNotes!.filter((note) => note.id.startsWith(`uuid-${index}-`)).length, noteCounts[index]);
+    const authoredNotes = source.slides[index].speakerNotes!.map((note) => note.text);
+    const mergedText = upgraded.slides[index].speakerNotes!.map((note) => note.text).join("\n\n");
+    for (const text of authoredNotes) assert.ok(mergedText.includes(text), `missing authored note on slide ${index}`);
+    assert.ok(upgraded.slides[index].speakerNotes!.length <= 12);
+  }
+  const secondPlan = planOriginalModelUpgrade(parseSlideDocument(JSON.parse(JSON.stringify(upgraded))));
+  assert.equal(secondPlan.status, "noop");
+  const edited = parseSlideDocument({
+    ...historical,
+    slides: historical.slides.map((slide, index) => index === 6 ? { ...slide, blocks: slide.blocks.map((block) => block.id.endsWith("-formula") ? { ...block, text: "Eigene Formel" } : block) } : slide)
+  });
+  const conflict = planOriginalModelUpgrade(edited);
+  assert.equal(conflict.status, "conflict");
+  assert.ok(conflict.conflicts.some((item) => item.path.includes("formula")));
+  const leadEdited = parseSlideDocument({
+    ...historical,
+    slides: historical.slides.map((slide, index) => index === 0 ? { ...slide, blocks: slide.blocks.map((block) => block.id.endsWith("-lead") ? { ...block, text: "Eigene Leitfrage" } : block) } : slide)
+  });
+  const leadConflict = planOriginalModelUpgrade(leadEdited);
+  assert.equal(leadConflict.status, "conflict");
+  assert.ok(leadConflict.conflicts.some((item) => item.path.includes("-lead")));
 });
 
 test("invalid cardinality, capacity and semantic extras return conflicts without constructing an invalid candidate", () => {
@@ -192,6 +253,8 @@ test("already-upgraded documents are idempotent and extra native elements remain
   assert.ok(plan.preserved.assetIds.includes("extra-asset"));
   assert.ok(applyOriginalModelUpgrade(plan).slides[0].canvas!.elements.some((element) => element.id === "user-drawing"));
   assert.equal(planOriginalModelUpgrade(doc()).status, "noop");
+  const serialized = parseSlideDocument(JSON.parse(JSON.stringify(original)));
+  assert.equal(planOriginalModelUpgrade(serialized).status, "noop");
 });
 
 test("edited source content is surfaced as a conflict and cannot be applied", () => {
