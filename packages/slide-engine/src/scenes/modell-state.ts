@@ -1,5 +1,6 @@
 import type { ModellSceneKey, ModellSceneState } from "./modell-types";
 import { modellTheme } from "./modell-theme";
+import { GRAVITY, INITIAL_DISPLACEMENT, hangingSpringEnergy } from "./oscillator-physics";
 
 // Didaktische Zustandslogik aus Modellbegriff_ThreeJS_clean.html, getrennt von der Darstellung.
 
@@ -43,6 +44,9 @@ export function createModellSceneState(playing: boolean): ModellSceneState {
     morph: 0,
     abstraction: 0,
     stiffness: 4,
+    sceneTime: 0,
+    oscillator: { x: GRAVITY / 4 + INITIAL_DISPLACEMENT, v: 0, time: 0 },
+    oscillatorTrace: [{ x: GRAVITY / 4 + INITIAL_DISPLACEMENT, time: 0 }],
     description: "force",
     executing: true,
     inputX: 0.4,
@@ -83,7 +87,7 @@ export function modellPredict(state: ModellSceneState, x: number) {
 
 // Echte Parameteranpassung per Gradientenabstieg, wie in der Vorlage.
 export function trainModellStep(state: ModellSceneState, dt: number) {
-  if (!state.trainingRunning) return;
+  if (!state.trainingRunning || !Number.isFinite(dt) || dt <= 0) return;
   state.accumulator += dt * 95;
   const count = Math.min(20, Math.floor(state.accumulator));
   state.accumulator -= count;
@@ -141,9 +145,22 @@ export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, 
     });
     inner += svgText(300, 248, "Schematisch. Kein LLM im Browser.", 13);
   } else if (key === "runtime") {
-    const angle = (state.outputAngle * Math.PI) / 180;
+    const angle = (state.servoAngle * Math.PI) / 180;
     inner = `<circle cx="85" cy="150" r="35" fill="${theme.fill}" stroke="${theme.ink}"/><rect x="230" y="100" width="115" height="100" rx="8" fill="${theme.fill}" stroke="${theme.ink}"/><circle cx="485" cy="150" r="63" fill="${theme.fill}" stroke="${theme.ink}"/><path d="M125 150H228M350 150H418" stroke="${accent}" stroke-width="2"/>`;
-    inner += `<path d="M485 150L${485 + 47 * Math.sin(angle)} ${150 - 47 * Math.cos(angle)}" stroke="${accent}" stroke-width="4"/>${svgText(85, 157, "x", 23)}${svgText(287, 157, "f", 28)}${svgText(485, 255, `y = ${formatModellNumber(state.outputAngle, 1)}°`, 17)}`;
+    inner += `<path d="M485 150L${485 + 47 * Math.sin(angle)} ${150 - 47 * Math.cos(angle)}" stroke="${accent}" stroke-width="4"/>${svgText(85, 157, "x", 23)}${svgText(287, 157, "f", 28)}${svgText(485, 255, `y = ${formatModellNumber(state.servoAngle, 1)}°`, 17)}`;
+  } else if (key === "limits") {
+    const q = hangingSpringEnergy(state.sceneTime), massTop = 160 + q.displacement * 45;
+    const coil = Array.from({length: 17}, (_, i) => `${i ? "L" : "M"}${140 + (i % 2 ? 15 : -15)} ${60 + i / 16 * (massTop - 60)}`).join(" ");
+    inner = `<path d="M95 50H185 ${coil}" stroke="${accent}" fill="none" stroke-width="3"/><rect x="112" y="${massTop}" width="56" height="42" fill="${theme.fill}" stroke="${theme.ink}"/>`;
+    if (state.description === "energy") {
+      ([['Eₖ',q.kinetic],['E_f',q.elastic],['E_g',q.gravitational]] as const).forEach(([name,energy], i) => {
+        const x = 300 + 90*i, height = 190*energy/q.totalAtStart;
+        inner += `<rect x="${x}" y="${250-height}" width="48" height="${Math.max(0,height)}" fill="${i===0?theme.secondary:i===1?accent:theme.ink}"/>${svgText(x+24,278,name,20)}`;
+      });
+      inner += svgText(414,40,`E = ${formatModellNumber(q.total)} J`,20);
+    } else {
+      inner += `<path d="M310 250L510 50M300 150H520M410 40V260" fill="none" stroke="${theme.ink}"/><circle cx="${410+q.displacement/q.amplitude*100}" cy="${150+q.displacement/q.amplitude*100}" r="6" fill="${accent}"/>${svgText(535,155,"x − x₀",16)}${svgText(410,28,"F",20)}`;
+    }
   } else if (key === "morph" || key === "transfer") {
     const words = key === "morph" ? modellConcepts : modellTransferSteps;
     words.forEach((word, i) => {
@@ -153,16 +170,8 @@ export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, 
     });
   } else {
     inner = `<path d="M125 65H260M193 65V83l-15 12 30 12-30 12 30 12-30 12 30 12-15 12v24" stroke="${accent}" fill="none" stroke-width="3"/><rect x="163" y="202" width="60" height="48" rx="5" fill="${theme.fill}" stroke="${theme.ink}"/><path d="M100 276H285" stroke="${theme.ink}" stroke-width="3"/>`;
-    const formula =
-      key === "limits"
-        ? state.description === "force"
-          ? "F = −kx"
-          : "E = ½mv² + ½kx²"
-        : key === "law"
-          ? "m·ẍ + k·x = 0"
-          : "Masse ↔ Feder";
-    inner += svgText(430, 155, formula, key === "limits" ? 18 : 22, accent);
-    inner += svgText(430, 197, key === "miniature" ? "Vereinfachtes Abbild" : "Idealisierte Beziehung", 14);
+    const formula = key === "law" ? "m·ẍ = mg − kx" : "Masse ↔ Feder";
+    inner += svgText(430, 155, formula, 22, accent);
   }
   const safeLabel = label.replace(/[<>&"]/g, "");
   return `<svg viewBox="0 0 600 340" xmlns="http://www.w3.org/2000/svg" style="color:${theme.ink}" role="img" aria-label="2D-Ersatzansicht: ${safeLabel}">${transparent ? "" : `<rect width="600" height="340" fill="${theme.paper}"/>`}${inner}</svg>`;

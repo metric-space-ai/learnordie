@@ -42,7 +42,12 @@ export function SlideEngineCanvas({
   const [qrOpen, setQrOpen] = useState(false);
   const qrDialog = useRef<HTMLDialogElement>(null);
   const participationButton = useRef<HTMLAnchorElement>(null);
-  useEffect(() => { setOrigin(window.location.origin); }, []);
+  useEffect(() => {
+    // A production candidate uses the explicitly configured public origin,
+    // rather than publishing its disposable deployment hostname in the QR.
+    try { setOrigin(new URL(process.env.NEXT_PUBLIC_APP_URL || window.location.origin).origin); }
+    catch { setOrigin(window.location.origin); }
+  }, []);
   const lectureUrl = lectureToken ? `${origin}${participationPath ?? `/l/${encodeURIComponent(lectureToken)}`}` : "";
   useEffect(() => {
     const dialog = qrDialog.current;

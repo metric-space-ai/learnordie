@@ -18,6 +18,9 @@ export type ModellSceneState = {
   morph: number;
   abstraction: number;
   stiffness: number;
+  sceneTime: number;
+  oscillator: { x: number; v: number; time: number };
+  oscillatorTrace: Array<{ time: number; x: number }>;
   description: "force" | "energy";
   executing: boolean;
   inputX: number;

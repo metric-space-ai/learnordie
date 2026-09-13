@@ -165,6 +165,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         (event.target instanceof Element && Boolean(event.target.closest("button, a, summary, [contenteditable=true]")));
       if (event.code === "Space" && !isTyping) {
         event.preventDefault();
+        if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+        setChatOpen(false);
+        setLeaderboardOpen(false);
+        setEvaluationOpen(false);
         setQuestionOrigin("space");
         setActiveHotspotIndex(null);
         setQuestionOpen((current) => !current);
@@ -203,8 +207,8 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   }, [chatOpen, evaluationOpen, leaderboardOpen, peekingSlide, questionOpen]);
 
   useEffect(() => {
-    if (questionOpen || peekingSlide) closeMore();
-  }, [questionOpen, peekingSlide]);
+    if (peekingSlide) closeMore();
+  }, [peekingSlide]);
 
   useEffect(() => {
     if (!questionOpen || questionOrigin !== "hotspot" || activeHotspotIndex === null) return;
@@ -521,6 +525,9 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           aria-pressed={questionOpen}
           onClick={() => {
             closeMore();
+            setChatOpen(false);
+            setLeaderboardOpen(false);
+            setEvaluationOpen(false);
             setQuestionOrigin("control");
             setActiveHotspotIndex(null);
             setQuestionOpen((current) => {
@@ -558,6 +565,9 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 return;
               }
               pendingHotspotSharedRef.current = { index, level };
+              setChatOpen(false);
+              setLeaderboardOpen(false);
+              setEvaluationOpen(false);
               setForcedLevel(level);
               setQuestionOrigin("hotspot");
               setActiveHotspotIndex(index);

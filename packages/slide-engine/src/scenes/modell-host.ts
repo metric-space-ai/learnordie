@@ -173,7 +173,8 @@ export class ModellSceneHost {
     if (new Set([
       "ABBILD → BEZIEHUNG → FUNKTION", "AUSWÄHLEN · VEREINFACHEN · WEGLASSEN",
       "EINE VOLLSTÄNDIGE PERIODE", "KRAFTBILANZ", "21 BEISPIELE · 3 LERNBARE PARAMETER",
-      "WIEDERHOLTE VERARBEITUNG · × N", "PRÜFEN UND RÜCKKOPPELN"
+      "WIEDERHOLTE VERARBEITUNG · × N", "PRÜFEN UND RÜCKKOPPELN",
+      "MODELL + INTERFACE", "LAUFZEITUMGEBUNG"
     ]).has(text)) return el;
     el.className = `lb-scene3d-label ${cls}`.trim();
     el.textContent = text;

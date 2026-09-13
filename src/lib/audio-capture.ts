@@ -97,33 +97,90 @@ async function recordWavAudioSnippet(stream: MediaStream, durationMs: number) {
   return encodePcm16Wav(samples, sampleRate);
 }
 
-function recordMediaRecorderSnippet(stream: MediaStream, durationMs: number) {
-  if (!("MediaRecorder" in window)) {
-    return Promise.resolve(new Blob(["fallback-audio"], { type: "application/octet-stream" }));
-  }
-
-  return new Promise<Blob>((resolve, reject) => {
-    const chunks: Blob[] = [];
-    const recorder = new MediaRecorder(stream);
-    recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    });
-    recorder.addEventListener("stop", () => {
-      resolve(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
-    }, { once: true });
-    recorder.addEventListener("error", () => reject(new Error("MediaRecorder Fehler.")), { once: true });
-    recorder.start();
-    window.setTimeout(() => {
-      if (recorder.state !== "inactive") recorder.stop();
-    }, durationMs);
-  });
+export async function recordAudioSnippet(stream: MediaStream, durationMs: number) {
+  // Never substitute fake bytes or unsupported WebM for a failed recording.
+  return recordWavAudioSnippet(stream, durationMs);
 }
 
-export async function recordAudioSnippet(stream: MediaStream, durationMs: number) {
+/** Fixed sample boundaries: neither gaps nor duplicated samples between requests. */
+export function createPcmSegmenter(sampleCount: number, emit: (samples: Float32Array) => void) {
+  if (!Number.isSafeInteger(sampleCount) || sampleCount < 1) throw new Error("Invalid audio segment size.");
+  let buffer = new Float32Array(sampleCount);
+  let used = 0;
+  return {
+    push(samples: Float32Array) {
+      let offset = 0;
+      while (offset < samples.length) {
+        const size = Math.min(sampleCount - used, samples.length - offset);
+        buffer.set(samples.subarray(offset, offset + size), used);
+        offset += size;
+        used += size;
+        if (used === sampleCount) {
+          const complete = buffer;
+          buffer = new Float32Array(sampleCount);
+          used = 0;
+          emit(complete);
+        }
+      }
+    },
+    flush() {
+      if (!used) return;
+      const remaining = buffer.slice(0, used);
+      used = 0;
+      emit(remaining);
+    }
+  };
+}
+
+export type RecordedPassage = { audio: Blob; startedAt: string; endedAt: string };
+
+/** One audio graph stays active while a separate bounded queue performs ASR. */
+export async function startContinuousWavCapture(stream: MediaStream, durationMs: number,
+  onPassage: (passage: RecordedPassage) => void, onError: (error: Error) => void) {
+  const AudioContextCtor = audioContextConstructor();
+  if (!AudioContextCtor) throw new Error("Web-Audio-Aufnahme ist nicht verfügbar.");
+  const context = new AudioContextCtor();
+  const source = context.createMediaStreamSource(stream);
+  const processor = context.createScriptProcessor(4096, 1, 1);
+  const gain = context.createGain();
+  gain.gain.value = 0;
+  let stopped = false;
+  let samplesRecorded = 0;
+  let started = Date.now();
+  const segmenter = createPcmSegmenter(Math.round(context.sampleRate * durationMs / 1000), samples => {
+    const startedAt = new Date(started + samplesRecorded / context.sampleRate * 1000).toISOString();
+    samplesRecorded += samples.length;
+    onPassage({ audio: encodePcm16Wav(samples, context.sampleRate), startedAt,
+      endedAt: new Date(started + samplesRecorded / context.sampleRate * 1000).toISOString() });
+  });
+  processor.onaudioprocess = event => {
+    if (!stopped) segmenter.push(event.inputBuffer.getChannelData(0));
+  };
+  const onEnded = () => onError(new Error("Mikrofonverbindung unterbrochen."));
+  const onState = () => {
+    if (!stopped && context.state !== "running") onError(new Error("Audioaufnahme wurde vom Browser unterbrochen."));
+  };
+  const stop = async (flush = true) => {
+    if (stopped) return;
+    stopped = true;
+    context.removeEventListener("statechange", onState);
+    stream.getAudioTracks().forEach(track => track.removeEventListener("ended", onEnded));
+    processor.onaudioprocess = null;
+    processor.disconnect(); source.disconnect(); gain.disconnect();
+    if (flush) segmenter.flush();
+    await context.close().catch(() => undefined);
+  };
   try {
-    return await recordWavAudioSnippet(stream, durationMs);
-  } catch {
-    return recordMediaRecorderSnippet(stream, durationMs);
+    source.connect(processor); processor.connect(gain); gain.connect(context.destination);
+    await context.resume();
+    if (context.state !== "running") throw new Error("Audioaufnahme konnte nicht gestartet werden.");
+    started = Date.now();
+    context.addEventListener("statechange", onState);
+    stream.getAudioTracks().forEach(track => track.addEventListener("ended", onEnded, { once: true }));
+    return { stop };
+  } catch (error) {
+    await stop(false);
+    throw error;
   }
 }
 

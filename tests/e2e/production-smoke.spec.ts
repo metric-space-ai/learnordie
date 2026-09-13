@@ -3687,7 +3687,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator(".student-gate-screen")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
   await expect(page.locator(".lecture-join-qr canvas")).toBeVisible();
-  await expect(page.locator(".slide-lecture-link")).toHaveAttribute("href", /\/l\/gleitlagerung-demo$/);
+  await expect(page.locator(".slide-lecture-link")).toHaveAttribute("href", /\/l\/ME1-GL-2026$/);
   const liveEntry = await page.locator('[data-slide-engine="v1"]').evaluate((element) => ({
     animation: getComputedStyle(element).animationName, motionRoot: Boolean(element.closest(".lb-motion-root"))
   }));

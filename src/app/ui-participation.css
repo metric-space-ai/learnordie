@@ -37,7 +37,12 @@
   overflow: hidden !important; clip-path: inset(50%); white-space: nowrap;
   padding: 0 !important; margin: -1px !important; border: 0 !important;
 }
-.learnordie-canvas-scene .lb-scene3d-controls { font-size: 34px; }
+.learnordie-canvas-scene .lb-scene3d-controls {
+  font-size: 30px; max-height: 28%; padding: 8px 16px; gap: 8px;
+}
+.learnordie-canvas-scene .lb-scene3d-stage { min-height: 65%; }
+.lb-scene3d-inline-controls { display: flex; align-items: center; gap: 12px; }
+.lb-scene3d-inline-controls > .lb-scene3d-range { flex: 1; min-width: 0; }
 .learnordie-canvas-scene .lb-scene3d-tool { font-size: 30px; }
 @media (max-width: 700px) {
   .lecture-join-slide { padding: 64px 20px 28px; gap: 12px; }

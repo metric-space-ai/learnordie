@@ -16,11 +16,11 @@ export async function withParticipationPath(lecture: Lecture): Promise<Lecture> 
         and(eq(joinCodes.scope, "series"), eq(joinCodes.seriesId, lecture.seriesId))
       )))
       .orderBy(sql`case when ${joinCodes.scope} = 'lecture' then 0 else 1 end`, joinCodes.createdAt).limit(1);
-    return { ...lecture, participationPath: code ? `/join/${encodeURIComponent(code.code)}` : `/l/${encodeURIComponent(lecture.publicToken)}` };
+    return { ...lecture, participationPath: code ? `/l/${encodeURIComponent(code.code)}` : `/l/${encodeURIComponent(lecture.publicToken)}` };
   }
   const share = await getStudentRepository().getShareInfoForSeries(lecture.ownerEmail, seriesIdForLecture(lecture));
   return { ...lecture, participationPath: share?.enabled && share.joinPath
-    ? share.joinPath : `/l/${encodeURIComponent(lecture.publicToken)}` };
+    ? share.joinPath.replace(/^\/join\//, "/l/") : `/l/${encodeURIComponent(lecture.publicToken)}` };
 }
 
 /** An enabled series code enters its one active classroom, not a generic dashboard. */

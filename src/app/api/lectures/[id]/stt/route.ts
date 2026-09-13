@@ -9,6 +9,7 @@ import { isValidRouteEntityId } from "@/server/route-params";
 import { normalizeTranscriptTimeRange } from "@/server/transcript-time";
 
 const MAX_STT_AUDIO_BYTES = 5_000_000;
+export const maxDuration = 60;
 const MAX_STT_FORM_BYTES = MAX_STT_AUDIO_BYTES + 64 * 1024;
 const sttMetaSchema = z.object({
   slideTopic: z.string().max(120).optional()
