@@ -1441,7 +1441,7 @@ export class PostgresLectureRepository implements LectureRepository {
 
       const chatQuestion = this.chatQuestionFromRow(question);
       const reviewTemplate = createReviewItemFromChatQuestion(lecture, chatQuestion);
-      let [existing] = await tx.select().from(questionReviewItems).where(and(
+      const [existing] = await tx.select().from(questionReviewItems).where(and(
         eq(questionReviewItems.lectureId, input.lectureId),
         eq(questionReviewItems.sourceStudentQuestionId, input.chatQuestionId)
       )).for("update").limit(1);
