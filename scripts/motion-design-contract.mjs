@@ -279,8 +279,9 @@ expectContains("learn_mode_contract", learnExperience, [
   "inspectorOpen",
   "question-origin-trace",
   "hotspot lb-enter-hotspot",
-  "learn-bar island-control lb-enter-control",
-  "action-stack island-control lb-enter-control",
+  "learner-workspace-toolbar lb-enter-control",
+  "learner-control-menu-panel",
+  "showNavigation={false}",
   "question-ai-link",
   "<Presence show={questionOpen}>",
   "<Presence show={lecture.leaderboardEnabled && leaderboardOpen}>",
@@ -296,12 +297,22 @@ expectContains("student_live_contract", studentLiveExperience, [
   "ensureStudentEnrollment",
   "showJoinIntro={live.state?.showIntro ?? true}",
   "navigationDisabled",
-  "chat-question-panel lb-enter-overlay",
   "data-panel-origin=\"chat-question\"",
   "{round && <LiveQuizDrawer",
   "aria-label=\"Pseudonym sichern\"",
   "<Presence show={lecture.leaderboardEnabled && leaderboardOpen}>"
 ], "src/components/StudentLiveExperience.tsx");
+
+expectRegex("student_live_animated_panel", studentLiveExperience, [
+  { label: "chat_panel_keeps_overlay_motion", pattern: /className="[^"]*\bchat-question-panel\b[^"]*\blb-enter-overlay\b[^"]*"/ }
+], "src/components/StudentLiveExperience.tsx");
+
+// The learner workspace must not reintroduce the two legacy control bands.
+for (const [name, content] of [["LearnExperience", learnExperience], ["StudentLiveExperience", studentLiveExperience]]) {
+  expectNotContains(`no_legacy_learner_chrome_${name}`, content, [
+    'className="learn-bar ', 'className="action-stack '
+  ], `src/components/${name}.tsx`);
+}
 
 expectContains("lecturer_live_contract", lecturerLiveExperience, [
   "className=\"slide-screen presentation-screen lb-motion-root\"",
