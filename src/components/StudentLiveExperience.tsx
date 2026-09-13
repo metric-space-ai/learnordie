@@ -98,7 +98,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" onClick={() => setLeaderboardOpen(true)}>Rangliste</button>}
       <button className="icon-action action-text" type="button" onClick={() => setChatOpen((current) => !current)}>Frage stellen</button>
     </div>
-    <Presence show={chatOpen}>{(motionState) => <aside className="chat-question-panel lb-enter-overlay" data-state={motionState} aria-label="Frage an Dozierende">
+    <Presence show={chatOpen}>{(motionState) => <aside className="chat-question-panel lb-enter-overlay" data-panel-origin="chat-question" data-state={motionState} aria-label="Frage an Dozierende">
       <div><strong>Frage an Dozierende</strong><button className="plain-button" type="button" onClick={() => setChatOpen(false)}>Schließen</button></div>
       <textarea value={chatText} onChange={(event) => setChatText(event.target.value)} aria-label="Deine Frage" rows={3} />
       <button className="primary-button" disabled={chatSending || chatText.trim().length < 4} type="button" onClick={() => void submitChatQuestion()}>{chatSending ? "Sendet …" : "Senden"}</button>

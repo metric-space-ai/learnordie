@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { crc32, deflateSync } from "node:zlib";
 import { originalModelCompanion } from "../../src/lib/model-original-source";
 
 // These stories run against the real isolated Postgres E2E server. Only its
@@ -10,6 +11,7 @@ type NativeElement = {
   id: string;
   type: string;
   text?: string;
+  fileId?: string;
   isDeleted?: boolean;
   customData?: { learnordie?: { type: string; html?: string; sceneId?: string } };
 };
@@ -18,7 +20,7 @@ type FixtureLecture = {
   title: string;
   publicToken: string;
   slides: Array<{ id: string }>;
-  slideDocument?: { slides: Array<{ id: string; canvas?: { elements: NativeElement[] } }> };
+  slideDocument?: { slides: Array<{ id: string; canvas?: { elements: NativeElement[]; files: Record<string, { dataURL: string }> } }> };
 };
 
 function diagnostics(page: Page, expectedCspRejection = false) {
@@ -203,7 +205,17 @@ test("native text is edited directly, saved in preview, reloaded and presented t
     const other = await otherContext.newPage();
     await login(other, "qa-other@learnordie.test");
     await expect(other.getByRole("option").filter({ hasText: lecture.title })).toHaveCount(0);
+    const otherList = await other.request.get("/api/lectures");
+    expect(otherList.ok()).toBe(true);
+    expect((await otherList.json()).lectures.some((item: { id: string }) => item.id === lecture.id)).toBe(false);
     expect((await other.request.get(`/lecturer/live/${lecture.publicToken}`)).status()).toBe(404);
+    const otherCsrf = await other.locator("[data-csrf-token]").getAttribute("data-csrf-token");
+    expect(otherCsrf).toBeTruthy();
+    const denied = await other.request.patch(`/api/lectures/${lecture.id}`, {
+      headers: { "x-learnbuddy-csrf": otherCsrf! }, data: { title: "Forbidden cross-owner change" }
+    });
+    expect(denied.status(), "A valid session and its own CSRF token cannot edit another lecturer's document").toBe(404);
+    expect((await savedLecture(page, lecture.id)).title).toBe(lecture.title);
     studentClean();
   } finally {
     try {
@@ -311,6 +323,53 @@ test("one presenter synchronizes three independent guests, timed questions and s
       for (const context of contexts) await context.close();
     }
   }
+});
+
+function nativePngFixture() {
+  const chunk = (type: string, data: Buffer) => {
+    const tagged = Buffer.concat([Buffer.from(type), data]);
+    const size = Buffer.alloc(4), checksum = Buffer.alloc(4);
+    size.writeUInt32BE(data.length);
+    checksum.writeUInt32BE(crc32(tagged));
+    return Buffer.concat([size, tagged, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(32, 0); header.writeUInt32BE(32, 4);
+  header[8] = 8; header[9] = 6; // 8-bit RGBA, standard non-interlaced PNG.
+  const scanlines = Buffer.alloc(32 * (1 + 32 * 4));
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    const offset = y * 129 + 1 + x * 4;
+    scanlines.set([105, 101, 219, 255], offset);
+  }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(scanlines)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+test("native image import persists a real PNG and rejects invalid image bytes without data loss", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const lecture = await createLecture(page, "Image import");
+  const editor = await nativeEditor(page);
+  const png = nativePngFixture();
+  const chooser = page.waitForEvent("filechooser");
+  await editor.getByRole("radio", { name: "Bild einfügen", exact: true }).click();
+  await (await chooser).setFiles({ name: "native-image.png", mimeType: "image/png", buffer: png });
+  await editor.locator("canvas.interactive").click({ position: { x: 320, y: 240 } });
+  await expect(page.locator(".studio-save-status")).toHaveText("Ungespeichert");
+  const saved = firstScene(await save(page, lecture));
+  const image = saved.elements.find((element) => element.type === "image" && !element.isDeleted);
+  expect(image?.fileId).toBeTruthy();
+  expect(saved.files[image!.fileId!].dataURL).toMatch(/^data:image\/png;base64,/);
+  await page.reload();
+  const reloaded = await selectLecture(page, lecture);
+  expect(firstScene(await savedLecture(page, lecture.id))).toEqual(saved);
+  const badChooser = page.waitForEvent("filechooser");
+  await reloaded.getByRole("radio", { name: "Bild einfügen", exact: true }).click();
+  await (await badChooser).setFiles({ name: "invalid.png", mimeType: "image/png", buffer: Buffer.from("This is not an image") });
+  await expect(page.getByText(/Das Bild konnte nicht eingefügt werden|Ungültige Datei konnte nicht geladen werden|Nicht unterstützter Dateityp/)).toBeVisible();
+  expect(firstScene(await savedLecture(page, lecture.id))).toEqual(saved);
+  await testInfo.attach("native-invalid-image-rejected", { body: await page.screenshot(), contentType: "image/png" });
+  await page.reload();
+  await selectLecture(page, lecture);
+  expect(firstScene(await savedLecture(page, lecture.id))).toEqual(saved);
 });
 
 test("the original companion downloads through the browser without changing a byte", async ({ page }) => {
