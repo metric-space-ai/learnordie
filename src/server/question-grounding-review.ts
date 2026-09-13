@@ -4,7 +4,14 @@ import type { AIProvider } from "./providers/ai";
 const LEVELS = ["4.0", "3.0", "2.0", "1.0"];
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const sourceBlocks = (sources: string | readonly string[]) => (typeof sources === "string" ? [sources] : sources).filter(source => source.trim());
-class GroundingFormatError extends Error {}
+type GroundingFailureCode = "review-format" | "factual-review" | "distractor-quality" | "missing-source" | "source-budget" | "timeout";
+export class GroundingReviewError extends Error {
+  readonly code: GroundingFailureCode;
+  constructor(code: GroundingFailureCode, message: string) { super(message); this.code = code; }
+}
+class GroundingFormatError extends GroundingReviewError {
+  constructor(message: string) { super("review-format", message); }
+}
 
 /** Stable, lossless original passages; no embedding, summary or model rewriting. */
 export function groundingSourcePassages(sources: string | readonly string[]) {
@@ -51,7 +58,7 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
   for (const entry of parsed.reviews) {
     if (entry.approved !== true) {
       const reason = typeof entry.reason === "string" ? entry.reason.slice(0, 400) : "nicht belegt";
-      throw new Error(`Fachprüfung ${entry.level}: ${reason}`);
+      throw new GroundingReviewError("factual-review", `Fachprüfung ${entry.level}: ${reason}`);
     }
   }
   if (variants?.length) {
@@ -61,7 +68,7 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
       if (Array.isArray(entry.distractors)) {
         for (const check of entry.distractors) {
           if (check && ["unrelated", "joke", "not_false"].includes(check.kind)) {
-            throw new Error(`Fachprüfung ${entry.level}: Unbrauchbarer Ablenker ${String(check.key).slice(0, 1)} (${check.kind}). ${typeof check.reason === "string" ? check.reason.slice(0, 300) : ""}`);
+            throw new GroundingReviewError("distractor-quality", `Fachprüfung ${entry.level}: Unbrauchbarer Ablenker ${String(check.key).slice(0, 1)} (${check.kind}). ${typeof check.reason === "string" ? check.reason.slice(0, 300) : ""}`);
           }
         }
       }
@@ -97,13 +104,13 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
 /** Separate source-based review; no family is published on failed or missing review. */
 export async function reviewQuestionGrounding(provider: AIProvider, variants: QuestionVariant[], sources: string | readonly string[], deadlineAt: number) {
   const remainingMs = Math.min(20_000, deadlineAt - Date.now() - 1_000);
-  if (remainingMs <= 0) throw new Error("Fachprüfung: Zeitlimit erreicht.");
+  if (remainingMs <= 0) throw new GroundingReviewError("timeout", "Fachprüfung: Zeitlimit erreicht.");
   const blocks = [...new Set(sourceBlocks(sources))];
   const sourceLength = blocks.reduce((size, source) => size + source.length, 0);
-  if (sourceLength < 12) throw new Error("Fachprüfung: keine belastbare Vorlesungsquelle.");
+  if (sourceLength < 12) throw new GroundingReviewError("missing-source", "Fachprüfung: keine belastbare Vorlesungsquelle.");
   // Never approve against an accidentally truncated subset. This remains below
   // the proxy body budget while retaining complete current passages and sources.
-  if (sourceLength > 120_000) throw new Error("Fachprüfung: Quellenkontext überschreitet das sichere Anfragebudget.");
+  if (sourceLength > 120_000) throw new GroundingReviewError("source-budget", "Fachprüfung: Quellenkontext überschreitet das sichere Anfragebudget.");
   const system = [
       "LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1",
       "Prüfe unabhängig jede der vier Prüfungsfragen samt Lösung und Erklärung gegen die beigefügten Vorlesungsquellen.",
@@ -123,7 +130,7 @@ export async function reviewQuestionGrounding(provider: AIProvider, variants: Qu
   let formatCorrection: { error: string; previousReview: string } | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     const timeoutMs = Math.min(20_000, deadlineAt - Date.now() - 1_000);
-    if (timeoutMs <= 0) throw new Error("Fachprüfung: Zeitlimit erreicht.");
+    if (timeoutMs <= 0) throw new GroundingReviewError("timeout", "Fachprüfung: Zeitlimit erreicht.");
     const result = await provider.complete({
       system: system + (formatCorrection ? " Die letzte Prüfantwort war formal ungültig. Prüfe dieselben unveränderten Kandidaten erneut. Verwende sourceIds mit exakten IDs aus sources, keine Auslassungszeichen und keine neu geschriebenen Zitate. Fachlich nicht belegbare Kandidaten weiterhin mit approved=false ablehnen." : ""),
       user: JSON.stringify({ sources: groundingSourcePassages(blocks), candidates, ...(formatCorrection ? { formatCorrection } : {}) }),

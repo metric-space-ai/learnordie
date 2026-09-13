@@ -6,6 +6,7 @@ import { demoLecture } from "@/lib/demo-data";
 import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, liveQuestionContextSource, liveQuestionSlideContext, parseStudentExamDraft } from "./question-generation";
 import type { AIProvider } from "./providers/ai";
 import { StudentDraftError, studentDraftDiagnostic } from "./student-draft-error";
+import { GroundingReviewError, parseQuestionGroundingReview } from "./question-grounding-review";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 test("normal Space selects the current slide even with previous speech; Shift+Space requires transcript", () => {
@@ -293,6 +294,19 @@ test("student draft length constraints are explicit and repair can rewrite an ov
   assert.match(requests[1].user, /core statement: 241 characters; expected 8 to 240/);
   assert.match(requests[1].user, /Formuliere überlange Felder als vollständige kürzere Aussagen/);
   assert.doesNotMatch(requests[1].user, /Kürze keine Felder/);
+});
+
+test("grounding diagnostics distinguish schema, context and factual failures without logging private reasons", () => {
+  const privateReason = "PRIVATE LECTURE AND STUDENT CONTENT";
+  for (const code of ["review-format", "factual-review", "distractor-quality", "missing-source", "source-budget", "timeout"] as const) {
+    const diagnostic = studentDraftDiagnostic(new StudentDraftError("grounding", 2, new GroundingReviewError(code, privateReason)));
+    assert.deepEqual(diagnostic, { stage: "grounding", attempt: 2, code });
+    assert.ok(!JSON.stringify(diagnostic).includes(privateReason));
+  }
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify({ reviews: [] }), privateReason), error => {
+    assert.deepEqual(studentDraftDiagnostic(new StudentDraftError("grounding", 2, error)), {stage:"grounding",attempt:2,code:"review-format"});
+    return true;
+  });
 });
 
 test("transcript shortcut generation is MiniMax-only and retries strict grounded four-by-four output without clipping", async (t) => {

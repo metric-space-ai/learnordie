@@ -1,3 +1,5 @@
+import { GroundingReviewError } from "./question-grounding-review";
+
 type DraftStage = "provider" | "schema" | "grounding";
 
 // Only fixed categories may reach runtime logs. Provider errors and model
@@ -9,7 +11,8 @@ export class StudentDraftError extends Error {
     super(stage === "provider" ? "Student exam draft generation failed." : "Student exam draft was invalid after one retry.", { cause });
     this.name = "StudentDraftError";
     const message = cause instanceof Error ? cause.message : "";
-    const code = /timed out|abort/i.test(message) ? "timeout"
+    const code = cause instanceof GroundingReviewError ? cause.code
+      : /timed out|abort/i.test(message) ? "timeout"
       : stage === "provider" ? "provider-failure"
       : /Beleg fehlt/.test(message) ? "source-quote"
       : /^Fachprüfung/.test(message) ? "factual-review"
