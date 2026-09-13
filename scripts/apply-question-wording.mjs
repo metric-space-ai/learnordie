@@ -6,7 +6,7 @@ import postgres from "postgres";
 import { applyQuestionWording } from "./lib/apply-question-wording.mjs";
 
 const args = process.argv.slice(2);
-if (args.includes("--help")) {
+if (args.includes("--help") || args.includes("-h")) {
   console.log("Usage: node scripts/apply-question-wording.mjs --plan PRIVATE.json --owner-email OWNER --public-token TOKEN [--apply --confirm-sha256 FILE_SHA256 --backup DURABLE_NEW_FILE.json]\nUses DATABASE_URL; default is a locked, owner-scoped dry-run. Application requires the exact file hash and an exclusive, durable backup. End the live session first. No authentication/provider bypass is provided.");
 } else {
   let sql;
