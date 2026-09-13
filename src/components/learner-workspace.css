@@ -10,7 +10,7 @@
 }
 .learn-shell .learner-workspace-toolbar {
   position: fixed;
-  z-index: 24;
+  z-index: 80;
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   display: flex;
@@ -167,7 +167,7 @@
   border-radius: 8px;
   background: transparent;
   color: inherit;
-  font-size: 13px;
+  font: inherit;
 }
 
 .learn-shell .slide-engine-stage .slide-lecture-link { max-width: calc(100% - 76px); }
@@ -183,11 +183,23 @@
   border: 1px dashed var(--app-border); background: transparent; box-shadow: none;
 }
 
-.learn-shell .overlay-panel,
+.learn-shell.slide-screen .overlay-panel,
 .learn-shell .learner-live-panel {
   max-height: calc(100svh - 92px);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+/* Keep the panel trigger reachable so clicking it again can always close it. */
+.learn-shell.slide-screen .overlay-panel.tall {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+}
+.learn-shell.slide-screen :is(.learner-control-menu-panel, .learner-live-panel, .learner-identity-panel, .overlay-panel) {
+  font-family: "Learnordie Sketch", var(--app-font), sans-serif;
+  font-size: 16px;
+}
+.learn-shell.slide-screen .learner-control-menu-panel :is(.plain-button, a) {
+  font: inherit;
 }
 
 .learn-shell .learner-live-panel {
@@ -271,7 +283,7 @@
     min-width: 40px;
   }
 
-  .learn-shell .overlay-panel,
+  .learn-shell.slide-screen .overlay-panel,
   .learn-shell .learner-live-panel {
     top: 12px;
     right: 12px;
