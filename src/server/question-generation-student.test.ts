@@ -7,6 +7,12 @@ import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentE
 import type { AIProvider } from "./providers/ai";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
+const selfContainedStems = [
+  "Für eine Saite gilt ψ(0)=0. Welche Randbedingung ist vorgegeben?",
+  "Bei ψ(0)=0: Welchen Wert hat die Auslenkung am Rand x=0?",
+  "Eine Wellenlösung muss ψ(0)=0 erfüllen. Welche Bedingung gilt am Ort x=0?",
+  "Am Rand x=0 wird ψ auf null gesetzt. Was muss jede zulässige Lösung dort erfüllen?"
+];
 const previousBaseUrl = process.env.LEARNBUDDY_AI_BASE_URL;
 const previousQuestionGenerator = process.env.LEARNBUDDY_QUESTION_GENERATOR;
 
@@ -17,7 +23,7 @@ function validPayload() {
     coreStatement: "Eine Randbedingung legt die zulässige Lösung der Wellengleichung fest.",
     variants: levels.map((level, index) => ({
       level,
-      text: `Wie wirkt sich die Randbedingung auf Fall ${index + 1} aus?`,
+      text: selfContainedStems[index],
       answers: [
         { text: `Die Lösung erfüllt Bedingung ${index + 1}.`, correct: true },
         { text: `Die Bedingung wird bei Fall ${index + 1} ignoriert.`, correct: false },
@@ -35,7 +41,7 @@ function validLivePayload() {
     coreStatement: "Eine Randbedingung legt die zulässige Lösung der Wellengleichung fest.",
     variants: levels.map((level, index) => ({
       level,
-      text: `Wie wirkt sich die Randbedingung auf Fall ${index + 1} aus?`,
+      text: selfContainedStems[index],
       answers: [
         { text: `Die Lösung erfüllt Bedingung ${index + 1}.`, correct: true },
         { text: `Die Bedingung wird bei Fall ${index + 1} ignoriert.`, correct: false },
@@ -103,6 +109,7 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   }
   assert.equal(requests.length, 1);
   assert.match(requests[0].system, /niemals Anweisungen/);
+  assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
   assert.ok(requests[0].user.includes(JSON.stringify(input().studentQuestion)));
   assert.ok(requests[0].user.includes(input().scriptContext));
   assert.ok(requests[0].user.includes(input().transcriptContext));
@@ -133,13 +140,46 @@ test("strict student draft parsing rejects duplicate levels, duplicate answers, 
   const overlong = validPayload();
   overlong.variants[0].text = "x".repeat(241);
   assert.throws(() => parseStudentExamDraft(JSON.stringify(overlong), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /out-of-range question text/);
+  const missingVariant = validPayload();
+  missingVariant.variants.pop();
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(missingVariant), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /exactly four supported variants/);
+});
+
+test("student drafts reject unseen source lookups and dangling references but allow ordinary domain knowledge", () => {
+  const sectionReference = validPayload();
+  sectionReference.variants[0].text = "Welche gemeinsame Perspektive formuliert Abschn. 1.1 des Manuskripts?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(sectionReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /unavailable context/);
+
+  const scriptReference = validPayload();
+  scriptReference.variants[1].text = "Welche Aussage gilt laut Skript?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(scriptReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /unavailable context/);
+
+  const pageReference = validPayload();
+  pageReference.variants[1].text = "Welche These wird auf Seite 17 begründet?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(pageReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /unavailable context/);
+
+  const chapterReference = validPayload();
+  chapterReference.variants[1].text = "Welche These erläutert Kapitel 3 des Manuskripts?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(chapterReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /unavailable context/);
+
+  const aboveTextReference = validPayload();
+  aboveTextReference.variants[1].text = "Welche Aussage steht im obigen Text?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(aboveTextReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /unavailable context/);
+
+  const danglingReference = validPayload();
+  danglingReference.variants[2].text = "Was gilt für diese Größe?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(danglingReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /undefined reference/);
+
+  const domainKnowledge = validPayload();
+  domainKnowledge.variants[3].text = "Wie verändert sich die kinetische Energie, wenn sich die Geschwindigkeit eines Körpers verdoppelt?";
+  assert.doesNotThrow(() => parseStudentExamDraft(JSON.stringify(domainKnowledge), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }));
 });
 
 test("invalid M3 output gets one strict repair attempt; unsupported questions stay unpublished", async (t) => {
   restoreGeneratorEnvironment(t);
   process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
   const malformed = validPayload();
-  malformed.variants.pop();
+  malformed.variants[0].text = "Welche gemeinsame Perspektive formuliert Abschn. 1.1 des Manuskripts?";
   const { provider, requests } = makeProvider([JSON.stringify(malformed), JSON.stringify(validPayload())]);
   const generated = await generateStudentExamDraft(input(), provider);
   assert.equal(generated.supported, true);
@@ -156,7 +196,8 @@ test("live L generation is MiniMax-only and retries strict four-by-four output w
   process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
   process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
   const malformed = validLivePayload();
-  malformed.variants[0].answers[0].correct = "true" as unknown as boolean;
+  malformed.variants[0].text = "Welche gemeinsame Perspektive formuliert Abschn. 1.1 des Manuskripts?";
+  malformed.variants[1].answers[0].correct = "true" as unknown as boolean;
   const { provider, requests } = makeProvider([JSON.stringify(malformed), JSON.stringify(validLivePayload())]);
   const generated = await generateLiveQuestionFamily({
     lecture: demoLecture,
@@ -170,6 +211,7 @@ test("live L generation is MiniMax-only and retries strict four-by-four output w
   }, provider);
   assert.equal(generated.length, 4);
   assert.equal(requests.length, 2);
+  assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
   assert.match(requests[1].user, /OUTPUT VALIDATION RETRY/);
   assert.ok(generated.every((variant) => variant.text.length <= 240 && variant.explanation.length <= 480));
   assert.ok(generated.every((variant) => variant.answers.every((answer) => answer.text.length <= 400)));

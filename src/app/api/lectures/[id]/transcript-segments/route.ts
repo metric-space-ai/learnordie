@@ -50,7 +50,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
 
   const repository = getLectureRepository();
   if (parsed.data.sessionId) {
-    const lecture = await repository.getLectureById(id, session.email);
+    const lecture = (await repository.listLectures(session.email)).find((item) => item.id === id);
     if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
     try {
       const liveContext = await liveLecture(lecture.publicToken, session.email);
