@@ -507,40 +507,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         slides={lecture.slides}
       />
       {questionOpen && questionOrigin === "hotspot" && <span className="question-origin-trace" aria-hidden="true" />}
-      <div className="hotspots" aria-label="Fragen-Hotspots">
-        <span className="hotspot-row-label">Fragen</span>
-        {hotspotLevels.slice(0, density).map((level, index) => (
-          <button
-            className={`hotspot lb-enter-hotspot ${hotspotClasses[index]}`}
-            key={`${level}-${index}`}
-            type="button"
-            ref={(node) => {
-              if (node) {
-                hotspotButtonRefs.current.set(index, node);
-              } else {
-                hotspotButtonRefs.current.delete(index);
-              }
-            }}
-            style={{ "--lb-i": index } as MotionStyle}
-            aria-pressed={questionOpen && activeHotspotIndex === index}
-            aria-label={`Frage Niveau ${level} anzeigen`}
-            onClick={() => {
-              pendingHotspotSharedRef.current = { index, level };
-              setForcedLevel(level);
-              setQuestionOrigin("hotspot");
-              setActiveHotspotIndex(index);
-              setQuestionOpen(true);
-              void recordLearnEvent("learn_marker_opened", { mode: "learn", level, slideId: lecture.slides[slide]?.id });
-            }}
-          >
-            <span className="hotspot-level" aria-hidden="true">{level}</span>
-          </button>
-        ))}
-      </div>
       <div className="learner-workspace-toolbar lb-enter-control" role="group" aria-label="Lernsteuerung">
         <nav className="learner-slide-navigation" aria-label="Foliennavigation">
           <button type="button" onClick={previous} aria-label="Vorherige Folie" title="Vorherige Folie">‹</button>
-          <span className="learner-slide-count" aria-live="polite" aria-atomic="true">{slide + 1} / {lecture.slides.length}</span>
+          <span className="learner-slide-count slide-count" aria-live="polite" aria-atomic="true">{slide + 1} / {lecture.slides.length}</span>
           <button type="button" onClick={next} aria-label="Nächste Folie" title="Nächste Folie">›</button>
         </nav>
         <button
@@ -564,6 +534,41 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         <details ref={moreRef} className="learn-more learner-control-menu">
           <summary aria-label="Weitere Aktionen">Mehr</summary>
           <div className="learn-more-panel learner-control-menu-panel" role="group" aria-label="Weitere Aktionen">
+      <div className="hotspots" aria-label="Fragen-Hotspots">
+        <span className="hotspot-row-label">Fragen</span>
+        {hotspotLevels.slice(0, density).map((level, index) => (
+          <button
+            className={`hotspot lb-enter-hotspot ${hotspotClasses[index]}`}
+            key={`${level}-${index}`}
+            type="button"
+            ref={(node) => {
+              if (node) {
+                hotspotButtonRefs.current.set(index, node);
+              } else {
+                hotspotButtonRefs.current.delete(index);
+              }
+            }}
+            style={{ "--lb-i": index } as MotionStyle}
+            aria-pressed={questionOpen && activeHotspotIndex === index}
+            aria-label={`Frage Niveau ${level} anzeigen`}
+            onClick={() => {
+              if (questionOpen && activeHotspotIndex === index) {
+                setQuestionOpen(false);
+                setPeekingSlide(false);
+                return;
+              }
+              pendingHotspotSharedRef.current = { index, level };
+              setForcedLevel(level);
+              setQuestionOrigin("hotspot");
+              setActiveHotspotIndex(index);
+              setQuestionOpen(true);
+              void recordLearnEvent("learn_marker_opened", { mode: "learn", level, slideId: lecture.slides[slide]?.id });
+            }}
+          >
+            <span className="hotspot-level" aria-hidden="true">{level}</span>
+          </button>
+        ))}
+      </div>
             <label className="learner-density-control">
               <span>Fragedichte</span>
               <input

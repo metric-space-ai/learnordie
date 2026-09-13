@@ -71,7 +71,9 @@ test.describe("standalone learner workspace", () => {
     const participationBox = await participation.boundingBox();
     expect(participationBox?.x ?? 999).toBeLessThan(40);
     expect(participationBox?.y ?? 999).toBeLessThan(40);
-    expect(participationBox?.width ?? 999).toBeLessThan(220);
+    expect(participationBox?.width ?? 999).toBeLessThan(330);
+    const stageBox = await page.locator(".slide-engine-stage").boundingBox();
+    expect(stageBox?.height ?? 0).toBeGreaterThan(800);
 
     const more = page.locator(".learner-control-menu summary");
     await more.click();
@@ -82,11 +84,14 @@ test.describe("standalone learner workspace", () => {
     await density.press("End");
     await expect(density).toHaveValue(maximumDensity!);
     await expect(page.locator(".hotspots .hotspot")).toHaveCount(Number(maximumDensity));
-    await more.click();
-
     await page.locator(".hotspots .hotspot").first().click();
     const question = page.locator(".question-drawer");
     await expect(question).toBeVisible();
+    await page.locator(".hotspots .hotspot").first().click();
+    await expect(question).not.toBeVisible();
+    await page.locator(".hotspots .hotspot").first().click();
+    await expect(question).toBeVisible();
+    await more.click();
     const levels = question.locator(".levels button");
     await expect(levels).toHaveCount(4);
     await levels.filter({ hasText: "1.0" }).click();
@@ -114,7 +119,7 @@ test.describe("standalone learner workspace", () => {
 
     for (const action of actions) {
       const trigger = page.locator(`.learner-control-menu-panel [aria-controls="${action.id}"]`);
-      if (await trigger.count() === 0) continue;
+      await expect(trigger, `Required ${action.id} trigger must exist`).toHaveCount(1);
       await exercisePanelDismissal(
         page,
         trigger,
@@ -127,6 +132,8 @@ test.describe("standalone learner workspace", () => {
 });
 
 test("live learner follows the presenter, and pseudonym editing is opt-in", async ({ page }) => {
+  let revision = 1;
+  let slideIndex = 0;
   await page.setViewportSize({ width: 390, height: 844 });
   await mockStudentWrites(page);
   await page.route("**/api/student/claim*", (route) => route.fulfill({
@@ -139,9 +146,9 @@ test("live learner follows the presenter, and pseudonym editing is opt-in", asyn
     contentType: "application/json",
     body: JSON.stringify({
       sessionId: "learner-workspace-session",
-      revision: 1,
+      revision,
       status: "active",
-      slideIndex: 0,
+      slideIndex,
       showIntro: false,
       serverNow: Date.now(),
       round: null,
@@ -154,6 +161,11 @@ test("live learner follows the presenter, and pseudonym editing is opt-in", asyn
   const toolbar = page.getByRole("group", { name: "Live-Steuerung" });
   await expect(toolbar).toBeVisible();
   await expect(page.locator("main")).toHaveAttribute("data-live-status", "active");
+  const firstSlide = await page.locator("[data-slide-id]").first().getAttribute("data-slide-id");
+  expect(firstSlide).toBeTruthy();
+  slideIndex = 1;
+  revision = 2;
+  await expect(page.locator("[data-slide-id]").first()).not.toHaveAttribute("data-slide-id", firstSlide!);
   await expect(page.locator(".slide-nav")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Vorherige Folie", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Nächste Folie", exact: true })).toHaveCount(0);

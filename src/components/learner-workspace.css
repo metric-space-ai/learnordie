@@ -1,3 +1,13 @@
+.learn-shell.slide-screen {
+  padding: 0;
+  background: var(--app-background);
+  grid-template-rows: minmax(0, 1fr);
+}
+.learn-shell.slide-screen::before, .learn-shell.slide-screen::after { display: none; }
+.learn-shell.slide-screen .slide-engine-stage:has(> .native-canvas) {
+  padding: 0;
+  background: transparent;
+}
 .learn-shell .learner-workspace-toolbar {
   position: fixed;
   z-index: 24;
@@ -14,6 +24,7 @@
   border-radius: 11px 9px 12px 8px;
   background: color-mix(in oklab, var(--panel) 96%, white 4%);
   color: var(--ink);
+  font-family: "Learnordie Sketch", var(--app-font), sans-serif;
   box-shadow: 0 4px 18px rgb(28 31 32 / 15%);
   backdrop-filter: blur(12px);
   transform: translateX(-50%);
@@ -54,7 +65,7 @@
 .learn-shell .learner-slide-count {
   min-width: 44px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   text-align: center;
@@ -62,7 +73,7 @@
 
 .learn-shell .learner-toolbar-action,
 .learn-shell .learner-control-menu summary {
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 680;
   white-space: nowrap;
 }
@@ -94,9 +105,12 @@
 
 .learn-shell .learner-control-menu {
   position: relative;
+  display: block;
+  font-family: inherit;
 }
 
-.learn-shell .learner-control-menu-panel {
+.learn-shell .learner-control-menu .learner-control-menu-panel {
+  position: absolute;
   top: auto;
   right: 0;
   bottom: calc(100% + 8px);
@@ -117,7 +131,7 @@
   justify-content: flex-start;
   padding: 8px 10px;
   color: inherit;
-  font-size: 13px;
+  font-size: 16px;
   text-align: left;
 }
 
@@ -128,7 +142,7 @@
   gap: 4px 12px;
   padding: 4px 6px 8px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 620;
 }
 
@@ -156,26 +170,17 @@
   font-size: 13px;
 }
 
-.learn-shell .slide-engine-stage .slide-lecture-link {
-  position: absolute;
-  z-index: 12;
-  top: calc(env(safe-area-inset-top, 0px) + 12px);
-  left: calc(env(safe-area-inset-left, 0px) + 12px);
-  display: inline-flex;
-  align-items: center;
-  overflow: hidden;
-  padding: 5px 8px;
-  border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
-  border-radius: 7px 9px 8px 7px;
-  background: color-mix(in oklab, var(--panel) 95%, white 5%);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 620;
-  line-height: 1.25;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgb(28 31 32 / 10%);
+.learn-shell .slide-engine-stage .slide-lecture-link { max-width: calc(100% - 76px); }
+.learn-shell .learner-control-menu-panel .hotspots {
+  position: static; inset: auto; transform: none; width: 100%; max-height: none;
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 10px;
+  visibility: visible !important; background: none; border: 0; box-shadow: none;
+}
+.learn-shell .learner-control-menu-panel .hotspot-row-label { flex-basis: 100%; }
+.learn-shell .learner-control-menu-panel .hotspot {
+  position: static; inset: auto; transform: none; min-width: 44px; min-height: 44px;
+  width: auto; height: auto; padding: 4px; font: inherit;
+  border: 1px dashed var(--app-border); background: transparent; box-shadow: none;
 }
 
 .learn-shell .overlay-panel,
@@ -243,10 +248,10 @@
   font-size: 22px;
 }
 
-.learn-shell:fullscreen .learner-workspace-toolbar,
-.learn-shell:has(.slide-engine-stage:fullscreen) .learner-workspace-toolbar {
-  display: none;
+:fullscreen .learn-shell .learner-workspace-toolbar:not(:hover):not(:focus-within):not(:has(details[open])) {
+  opacity: 0;
 }
+:fullscreen .learn-shell .learner-workspace-toolbar { transition: opacity 150ms; }
 
 @media (max-width: 560px) {
   .learn-shell .learner-workspace-toolbar {
