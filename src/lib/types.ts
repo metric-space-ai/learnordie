@@ -233,6 +233,7 @@ export type StudentChatQuestion = {
   examDraftError?: string;
   examDraftRoundId?: string;
   examDraftAttemptAt?: string;
+  examDraftAttemptId?: string;
   createdAt: string;
 };
 

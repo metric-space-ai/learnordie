@@ -83,45 +83,63 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
   }
 
-  let examDraftStatus = chatQuestion.examDraftStatus ?? "not_applicable";
   if (chatQuestion.status === "accepted") {
-    await repository.updateStudentExamDraftStatus({
+    const now = new Date();
+    const attempt = await repository.beginStudentExamDraftAttempt({
       lectureId: chatQuestion.lectureId,
       chatQuestionId: chatQuestion.id,
-      status: "generating"
+      now,
+      since: new Date(now.getTime() - CHAT_QUESTION_WINDOW_MS),
+      cooldownMs: 30_000,
+      staleGenerationMs: 90_000,
+      maxAttempts: 12,
+      initial: true
     });
-    try {
-      const lecture = await repository.getLectureByToken(token);
-      if (!lecture) throw new Error("Lecture no longer exists.");
-      const generated = await generateStudentQuestionExamDraft(lecture, chatQuestion);
-      if (!generated.supported) {
-        examDraftStatus = "unsupported";
+    if (attempt.status === "started") {
+      try {
+        const lecture = await repository.getLectureByToken(token);
+        if (!lecture) throw new Error("Lecture no longer exists.");
+        const generated = await generateStudentQuestionExamDraft(lecture, chatQuestion);
+        if (!generated.supported) {
+          await repository.updateStudentExamDraftStatus({
+            lectureId: chatQuestion.lectureId,
+            chatQuestionId: chatQuestion.id,
+            attemptId: attempt.attemptId,
+            status: "unsupported",
+            error: "Die Frage ließ sich aus dem aktuellen Vorlesungskontext nicht ableiten."
+          });
+        } else {
+          await repository.saveStudentExamDraft({
+            lectureId: chatQuestion.lectureId,
+            chatQuestionId: chatQuestion.id,
+            attemptId: attempt.attemptId,
+            variants: generated.variants
+          });
+        }
+      } catch {
+        console.warn("student exam draft generation failed");
         await repository.updateStudentExamDraftStatus({
           lectureId: chatQuestion.lectureId,
           chatQuestionId: chatQuestion.id,
-          status: examDraftStatus,
-          error: "Die Frage ließ sich aus dem aktuellen Vorlesungskontext nicht ableiten."
+          attemptId: attempt.attemptId,
+          status: "failed",
+          error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
         });
-      } else {
-        const saved = await repository.saveStudentExamDraft({
-          lectureId: chatQuestion.lectureId,
-          chatQuestionId: chatQuestion.id,
-          variants: generated.variants
-        });
-        if (!saved) throw new Error("Draft could not be persisted.");
-        examDraftStatus = "draft";
       }
-    } catch {
-      console.warn("student exam draft generation failed");
-      examDraftStatus = "failed";
+    } else if (attempt.status === "rate_limited") {
       await repository.updateStudentExamDraftStatus({
         lectureId: chatQuestion.lectureId,
         chatQuestionId: chatQuestion.id,
-        status: examDraftStatus,
+        status: "failed",
         error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
       });
     }
   }
+
+  const refreshed = await repository.getLectureByToken(token);
+  const examDraftStatus = refreshed?.studentChatQuestions?.find((item) => item.id === chatQuestion.id)?.examDraftStatus
+    ?? chatQuestion.examDraftStatus
+    ?? "not_applicable";
 
   return NextResponse.json({
     chatQuestion: {

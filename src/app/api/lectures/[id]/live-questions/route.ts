@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { questionsForSlide } from "@/lib/questions";
+import type { Lecture } from "@/lib/types";
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
 import { acceptedTranscriptContext, generateLiveQuestionFamily, liveQuestionSlideContext } from "@/server/question-generation";
-import { liveLecture, readLiveSession } from "@/server/live-session-repository";
+import { LiveSessionError, liveLecture, readLiveSession } from "@/server/live-session-repository";
 import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
@@ -18,6 +19,7 @@ const MIN_TRANSCRIPT_CHARS = 120;
 const liveQuestionSchema = z.object({
   slideId: z.string().min(1).max(120),
   transcript: z.string().max(8000).optional(),
+  sessionId: z.string().uuid().optional(),
   allowSlideContext: z.boolean().optional(),
   mode: z.enum(["transcript-only"]).optional()
 });
@@ -65,27 +67,39 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const slide = liveQuestionSlideContext(lecture, parsed.data.slideId);
   if (!slide) return NextResponse.json({ error: "Folie nicht gefunden." }, { status: 404 });
 
+  if (parsed.data.sessionId && parsed.data.mode !== "transcript-only") {
+    try {
+      const liveContext = await liveLecture(lecture.publicToken, session.email);
+      const live = await readLiveSession(liveContext, null, false);
+      if (live.sessionId !== parsed.data.sessionId) {
+        return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
+      }
+    } catch (error) {
+      console.warn("live question session unavailable", error instanceof Error ? error.message : error);
+      return NextResponse.json({ error: "Die aktuelle Live-Sitzung ist nicht verfügbar." }, { status: error instanceof LiveSessionError ? error.status : 503 });
+    }
+  }
+
   let transcript = (parsed.data.transcript?.trim() || recentTranscript(lecture)).trim();
   let latestTranscript: string | undefined;
   if (parsed.data.mode === "transcript-only") {
     try {
       const liveContext = await liveLecture(lecture.publicToken, session.email);
       const live = await readLiveSession(liveContext, null, false);
+      if (parsed.data.sessionId && parsed.data.sessionId !== live.sessionId) {
+        return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
+      }
       if (live.status !== "active" || live.sessionStartedAt === null) {
         return NextResponse.json({ error: "Für diese Live-Sitzung ist noch kein aktueller Transkriptabschnitt verfügbar." }, { status: 422 });
       }
       const current = acceptedTranscriptContext(lecture, live.sessionStartedAt);
-      if (current.segmentCount === 0 || current.latestAt === null || Date.now() - current.latestAt > 120_000 || current.accumulated.length < MIN_TRANSCRIPT_CHARS) {
+      if (current.segmentCount === 0 || current.latestAt === null || Date.now() - current.latestAt > 120_000 || current.recentWindow.length < MIN_TRANSCRIPT_CHARS) {
         return NextResponse.json({ error: "Das aktuelle Live-Transkript ist noch zu kurz für eine Frage." }, { status: 422 });
       }
-      const supplied = parsed.data.transcript?.trim() ?? "";
-      transcript = supplied && !current.accumulated.includes(supplied) && !supplied.includes(current.accumulated)
-        ? `${current.accumulated} ${supplied}`.trim()
-        : (supplied.length > current.accumulated.length ? supplied : current.accumulated);
-      latestTranscript = current.latest;
-      if (transcript.length < MIN_TRANSCRIPT_CHARS) {
-        return NextResponse.json({ error: "Das aktuelle Live-Transkript ist noch zu kurz für eine Frage." }, { status: 422 });
-      }
+      // Client transcript text is only a hint for its display path; grounding for
+      // L is exclusively the accepted, current-session server record.
+      transcript = current.accumulated;
+      latestTranscript = current.recentWindow;
     } catch (error) {
       console.warn("transcript-only live context unavailable", error instanceof Error ? error.message : error);
       return NextResponse.json({ error: "Das aktuelle Live-Transkript ist nicht verfügbar. Bitte die nächste Passage abwarten." }, { status: 503 });

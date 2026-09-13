@@ -5,6 +5,7 @@ import type { StoredLiveRound } from "../live-session-repository";
 import {
   boolean,
   integer,
+  index,
   jsonb,
   pgEnum,
   pgTable,
@@ -236,8 +237,16 @@ export const studentChatQuestions = pgTable("student_chat_questions", {
   examDraftError: text("exam_draft_error"),
   examDraftRoundId: text("exam_draft_round_id"),
   examDraftAttemptAt: timestamp("exam_draft_attempt_at", { withTimezone: true }),
+  examDraftAttemptId: text("exam_draft_attempt_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
+
+export const studentExamDraftAttempts = pgTable("student_exam_draft_attempts", {
+  id: uuid("id").primaryKey(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  chatQuestionId: uuid("chat_question_id").references(() => studentChatQuestions.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [index("student_exam_draft_attempts_lecture_created_idx").on(table.lectureId, table.createdAt)]);
 
 export const transcriptSegments = pgTable("transcript_segments", {
   id: uuid("id").defaultRandom().primaryKey(),

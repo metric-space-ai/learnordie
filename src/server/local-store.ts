@@ -53,6 +53,7 @@ import {
 } from "./lecture-factory";
 import { createPresentationAssetDrafts, processMaterialContent } from "./material-pipeline";
 import { generateQuestionVariantsForMaterial } from "./question-generation";
+import { decideStudentExamDraftAttempt, studentExamDraftAttemptMayCommit, studentExamDraftMayBeRejected } from "./student-exam-draft-state";
 import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
 import { applyQualityDecision, recordReviewEdits } from "./question-review-metadata";
@@ -71,10 +72,25 @@ const STORE_PATH = path.join(process.cwd(), ".data", "learnbuddy-local.json");
 
 type LocalStoreData = {
   lectures: Lecture[];
+  studentExamDraftAttempts?: Array<{ id: string; lectureId: string; chatQuestionId: string; createdAt: string }>;
   seriesEvaluationTemplates?: Record<string, Lecture["evaluationConfig"]>;
   seriesAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
   tenantAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
 };
+
+let studentDraftOperationQueue: Promise<void> = Promise.resolve();
+
+async function withStudentDraftOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = studentDraftOperationQueue;
+  let release!: () => void;
+  studentDraftOperationQueue = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
 
 type AppendQuestionFamilyInput = {
   slideId?: string;
@@ -326,6 +342,7 @@ async function readStore() {
       assistantMessages: lecture.assistantMessages ?? []
     };
   });
+  data.studentExamDraftAttempts ??= [];
   applyLocalSeriesBudgets(data);
   applyLocalTenantBudgets(data);
   if (seedQaLectures(data)) {
@@ -730,50 +747,131 @@ export class LocalLectureStore {
     return chatQuestion;
   }
 
-  async updateStudentExamDraftStatus(input: { lectureId: string; chatQuestionId: string; status: StudentExamDraftStatus; error?: string }, ownerEmail?: string) {
-    const store = await readStore();
-    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
-    const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
-    if (!lecture || !question) return null;
-    question.examDraftStatus = input.status;
-    question.examDraftError = input.error;
-    if (input.status === "generating") question.examDraftAttemptAt = new Date().toISOString();
-    if (input.status === "rejected") {
-      const review = lecture.questionReviews?.find((item) => item.sourceStudentQuestionId === question.id);
-      if (review) {
-        review.status = "rejected";
-        review.reviewedAt = new Date().toISOString();
-      }
-    }
-    await writeStore(store);
-    return lecture;
+  async beginStudentExamDraftAttempt(input: { lectureId: string; chatQuestionId: string; now: Date; since: Date; cooldownMs: number; staleGenerationMs: number; maxAttempts: number; initial?: boolean }, ownerEmail?: string) {
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+      const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
+      if (!lecture || !question) return { status: "not_found" as const };
+      const decision = decideStudentExamDraftAttempt({
+        questionStatus: question.status,
+        draftStatus: question.examDraftStatus ?? "not_applicable",
+        attemptAt: question.examDraftAttemptAt ? Date.parse(question.examDraftAttemptAt) : null,
+        attemptId: question.examDraftAttemptId
+      }, {
+        now: input.now.getTime(),
+        cooldownMs: input.cooldownMs,
+        staleGenerationMs: input.staleGenerationMs,
+        initial: input.initial ?? false
+      });
+      if (decision !== "started") return { status: decision };
+
+      const attempts = store.studentExamDraftAttempts ?? [];
+      const retained = attempts.filter((attempt) => attempt.lectureId !== input.lectureId || Date.parse(attempt.createdAt) >= input.now.getTime() - 24 * 60 * 60 * 1000);
+      store.studentExamDraftAttempts = retained;
+      const countInWindow = retained.filter((attempt) => attempt.lectureId === input.lectureId && Date.parse(attempt.createdAt) >= input.since.getTime()).length;
+      if (countInWindow >= input.maxAttempts) return { status: "rate_limited" as const };
+
+      const attemptId = crypto.randomUUID();
+      store.studentExamDraftAttempts.push({ id: attemptId, lectureId: input.lectureId, chatQuestionId: input.chatQuestionId, createdAt: input.now.toISOString() });
+      question.examDraftStatus = "generating";
+      question.examDraftError = undefined;
+      question.examDraftAttemptAt = input.now.toISOString();
+      question.examDraftAttemptId = attemptId;
+      question.examDraftRoundId = undefined;
+      await writeStore(store);
+      return { status: "started" as const, attemptId };
+    });
   }
 
-  async saveStudentExamDraft(input: { lectureId: string; chatQuestionId: string; variants: QuestionVariant[] }, ownerEmail?: string) {
-    const store = await readStore();
-    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
-    const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
-    if (!lecture || !question || question.status !== "accepted") return null;
-    const review = lecture.questionReviews?.find((item) => item.sourceStudentQuestionId === question.id)
-      ?? createReviewItemFromChatQuestion(lecture, question);
-    review.sourceStudentQuestionId = question.id;
-    review.variants = clone(input.variants);
-    review.status = "draft";
-    review.reviewedAt = undefined;
-    lecture.questionReviews ??= [];
-    if (!lecture.questionReviews.some((item) => item.id === review.id)) lecture.questionReviews.unshift(review);
-    question.examDraftStatus = "draft";
-    question.examDraftError = undefined;
-    await writeStore(store);
-    return lecture;
+  async updateStudentExamDraftStatus(input: { lectureId: string; chatQuestionId: string; status: StudentExamDraftStatus; error?: string; attemptId?: string }, ownerEmail?: string) {
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+      const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
+      if (!lecture || !question) return null;
+      if (input.status === "rejected") {
+        if (studentExamDraftMayBeRejected({
+          questionStatus: question.status,
+          draftStatus: question.examDraftStatus ?? "not_applicable",
+          attemptId: question.examDraftAttemptId,
+          roundId: question.examDraftRoundId
+        })) {
+          question.examDraftStatus = "rejected";
+          question.examDraftError = undefined;
+          question.examDraftAttemptId = undefined;
+          const review = lecture.questionReviews?.find((item) => item.sourceStudentQuestionId === question.id);
+          if (review) {
+            review.status = "rejected";
+            review.reviewedAt = new Date().toISOString();
+          }
+          await writeStore(store);
+        }
+        return lecture;
+      }
+      if (input.status !== "failed" && input.status !== "unsupported") return lecture;
+      const ownsAttempt = input.attemptId
+        ? question.examDraftStatus === "generating" && question.examDraftAttemptId === input.attemptId
+        : question.examDraftStatus === "pending" && !question.examDraftAttemptId;
+      if (!ownsAttempt || question.status !== "accepted") return lecture;
+      question.examDraftStatus = input.status;
+      question.examDraftError = input.error;
+      question.examDraftAttemptId = undefined;
+      await writeStore(store);
+      return lecture;
+    });
+  }
+
+  async saveStudentExamDraft(input: { lectureId: string; chatQuestionId: string; attemptId: string; variants: QuestionVariant[] }, ownerEmail?: string) {
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+      const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
+      if (!lecture || !question || !studentExamDraftAttemptMayCommit({
+        questionStatus: question.status,
+        draftStatus: question.examDraftStatus ?? "not_applicable",
+        attemptId: question.examDraftAttemptId
+      }, input.attemptId)) return null;
+      const review = lecture.questionReviews?.find((item) => item.sourceStudentQuestionId === question.id)
+        ?? createReviewItemFromChatQuestion(lecture, question);
+      if (review.status === "rejected") return null;
+      review.sourceStudentQuestionId = question.id;
+      review.variants = clone(input.variants);
+      review.status = "draft";
+      review.reviewedAt = undefined;
+      lecture.questionReviews ??= [];
+      if (!lecture.questionReviews.some((item) => item.id === review.id)) lecture.questionReviews.unshift(review);
+      question.examDraftStatus = "draft";
+      question.examDraftError = undefined;
+      question.examDraftAttemptId = undefined;
+      question.examDraftRoundId = undefined;
+      await writeStore(store);
+      return lecture;
+    });
+  }
+
+  async archivePublishedStudentExamDraft(lectureId: string, chatQuestionId: string, ownerEmail?: string) {
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+      const question = lecture?.studentChatQuestions?.find((item) => item.id === chatQuestionId);
+      const review = lecture?.questionReviews?.find((item) => item.sourceStudentQuestionId === chatQuestionId);
+      if (!lecture || !question || question.examDraftStatus !== "published" || !review) return null;
+      const familyId = `review:${review.id}`;
+      if (!(lecture.questions ?? []).some((item) => item.familyId === familyId)) {
+        lecture.questions = withReviewFamily(lecture.questions ?? [], review.id, review.sourceTitle, review.variants);
+        await writeStore(store);
+      }
+      return lecture;
+    });
   }
 
   async countRecentStudentExamDraftAttempts(input: { lectureId: string; since: Date }, ownerEmail?: string) {
     const store = await readStore();
     const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
     if (!lecture) return null;
-    return (lecture.studentChatQuestions ?? []).filter((question) => (
-      question.examDraftAttemptAt && Date.parse(question.examDraftAttemptAt) >= input.since.getTime()
+    return (store.studentExamDraftAttempts ?? []).filter((attempt) => (
+      attempt.lectureId === input.lectureId && Date.parse(attempt.createdAt) >= input.since.getTime()
     )).length;
   }
 
@@ -790,43 +888,47 @@ export class LocalLectureStore {
   }
 
   async moderateStudentChatQuestion(input: { lectureId: string; chatQuestionId: string; status: StudentChatQuestion["status"]; actor?: string }, ownerEmail?: string) {
-    const store = await readStore();
-    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
-    const chatQuestion = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
-    if (!lecture || !chatQuestion) return null;
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+      const chatQuestion = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
+      if (!lecture || !chatQuestion) return null;
 
-    chatQuestion.status = input.status;
-    chatQuestion.examDraftStatus = input.status === "ignored"
-      ? "not_applicable"
-      : chatQuestion.examDraftStatus === "not_applicable" ? "pending" : chatQuestion.examDraftStatus;
-    chatQuestion.examDraftError = undefined;
-    chatQuestion.relevanceReason = input.status === "accepted"
-      ? `Vom Referenten als Fragequelle übernommen${input.actor ? ` (${input.actor})` : ""}.`
-      : `Vom Referenten ignoriert${input.actor ? ` (${input.actor})` : ""}.`;
-    chatQuestion.sourceTopic = input.status === "accepted" ? chatQuestion.sourceTopic ?? lecture.title : chatQuestion.sourceTopic;
-    chatQuestion.moderationProvider = "referent";
-    chatQuestion.moderationModel = "manual-review";
-    chatQuestion.moderationConfidence = 100;
-    chatQuestion.moderationSignals = [input.status === "accepted" ? "manuell übernommen" : "manuell ignoriert"];
+      const previousDraftStatus = chatQuestion.examDraftStatus;
+      chatQuestion.status = input.status;
+      chatQuestion.examDraftStatus = input.status === "ignored"
+        ? "not_applicable"
+        : previousDraftStatus === "not_applicable" ? "pending" : previousDraftStatus;
+      if (input.status === "ignored" || previousDraftStatus === "not_applicable") chatQuestion.examDraftAttemptId = undefined;
+      chatQuestion.examDraftError = undefined;
+      chatQuestion.relevanceReason = input.status === "accepted"
+        ? `Vom Referenten als Fragequelle übernommen${input.actor ? ` (${input.actor})` : ""}.`
+        : `Vom Referenten ignoriert${input.actor ? ` (${input.actor})` : ""}.`;
+      chatQuestion.sourceTopic = input.status === "accepted" ? chatQuestion.sourceTopic ?? lecture.title : chatQuestion.sourceTopic;
+      chatQuestion.moderationProvider = "referent";
+      chatQuestion.moderationModel = "manual-review";
+      chatQuestion.moderationConfidence = 100;
+      chatQuestion.moderationSignals = [input.status === "accepted" ? "manuell übernommen" : "manuell ignoriert"];
 
-    const review = createReviewItemFromChatQuestion(lecture, chatQuestion);
-    lecture.questionReviews ??= [];
-    const existingReviewIndex = lecture.questionReviews.findIndex((item) => item.sourceTitle === review.sourceTitle);
+      const review = createReviewItemFromChatQuestion(lecture, chatQuestion);
+      lecture.questionReviews ??= [];
+      const existingReviewIndex = lecture.questionReviews.findIndex((item) => item.sourceStudentQuestionId === chatQuestion.id);
 
-    if (input.status === "accepted" && existingReviewIndex === -1) {
-      lecture.questionReviews = [review, ...lecture.questionReviews];
-      if (lecture.status === "draft" || lecture.status === "material_processing") lecture.status = "question_review";
-    }
+      if (input.status === "accepted" && existingReviewIndex === -1) {
+        lecture.questionReviews = [review, ...lecture.questionReviews];
+        if (lecture.status === "draft" || lecture.status === "material_processing") lecture.status = "question_review";
+      }
 
-    if (input.status === "ignored" && existingReviewIndex >= 0 && lecture.questionReviews[existingReviewIndex].status === "draft") {
-      lecture.questionReviews = lecture.questionReviews.filter((_, index) => index !== existingReviewIndex);
-      const hasApproved = lecture.questionReviews.some((item) => item.status === "approved");
-      const hasDraft = lecture.questionReviews.some((item) => item.status === "draft");
-      lecture.status = hasApproved ? "ready_for_live" : hasDraft ? "question_review" : "material_processing";
-    }
+      if (input.status === "ignored" && existingReviewIndex >= 0 && lecture.questionReviews[existingReviewIndex].status === "draft") {
+        lecture.questionReviews = lecture.questionReviews.filter((_, index) => index !== existingReviewIndex);
+        const hasApproved = lecture.questionReviews.some((item) => item.status === "approved");
+        const hasDraft = lecture.questionReviews.some((item) => item.status === "draft");
+        lecture.status = hasApproved ? "ready_for_live" : hasDraft ? "question_review" : "material_processing";
+      }
 
-    await writeStore(store);
-    return lecture;
+      await writeStore(store);
+      return lecture;
+    });
   }
 
   async submitTranscriptSegment(input: { lectureId: string; text: string; provider?: string; startedAt?: string; endedAt?: string }, ownerEmail?: string) {
@@ -1245,41 +1347,51 @@ export class LocalLectureStore {
   }
 
   async decideQuestionReview(lectureId: string, reviewId: string, decision: ReviewDecision, actor = "referent", ownerEmail?: string) {
-    const store = await readStore();
-    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
-    const review = lecture?.questionReviews?.find((item) => item.id === reviewId);
-    if (!lecture || !review) return null;
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+      const review = lecture?.questionReviews?.find((item) => item.id === reviewId);
+      if (!lecture || !review) return null;
 
-    review.status = decision;
-    review.reviewedAt = new Date().toISOString();
-    if (decision === "rejected" && review.sourceStudentQuestionId) {
-      const question = lecture.studentChatQuestions?.find((item) => item.id === review.sourceStudentQuestionId);
-      if (question) {
-        question.examDraftStatus = "rejected";
-        question.examDraftError = undefined;
+      const sourceQuestion = review.sourceStudentQuestionId
+        ? lecture.studentChatQuestions?.find((item) => item.id === review.sourceStudentQuestionId)
+        : undefined;
+      if (decision === "rejected" && sourceQuestion && !studentExamDraftMayBeRejected({
+        questionStatus: sourceQuestion.status,
+        draftStatus: sourceQuestion.examDraftStatus ?? "not_applicable",
+        attemptId: sourceQuestion.examDraftAttemptId,
+        roundId: sourceQuestion.examDraftRoundId
+      })) return lecture;
+
+      review.status = decision;
+      review.reviewedAt = new Date().toISOString();
+      if (decision === "rejected" && sourceQuestion) {
+        sourceQuestion.examDraftStatus = "rejected";
+        sourceQuestion.examDraftError = undefined;
+        sourceQuestion.examDraftAttemptId = undefined;
       }
-    }
-    review.variants = applyQualityDecision({
-      variants: review.variants,
-      decision,
-      actor
-    });
-    if (decision === "approved") {
-      lecture.questions = withReviewFamily(lecture.questions, review.id, review.sourceTitle, review.variants);
-      lecture.status = "ready_for_live";
-    } else {
-      const reviews = lecture.questionReviews ?? [];
-      if (reviews.some((item) => item.status === "approved")) {
+      review.variants = applyQualityDecision({
+        variants: review.variants,
+        decision,
+        actor
+      });
+      if (decision === "approved") {
+        lecture.questions = withReviewFamily(lecture.questions, review.id, review.sourceTitle, review.variants);
         lecture.status = "ready_for_live";
-      } else if (reviews.every((item) => item.status !== "draft")) {
-        lecture.status = "material_processing";
       } else {
-        lecture.status = "question_review";
+        const reviews = lecture.questionReviews ?? [];
+        if (reviews.some((item) => item.status === "approved")) {
+          lecture.status = "ready_for_live";
+        } else if (reviews.every((item) => item.status !== "draft")) {
+          lecture.status = "material_processing";
+        } else {
+          lecture.status = "question_review";
+        }
       }
-    }
 
-    await writeStore(store);
-    return lecture;
+      await writeStore(store);
+      return lecture;
+    });
   }
 
   async updateQuestionReview(lectureId: string, reviewId: string, variants: QuestionVariant[], actor = "referent", ownerEmail?: string) {

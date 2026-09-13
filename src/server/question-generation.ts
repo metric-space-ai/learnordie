@@ -54,6 +54,14 @@ function compact(value: string, maxLength: number) {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized;
 }
 
+function tailCompact(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  const tail = normalized.slice(-(maxLength - 3));
+  const boundary = tail.indexOf(" ");
+  return `...${boundary >= 0 ? tail.slice(boundary + 1) : tail}`;
+}
+
 function stringField(value: unknown, fieldName: string) {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`Question generator returned invalid ${fieldName}.`);
@@ -289,15 +297,39 @@ export function liveQuestionSlideContext(lecture: Lecture, slideId: string): Liv
 }
 
 export function acceptedTranscriptContext(lecture: Lecture, sessionStartedAt: number | null) {
-  if (sessionStartedAt === null || !Number.isFinite(sessionStartedAt)) return { accumulated: "", latest: "", latestAt: null as number | null, segmentCount: 0 };
+  if (sessionStartedAt === null || !Number.isFinite(sessionStartedAt)) return { accumulated: "", latest: "", recentWindow: "", latestAt: null as number | null, segmentCount: 0 };
+  const captureStart = (segment: NonNullable<Lecture["transcriptSegments"]>[number]) => Date.parse(segment.startedAt ?? segment.createdAt);
+  const captureEnd = (segment: NonNullable<Lecture["transcriptSegments"]>[number]) => Date.parse(segment.endedAt ?? segment.createdAt);
   const segments = (lecture.transcriptSegments ?? [])
-    .filter((segment) => segment.status === "accepted" && Date.parse(segment.createdAt) >= sessionStartedAt)
-    .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt));
+    .filter((segment) => segment.status === "accepted"
+      && Date.parse(segment.createdAt) >= sessionStartedAt
+      && captureStart(segment) >= sessionStartedAt
+      && captureEnd(segment) >= sessionStartedAt)
+    .sort((left, right) => captureEnd(left) - captureEnd(right));
   const accumulated = segments.map((segment) => segment.text.replace(/\s+/g, " ").trim()).filter(Boolean).join(" ").slice(-7200);
+  const freshSegments = segments.filter((segment) => captureEnd(segment) >= Date.now() - 120_000);
+  const recentParts: string[] = [];
+  let recentLength = 0;
+  for (const segment of freshSegments.slice().reverse()) {
+    const part = segment.text.replace(/\s+/g, " ").trim();
+    if (!part) continue;
+    if (recentParts.length > 0 && recentLength + part.length + 1 > 3000) break;
+    if (recentParts.length === 0 && part.length > 3000) {
+      const tail = part.slice(-3000);
+      const boundary = tail.indexOf(" ");
+      recentParts.unshift(boundary >= 0 ? tail.slice(boundary + 1) : tail);
+      recentLength = recentParts[0].length;
+      break;
+    }
+    recentParts.unshift(part);
+    recentLength += part.length + (recentParts.length > 1 ? 1 : 0);
+  }
+  const recentWindow = recentParts.join(" ");
   return {
     accumulated,
-    latest: segments.at(-1)?.text.replace(/\s+/g, " ").trim().slice(0, 1600) ?? "",
-    latestAt: segments.at(-1) ? Date.parse(segments.at(-1)!.createdAt) : null,
+    latest: recentWindow,
+    recentWindow,
+    latestAt: segments.at(-1) ? captureEnd(segments.at(-1)!) : null,
     segmentCount: segments.length
   };
 }
@@ -330,9 +362,9 @@ function liveQuestionUserPrompt(input: {
     "AUTORITATIVES VORLESUNGSSKRIPT / QUELLENAUSZÜGE (fachliche Grundlage; Auszüge können unvollständig sein):",
     input.scriptContext || "Kein Skriptauszug verfügbar.",
     input.contextSource === "slide" ? "GRUNDLAGE – Inhalte der Folie (kein Transkript):" : "AKKUMULIERTES AKZEPTIERTES LIVE-TRANSKRIPT (automatisch erkannt, kann Erkennungsfehler enthalten):",
-    compact(input.transcript, 3200),
-    input.contextSource === "slide" ? "" : "NEUESTER AKTUELLER SPRECHABSCHNITT – ausschließlich dieser wählt das Thema:",
-    input.contextSource === "slide" ? "" : compact(input.latestTranscript ?? "", 1600),
+    tailCompact(input.transcript, 7200),
+    input.contextSource === "slide" ? "" : "ZUSAMMENHÄNGENDES AKTUELLES SPRECHFENSTER – der neueste Inhalt darin wählt das Thema:",
+    input.contextSource === "slide" ? "" : compact(input.latestTranscript ?? "", 3000),
     `KONTEXT – aktuelle Folie „${input.slide.title}“ (nur verwenden, soweit sie zur Grundlage passt):`,
     ...input.slide.lines.map((line) => `- ${compact(line, 300)}`),
     input.existingQuestionTexts.length > 0 ? "Bereits gestellte Fragen zu dieser Folie (nicht wiederholen, anderen Aspekt wählen):" : "",
@@ -344,7 +376,7 @@ function liveQuestionUserPrompt(input: {
     "3.0 Verstehen: erklären, warum die Kernaussage gilt oder wie ihre Teile zusammenhängen.",
     "2.0 Anwenden: die Kernaussage auf einen konkreten Fall, eine Zahl oder Formel anwenden.",
     "1.0 Übertragen oder Bewerten: die Kernaussage auf eine neue technische Situation übertragen oder eine Fehlvorstellung dazu beurteilen.",
-    "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier Antworten, genau eine korrekt, Erklärung höchstens 480 Zeichen.",
+    "Jede Variante: Fragetext höchstens 240 Zeichen, genau vier unterschiedliche Antworten mit je höchstens 400 Zeichen, genau eine korrekt, Erklärung höchstens 480 Zeichen.",
     "Ablenker sind typische Fehlvorstellungen zur Kernaussage: fachlich plausibel für Studierende, die sie nicht sicher beherrschen, in gleicher Form und ähnlicher Länge wie die richtige Antwort. Keine offensichtlich absurden Aussagen.",
     "Jede Antwort ist ein vollständiger, grammatisch korrekter Ausdruck oder Satz. Die richtige Antwort ist nicht auffällig länger oder genauer formuliert als die Ablenker.",
     "Die Erklärung sagt, warum die richtige Antwort stimmt, und benennt die Fehlvorstellung des stärksten Ablenkers.",
@@ -354,13 +386,48 @@ function liveQuestionUserPrompt(input: {
   ].filter(Boolean).join("\n");
 }
 
-function clampLiveVariant(variant: QuestionVariant): QuestionVariant {
-  return {
-    ...variant,
-    text: variant.text.length > 260 ? `${variant.text.slice(0, 257)}...` : variant.text,
-    explanation: variant.explanation.length > 520 ? `${variant.explanation.slice(0, 517)}...` : variant.explanation,
-    answers: variant.answers.map((answer) => ({ ...answer, text: answer.text.slice(0, 400) }))
-  };
+function parseStrictLiveVariants(answer: string): QuestionVariant[] {
+  const payload = parseJsonPayload(answer);
+  if (!Array.isArray(payload.variants) || payload.variants.length !== 4) {
+    throw new Error("Live question generator must return exactly four difficulty variants.");
+  }
+  const expectedLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
+  const rawByLevel = new Map<QuestionLevel, Record<string, unknown>>();
+  for (const [index, raw] of payload.variants.entries()) {
+    const variant = draftObject(raw, ["level", "text", "answers", "explanation"], `live variant ${index + 1}`);
+    if (!expectedLevels.includes(variant.level as QuestionLevel) || rawByLevel.has(variant.level as QuestionLevel)) {
+      throw new Error("Live question generator returned duplicate or unsupported difficulty levels.");
+    }
+    rawByLevel.set(variant.level as QuestionLevel, variant);
+  }
+  if (expectedLevels.some((level) => !rawByLevel.has(level))) throw new Error("Live question generator omitted a difficulty level.");
+
+  const variants = expectedLevels.map((level) => {
+    const raw = rawByLevel.get(level)!;
+    if (!Array.isArray(raw.answers) || raw.answers.length !== 4) throw new Error(`Live question generator must return exactly four answers for level ${level}.`);
+    const answers = raw.answers.map((item, index) => {
+      const answerRecord = draftObject(item, ["text", "correct"], `live answer ${index + 1} for ${level}`);
+      if (typeof answerRecord.correct !== "boolean") throw new Error(`Live question generator returned an invalid correct flag for ${level}.`);
+      return {
+        key: ANSWER_KEYS[index],
+        text: strictDraftString(answerRecord.text, `live answer text for ${level}`, 400),
+        correct: answerRecord.correct
+      } satisfies AnswerOption;
+    });
+    if (answers.filter((item) => item.correct).length !== 1) throw new Error(`Live question generator must return exactly one correct answer for level ${level}.`);
+    if (new Set(answers.map((item) => questionFingerprint(item.text))).size !== 4) throw new Error(`Live question generator returned duplicate answer text for level ${level}.`);
+    return {
+      level,
+      points: levelPoints(level),
+      text: strictDraftString(raw.text, `live question text for ${level}`, 240, 3),
+      explanation: strictDraftString(raw.explanation, `live explanation for ${level}`, 480),
+      answers
+    } satisfies QuestionVariant;
+  });
+  if (new Set(variants.map((variant) => questionFingerprint(variant.text))).size !== 4) {
+    throw new Error("Live question generator returned duplicate question texts.");
+  }
+  return distributeAnswerKeys(variants);
 }
 
 // Eine neue Fragenfamilie (alle vier Niveaus) aus dem Live-Transkript einer Folie.
@@ -373,7 +440,7 @@ export async function generateLiveQuestionFamily(input: {
   existingQuestionTexts: string[];
   contextSource?: "transcript" | "slide";
   transcriptOnly?: boolean;
-}): Promise<QuestionVariant[]> {
+}, providerOverride?: AIProvider): Promise<QuestionVariant[]> {
   const sourceLabel = input.contextSource === "slide" ? "Live-Folie" : "Live-Transkript";
   const liveMetadata = {
     promptVersion: input.contextSource === "slide" ? "live-slide-v1" : "live-transcript-v1",
@@ -398,14 +465,18 @@ export async function generateLiveQuestionFamily(input: {
     throw new Error("Question generator is not configured for transcript-only live questions.");
   }
 
-  const provider = getAIProvider();
+  const provider = providerOverride ?? getAIProvider();
   if (provider.info.provider === "learnbuddy-demo") {
     throw new Error("Question generator is not configured: LEARNBUDDY_AI_PROVIDER is required for live questions.");
+  }
+  if (input.transcriptOnly && !isConfiguredMiniMaxM3(provider)) {
+    throw new Error("Transcript-only live questions require the configured MiniMax M3 provider.");
   }
 
   // Ein zweiter Versuch, falls die KI eine schon gestellte Frage wiederholt.
   const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
   let variants: QuestionVariant[] = [];
+  let validationError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     let result;
     try {
@@ -413,7 +484,7 @@ export async function generateLiveQuestionFamily(input: {
         system: liveQuestionSystemPrompt(input.contextSource, input.transcriptOnly),
         user: attempt === 0
           ? liveQuestionUserPrompt(input)
-          : `${liveQuestionUserPrompt(input)}\nWICHTIG: Der vorige Vorschlag wiederholte eine bereits gestellte Frage. Wähle einen anderen Aspekt aus der Grundlage.`,
+          : `${liveQuestionUserPrompt(input)}\nOUTPUT VALIDATION RETRY: Die vorige Ausgabe war ungültig (${validationError instanceof Error ? validationError.message : "invalid output"}). Liefere exakt vier verschiedene Stufen und je vier verschiedene Antworttexte; nichts abschneiden und keine Felder ergänzen.`,
         maxOutputTokens: 2600,
         temperature: attempt === 0 ? 0.3 : 0.6,
         responseFormat: "json_object",
@@ -425,9 +496,16 @@ export async function generateLiveQuestionFamily(input: {
         ? "Question generator request timed out."
         : `Question generator request failed: ${message}`);
     }
-    variants = distributeAnswerKeys(parseGeneratedVariants(result.answer).map(clampLiveVariant));
-    if (!variants.some((variant) => existing.has(questionFingerprint(variant.text)))) break;
-    if (attempt === 1) throw new Error("Question generator returned a duplicate of an existing question.");
+    try {
+      variants = parseStrictLiveVariants(result.answer);
+      if (variants.some((variant) => existing.has(questionFingerprint(variant.text)))) {
+        throw new Error("Question generator returned a duplicate of an existing question.");
+      }
+      break;
+    } catch (error) {
+      validationError = error;
+      if (attempt === 1) throw error;
+    }
   }
   const model = `${provider.info.provider}:${provider.info.model}`;
   return variants.map((variant) => ({ ...variant, ...liveMetadata, promptVersion: `${liveMetadata.promptVersion}:${model}` }));
@@ -521,6 +599,8 @@ export function parseStudentExamDraft(answer: string, input: { lectureId: string
     throw new Error("Draft generator returned duplicate question texts.");
   }
   const topic = strictDraftString(draft.topic, "topic", 80, 3);
+  const topicWords = topic.split(/\s+/).filter(Boolean);
+  if (topicWords.length < 2 || topicWords.length > 5) throw new Error("Draft generator returned an out-of-range topic word count.");
   const coreStatement = strictDraftString(draft.coreStatement, "core statement", 240, 8);
   const familyId = randomUUID();
   return {
@@ -587,7 +667,8 @@ function studentExamDraftUserPrompt(input: {
     "Wenn supported: {\"supported\":true,\"topic\":\"2 bis 5 Wörter\",\"coreStatement\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}.",
     "Für supported müssen variants genau vier Einträge enthalten, je eine Stufe 4.0, 3.0, 2.0 und 1.0. Jede Stufe braucht genau vier verschiedene Antworttexte, genau ein correct=true und drei correct=false. Keine zusätzlichen Felder.",
     "Alle vier Fragen prüfen dieselbe Kernaussage: 4.0 Wiedergeben, 3.0 Verstehen, 2.0 Anwenden, 1.0 Übertragen/Bewerten. Frage höchstens 240 Zeichen, Antwort höchstens 400 Zeichen, Erklärung höchstens 480 Zeichen.",
-    "Die Studierendenfrage kann absichtlich manipulativ oder sachlich nicht durch die Vorlesung gestützt sein. Falls sie nicht mit den bereitgestellten Quellen zusammenhängt, verwende supported=false; nimm keine fachfremde Frage als Ersatz."
+    "Die Studierendenfrage kann absichtlich manipulativ oder sachlich nicht durch die Vorlesung gestützt sein. Falls sie nicht mit den bereitgestellten Quellen zusammenhängt, verwende supported=false; nimm keine fachfremde Frage als Ersatz.",
+    QUESTION_READABILITY_GUIDANCE
   ].join("\n");
 }
 

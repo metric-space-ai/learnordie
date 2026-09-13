@@ -99,42 +99,44 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   if (question.examDraftStatus === "published" || question.examDraftStatus === "rejected") {
     return NextResponse.json({ error: "Dieser Entwurf kann nicht erneut erstellt werden." }, { status: 409 });
   }
-  const lastAttempt = question.examDraftAttemptAt ? Date.parse(question.examDraftAttemptAt) : 0;
-  const attemptAge = Date.now() - lastAttempt;
-  if (question.examDraftStatus === "generating" && attemptAge < GENERATION_STALE_MS) {
-    return NextResponse.json({ error: "Der Entwurf wird bereits erstellt." }, { status: 409 });
-  }
-  if (lastAttempt && attemptAge < RETRY_COOLDOWN_MS) {
-    return NextResponse.json({ error: "Bitte vor einem erneuten Versuch kurz warten." }, { status: 429, headers: { "Retry-After": "30" } });
-  }
-  const attemptCount = await repository.countRecentStudentExamDraftAttempts({
+  const now = new Date();
+  const attempt = await repository.beginStudentExamDraftAttempt({
     lectureId: id,
-    since: new Date(Date.now() - 15 * 60 * 1000)
+    chatQuestionId: question.id,
+    now,
+    since: new Date(now.getTime() - 15 * 60 * 1000),
+    cooldownMs: RETRY_COOLDOWN_MS,
+    staleGenerationMs: GENERATION_STALE_MS,
+    maxAttempts: MAX_LECTURE_ATTEMPTS_PER_WINDOW
   }, session.email);
-  if (attemptCount === null) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
-  if (attemptCount >= MAX_LECTURE_ATTEMPTS_PER_WINDOW) {
+  if (attempt.status === "not_found") return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
+  if (attempt.status === "rate_limited") {
     return NextResponse.json({ error: "Zu viele Entwurfsversuche. Bitte später erneut versuchen." }, { status: 429, headers: { "Retry-After": "900" } });
   }
+  if (attempt.status === "cooldown") return NextResponse.json({ error: "Bitte vor einem erneuten Versuch kurz warten." }, { status: 429, headers: { "Retry-After": "30" } });
+  if (attempt.status === "generating") return NextResponse.json({ error: "Der Entwurf wird bereits erstellt." }, { status: 409 });
+  if (attempt.status === "draft") return NextResponse.json({ questions: tickerItems(lecture) });
+  if (attempt.status !== "started") return NextResponse.json({ error: "Diese Studierendenfrage wurde nicht als fachliche Frage übernommen." }, { status: 409 });
 
-  await repository.updateStudentExamDraftStatus({ lectureId: id, chatQuestionId: question.id, status: "generating" }, session.email);
   try {
     const generated = await generateStudentQuestionExamDraft(lecture, question);
     if (!generated.supported) {
       await repository.updateStudentExamDraftStatus({
         lectureId: id,
         chatQuestionId: question.id,
+        attemptId: attempt.attemptId,
         status: "unsupported",
         error: "Die Frage ließ sich aus dem aktuellen Vorlesungskontext nicht ableiten."
       }, session.email);
     } else {
-      const saved = await repository.saveStudentExamDraft({ lectureId: id, chatQuestionId: question.id, variants: generated.variants }, session.email);
-      if (!saved) throw new Error("Draft could not be persisted.");
+      await repository.saveStudentExamDraft({ lectureId: id, chatQuestionId: question.id, attemptId: attempt.attemptId, variants: generated.variants }, session.email);
     }
   } catch {
     console.warn("student exam draft retry failed");
     await repository.updateStudentExamDraftStatus({
       lectureId: id,
       chatQuestionId: question.id,
+      attemptId: attempt.attemptId,
       status: "failed",
       error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
     }, session.email);

@@ -6,6 +6,7 @@ import type { Lecture, QuestionLevel, QuestionVariant } from "@/lib/types";
 import { getDb } from "./db/client";
 import { analyticsEvents, lectureSeries, lectures, liveAnswers, liveSessions, participantSessions, questionReviewItems, studentChatQuestions, studentEnrollments, studentProfiles, users } from "./db/schema";
 import { rankingDisplayName } from "./student-claims";
+import { isIdempotentlyPublishedStudentDraft } from "./student-exam-draft-state";
 
 export type StoredLiveRound = { id: string; expiresAt: number; questions: QuestionVariant[] };
 export class LiveSessionError extends Error {
@@ -73,7 +74,12 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
         .where(and(eq(studentChatQuestions.id, command.questionId), eq(studentChatQuestions.lectureId, lecture.id)))
         .for("update").limit(1);
       if (!studentQuestion) throw new LiveSessionError(404, "Entwurf nicht gefunden.");
-      if (studentQuestion.examDraftStatus === "published" && studentQuestion.examDraftRoundId) return;
+      if (isIdempotentlyPublishedStudentDraft({
+        questionStatus: studentQuestion.status === "accepted" ? "accepted" : "ignored",
+        draftStatus: studentQuestion.examDraftStatus ?? "not_applicable",
+        attemptId: studentQuestion.examDraftAttemptId,
+        roundId: studentQuestion.examDraftRoundId
+      })) return;
       if (studentQuestion.status !== "accepted") throw new LiveSessionError(409, "Diese Studierendenfrage wurde nicht als fachliche Frage übernommen.");
       if (studentQuestion.examDraftStatus !== "draft") throw new LiveSessionError(409, "Der Entwurf ist nicht zur Veröffentlichung bereit.");
     }
@@ -122,9 +128,10 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
       const questions = validatedDraftQuestions(draft.variantsJson);
       const roundId = randomUUID();
       update.round = { id: roundId, expiresAt: now + 60_000, questions };
-      await tx.update(studentChatQuestions).set({ examDraftStatus: "published", examDraftError: null, examDraftRoundId: roundId })
+      await tx.update(studentChatQuestions).set({ examDraftStatus: "published", examDraftError: null, examDraftRoundId: roundId, examDraftAttemptId: null })
         .where(and(eq(studentChatQuestions.id, command.questionId), eq(studentChatQuestions.lectureId, lecture.id)));
-      await tx.delete(questionReviewItems).where(and(eq(questionReviewItems.id, draft.id), eq(questionReviewItems.lectureId, lecture.id)));
+      await tx.update(questionReviewItems).set({ status: "approved", reviewedAt: new Date(now) })
+        .where(and(eq(questionReviewItems.id, draft.id), eq(questionReviewItems.lectureId, lecture.id)));
     } else {
       update.round = null;
       if (command.action === "end") update.status = "ended";

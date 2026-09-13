@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { QuestionVariant, StudentChatQuestionStatus, StudentExamDraftStatus } from "@/lib/types";
 
 type TickerQuestion = {
@@ -20,22 +20,26 @@ type TickerQuestion = {
   };
 };
 
-export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPublishDraft }: {
+export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPublishDraft, placement = "top-left", className }: {
   lectureId: string;
   csrfToken: string;
   canPublish: boolean;
   onPublishDraft: (questionId: string) => Promise<boolean>;
+  placement?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "host";
+  className?: string;
 }) {
   const [questions, setQuestions] = useState<TickerQuestion[]>([]);
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const polling = useRef(false);
+  const mutating = useRef(false);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(`/api/lectures/${encodeURIComponent(lectureId)}/student-question-ticker`, {
+    const response = await boundedFetch(`/api/lectures/${encodeURIComponent(lectureId)}/student-question-ticker`, {
       cache: "no-store",
       signal
-    });
+    }, 10_000);
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error ?? "Fragen konnten nicht geladen werden.");
     setQuestions(Array.isArray(body.questions) ? body.questions as TickerQuestion[] : []);
@@ -43,9 +47,18 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
 
   useEffect(() => {
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let active: AbortController | undefined;
-    const poll = async () => {
+    const schedule = () => {
+      if (!stopped) timer = setTimeout(() => { void poll(); }, document.hidden ? 10_000 : 4_000);
+    };
+    async function poll() {
+      if (stopped) return;
+      if (polling.current || mutating.current) {
+        schedule();
+        return;
+      }
+      polling.current = true;
       active = new AbortController();
       try {
         await refresh(active.signal);
@@ -55,13 +68,15 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
           setError(caught instanceof Error ? caught.message : "Fragen konnten nicht geladen werden.");
         }
       } finally {
-        if (!stopped) timer = setTimeout(poll, document.hidden ? 10_000 : 4_000);
+        polling.current = false;
+        active = undefined;
+        schedule();
       }
-    };
+    }
     const onVisibility = () => {
       if (!document.hidden) {
-        clearTimeout(timer);
-        void poll();
+        if (timer) clearTimeout(timer);
+        if (!polling.current) void poll();
       }
     };
     void poll();
@@ -69,20 +84,31 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
     return () => {
       stopped = true;
       active?.abort();
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
   async function runAction(action: "retry" | "reject", questionId: string) {
+    if (mutating.current) return;
+    mutating.current = true;
     setBusyId(questionId);
     setError("");
     try {
-      const response = await fetch(`/api/lectures/${encodeURIComponent(lectureId)}/student-question-ticker`, {
+      const response = await boundedFetch(`/api/lectures/${encodeURIComponent(lectureId)}/student-question-ticker`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
         body: JSON.stringify({ action, questionId })
-      });
+      }, 65_000);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? "Änderung konnte nicht gespeichert werden.");
       if (Array.isArray(body.questions)) setQuestions(body.questions as TickerQuestion[]);
@@ -91,11 +117,14 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
       setError(caught instanceof Error ? caught.message : "Änderung konnte nicht gespeichert werden.");
       await refresh().catch(() => undefined);
     } finally {
+      mutating.current = false;
       setBusyId(null);
     }
   }
 
   async function publish(questionId: string) {
+    if (mutating.current) return;
+    mutating.current = true;
     setBusyId(questionId);
     setError("");
     try {
@@ -106,52 +135,66 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
       setError(caught instanceof Error ? caught.message : "Die Fragerunde wurde nicht gestartet.");
       await refresh().catch(() => undefined);
     } finally {
+      mutating.current = false;
       setBusyId(null);
     }
   }
 
   const pendingCount = questions.filter((question) => question.examDraftStatus !== "published" && question.examDraftStatus !== "rejected").length;
-  return <aside aria-label="Eingehende Studierendenfragen" className="student-question-ticker" style={{
-    position: "fixed", right: 16, top: 16, zIndex: 40, width: open ? "min(360px, calc(100vw - 32px))" : "auto",
-    color: "#f8fafc", font: "500 13px/1.4 system-ui, sans-serif", pointerEvents: "auto"
-  }}>
-    <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} style={{
-      display: "block", marginLeft: "auto", border: "1px solid rgba(255,255,255,.18)", borderRadius: 999,
-      padding: "8px 12px", background: "rgba(15,23,42,.94)", color: "inherit", cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,.22)"
-    }}>
+  return <aside aria-label="Eingehende Studierendenfragen" className={`student-question-ticker ${className ?? ""}`} data-open={open} data-placement={placement}>
+    <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="student-question-ticker__toggle">
       Fragen{pendingCount ? ` · ${pendingCount}` : ""}
     </button>
-    {open && <section aria-label="Fragen und Entwürfe" style={{ marginTop: 8, maxHeight: "min(62vh, 520px)", overflow: "auto", border: "1px solid rgba(255,255,255,.14)", borderRadius: 14, padding: 12, background: "rgba(15,23,42,.97)", boxShadow: "0 10px 30px rgba(0,0,0,.26)" }}>
-      {error && <p role="status" style={{ margin: "0 0 8px", color: "#fca5a5" }}>{error}</p>}
-      {questions.length === 0 && <p style={{ margin: 0, color: "#cbd5e1" }}>Noch keine Fragen.</p>}
-      <div style={{ display: "grid", gap: 10 }}>
-        {questions.map((question) => <article key={question.id} style={{ borderTop: "1px solid rgba(255,255,255,.12)", paddingTop: 9 }}>
-          <p style={{ margin: "0 0 4px", color: "#cbd5e1", fontSize: 11 }}>{question.pseudonym} · {new Date(question.createdAt).toLocaleTimeString()}</p>
-          <p style={{ margin: "0 0 7px", overflowWrap: "anywhere" }}>{question.text}</p>
+    {open && <section aria-label="Fragen und Entwürfe" className="student-question-ticker__panel">
+      {error && <p role="status" className="student-question-ticker__error">{error}</p>}
+      {questions.length === 0 && <p className="student-question-ticker__empty">Noch keine Fragen.</p>}
+      <div className="student-question-ticker__list">
+        {questions.map((question) => <article key={question.id} className="student-question-ticker__item">
+          <p className="student-question-ticker__meta">{question.pseudonym} · {new Date(question.createdAt).toLocaleTimeString()}</p>
+          <p className="student-question-ticker__question">{question.text}</p>
           {question.draft ? <details>
-            <summary style={{ cursor: "pointer", color: "#bfdbfe" }}>Entwurf prüfen · {question.draft.topic}</summary>
-            <p style={{ margin: "7px 0", color: "#cbd5e1" }}>{question.draft.coreStatement}</p>
-            {question.draft.variants.map((variant) => <div key={variant.level} style={{ margin: "8px 0", padding: 8, borderRadius: 8, background: "rgba(255,255,255,.06)" }}>
+            <summary className="student-question-ticker__draft-summary">Entwurf prüfen · {question.draft.topic}</summary>
+            <p className="student-question-ticker__core">{question.draft.coreStatement}</p>
+            {question.draft.variants.map((variant) => <div key={variant.level} className="student-question-ticker__variant">
               <strong>{variant.level}</strong>
-              <p style={{ margin: "4px 0" }}>{variant.text}</p>
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {variant.answers.map((answer) => <li key={answer.key} style={{ color: answer.correct ? "#86efac" : "#e2e8f0" }}>{answer.key}. {answer.text}{answer.correct ? " · richtig" : ""}</li>)}
+              <p className="student-question-ticker__variant-text">{variant.text}</p>
+              <ul className="student-question-ticker__answers">
+                {variant.answers.map((answer) => <li key={answer.key} data-correct={answer.correct}>{answer.key}. {answer.text}{answer.correct ? " · richtig" : ""}</li>)}
               </ul>
-              <p style={{ margin: "5px 0 0", color: "#cbd5e1" }}>{variant.explanation}</p>
+              <p className="student-question-ticker__explanation">{variant.explanation}</p>
             </div>)}
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button type="button" disabled={!canPublish || busyId === question.id} onClick={() => void publish(question.id)}>{busyId === question.id ? "Wird gespeichert …" : "Explizit live stellen · 60 s"}</button>
-              <button type="button" disabled={busyId === question.id} onClick={() => void runAction("reject", question.id)}>Ablehnen</button>
+            <div className="student-question-ticker__actions">
+              {question.examDraftStatus !== "published" && <button type="button" disabled={!canPublish || busyId !== null} onClick={() => void publish(question.id)}>{busyId === question.id ? "Wird gespeichert …" : "Live stellen · 60 s"}</button>}
+              {question.examDraftStatus !== "published" && <button type="button" disabled={busyId !== null} onClick={() => void runAction("reject", question.id)}>Ablehnen</button>}
             </div>
-          </details> : question.examDraftStatus === "generating" || question.examDraftStatus === "pending" ? <p role="status" style={{ margin: 0, color: "#cbd5e1" }}>Entwurf wird vorbereitet …</p>
-            : question.examDraftStatus === "failed" || question.examDraftStatus === "unsupported" ? <div>
-              <p style={{ margin: "0 0 6px", color: "#fcd34d" }}>{question.examDraftError ?? "Kein Entwurf verfügbar."}</p>
-              <button type="button" disabled={busyId === question.id} onClick={() => void runAction("retry", question.id)}>Erneut versuchen</button>
+          </details> : question.examDraftStatus === "generating" ? <p role="status" className="student-question-ticker__status">Entwurf wird vorbereitet …</p>
+            : question.examDraftStatus === "pending" ? <div>
+              <p className="student-question-ticker__status">Entwurf wartet auf Erstellung.</p>
+              <button type="button" disabled={busyId !== null} onClick={() => void runAction("retry", question.id)}>Entwurf erstellen</button>
             </div>
-              : <p style={{ margin: 0, color: "#cbd5e1" }}>{question.examDraftStatus === "published" ? "Veröffentlicht" : question.examDraftStatus === "rejected" ? "Abgelehnt" : "Nicht zur Entwurfserstellung übernommen"}</p>}
+              : question.examDraftStatus === "failed" || question.examDraftStatus === "unsupported" ? <div>
+              <p className="student-question-ticker__status">{question.examDraftError ?? "Kein Entwurf verfügbar."}</p>
+              <button type="button" disabled={busyId !== null} onClick={() => void runAction("retry", question.id)}>Erneut versuchen</button>
+            </div>
+              : <p className="student-question-ticker__status">{question.examDraftStatus === "published" ? "Veröffentlicht" : question.examDraftStatus === "rejected" ? "Abgelehnt" : "Nicht zur Entwurfserstellung übernommen"}</p>}
         </article>)}
       </div>
-      {!canPublish && <p style={{ margin: "10px 0 0", color: "#cbd5e1", fontSize: 11 }}>Veröffentlichen ist verfügbar, wenn die Präsentation läuft und keine andere Fragerunde offen ist.</p>}
+      {!canPublish && <p className="student-question-ticker__hint">Veröffentlichen ist verfügbar, wenn die Präsentation läuft und keine andere Fragerunde offen ist.</p>}
     </section>}
   </aside>;
+}
+
+async function boundedFetch(input: RequestInfo | URL, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const upstream = init.signal;
+  const abortFromUpstream = () => controller.abort();
+  if (upstream?.aborted) controller.abort();
+  else upstream?.addEventListener("abort", abortFromUpstream, { once: true });
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+    upstream?.removeEventListener("abort", abortFromUpstream);
+  }
 }

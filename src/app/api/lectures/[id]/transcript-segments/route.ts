@@ -6,11 +6,13 @@ import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 import { normalizeTranscriptTimeRange } from "@/server/transcript-time";
+import { LiveSessionError, liveLecture, readLiveSession } from "@/server/live-session-repository";
 
 const MAX_TRANSCRIPT_SEGMENT_BYTES = 4096;
 
 const transcriptSchema = z.object({
   text: z.string().min(8).max(1200),
+  sessionId: z.string().uuid().optional(),
   provider: z.string().min(2).max(80).optional(),
   startedAt: z.string().optional(),
   endedAt: z.string().optional()
@@ -46,13 +48,31 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     return NextResponse.json({ error: "Ungültiges Transkriptsegment." }, { status: 400 });
   }
 
-  const segment = await getLectureRepository().submitTranscriptSegment({
+  const repository = getLectureRepository();
+  if (parsed.data.sessionId) {
+    const lecture = await repository.getLectureById(id, session.email);
+    if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
+    try {
+      const liveContext = await liveLecture(lecture.publicToken, session.email);
+      const live = await readLiveSession(liveContext, null, false);
+      if (live.sessionId !== parsed.data.sessionId) {
+        return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
+      }
+    } catch (error) {
+      return NextResponse.json({ error: "Die aktuelle Live-Sitzung ist nicht verfügbar." }, { status: error instanceof LiveSessionError ? error.status : 503 });
+    }
+  }
+
+  const segment = await repository.submitTranscriptSegment({
     lectureId: id,
     ...parsed.data,
     startedAt: timeRange.startedAt,
     endedAt: timeRange.endedAt
   }, session.email);
-  if (!segment) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
+  if (!segment) return NextResponse.json(
+    { error: parsed.data.sessionId ? "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." : "Vorlesung nicht gefunden." },
+    { status: parsed.data.sessionId ? 409 : 404 }
+  );
 
   return NextResponse.json({
     segment,

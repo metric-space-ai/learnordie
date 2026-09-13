@@ -84,11 +84,28 @@ export type UpdateStudentExamDraftStatusInput = {
   chatQuestionId: string;
   status: StudentExamDraftStatus;
   error?: string;
+  attemptId?: string;
 };
+
+export type BeginStudentExamDraftAttemptInput = {
+  lectureId: string;
+  chatQuestionId: string;
+  now: Date;
+  since: Date;
+  cooldownMs: number;
+  staleGenerationMs: number;
+  maxAttempts: number;
+  initial?: boolean;
+};
+
+export type BeginStudentExamDraftAttemptResult =
+  | { status: "started"; attemptId: string }
+  | { status: "not_found" | "not_accepted" | "pending" | "generating" | "cooldown" | "rate_limited" | "draft" | "published" | "rejected" };
 
 export type SaveStudentExamDraftInput = {
   lectureId: string;
   chatQuestionId: string;
+  attemptId: string;
   variants: QuestionVariant[];
 };
 
@@ -100,6 +117,7 @@ export type CountRecentStudentExamDraftAttemptsInput = {
 export type SubmitTranscriptSegmentInput = {
   lectureId: string;
   text: string;
+  sessionId?: string;
   provider?: string;
   startedAt?: string;
   endedAt?: string;
@@ -200,7 +218,9 @@ export interface LectureRepository {
   countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput): Promise<number | null>;
   submitStudentChatQuestion(input: SubmitChatQuestionInput): Promise<StudentChatQuestion | null>;
   updateStudentExamDraftStatus(input: UpdateStudentExamDraftStatusInput, ownerEmail?: string): Promise<Lecture | null>;
+  beginStudentExamDraftAttempt(input: BeginStudentExamDraftAttemptInput, ownerEmail?: string): Promise<BeginStudentExamDraftAttemptResult>;
   saveStudentExamDraft(input: SaveStudentExamDraftInput, ownerEmail?: string): Promise<Lecture | null>;
+  archivePublishedStudentExamDraft(lectureId: string, chatQuestionId: string, ownerEmail?: string): Promise<Lecture | null>;
   countRecentStudentExamDraftAttempts(input: CountRecentStudentExamDraftAttemptsInput, ownerEmail?: string): Promise<number | null>;
   moderateStudentChatQuestion(input: ModerateChatQuestionInput, ownerEmail?: string): Promise<Lecture | null>;
   submitTranscriptSegment(input: SubmitTranscriptSegmentInput, ownerEmail?: string): Promise<TranscriptSegment | null>;
@@ -268,8 +288,16 @@ class LocalJsonLectureRepository implements LectureRepository {
     return this.store.updateStudentExamDraftStatus(input, ownerEmail);
   }
 
+  async beginStudentExamDraftAttempt(input: BeginStudentExamDraftAttemptInput, ownerEmail?: string) {
+    return this.store.beginStudentExamDraftAttempt(input, ownerEmail);
+  }
+
   async saveStudentExamDraft(input: SaveStudentExamDraftInput, ownerEmail?: string) {
     return this.store.saveStudentExamDraft(input, ownerEmail);
+  }
+
+  async archivePublishedStudentExamDraft(lectureId: string, chatQuestionId: string, ownerEmail?: string) {
+    return this.store.archivePublishedStudentExamDraft(lectureId, chatQuestionId, ownerEmail);
   }
 
   async countRecentStudentExamDraftAttempts(input: CountRecentStudentExamDraftAttemptsInput, ownerEmail?: string) {
