@@ -60,6 +60,7 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
   expect(linkBox!.x).toBeLessThan(40);
   expect(linkBox!.y).toBeLessThan(50);
   // Normal clicks must work: a visible link must not intercept slide controls.
+  await page.getByLabel("Präsentationssteuerung", { exact: true }).click();
   await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
   await expect(page.locator(".slide-nav .slide-count")).toHaveText(`2 / ${lecture.slides.length}`);
   await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();

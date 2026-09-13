@@ -29,7 +29,7 @@ function diagnostics(page: Page, expectedCspRejection = false) {
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
-    if (expectedCspRejection && /Content Security Policy|violates.*directive/i.test(message.text())) return;
+    if (expectedCspRejection && /Content Security Policy|violates.*directive|^Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set\.$/i.test(message.text())) return;
     problems.push(message.text());
   });
   page.on("response", (response) => {
@@ -357,6 +357,10 @@ function nativePngFixture() {
 
 test("native image import persists a real PNG and rejects invalid image bytes without data loss", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
+  // Chromium's native File System Access picker rejects Playwright's file
+  // chooser interception. Exercise the supported standard file-input path,
+  // with real bytes and the real Excalidraw decoder (no image/API mocks).
+  await page.addInitScript(() => { Reflect.deleteProperty(window, "showOpenFilePicker"); });
   const lecture = await createLecture(page, "Image import");
   const editor = await nativeEditor(page);
   const png = nativePngFixture();
@@ -410,9 +414,11 @@ test("original reader renders the complete handout with native formulas, tables 
 
 test("the original companion downloads through the browser without changing a byte", async ({ page }) => {
   await login(page);
-  await page.getByLabel("Studio-Menü", { exact: true }).click();
+  // This account intentionally owns no lectures: the reader/download must
+  // also work before creating a lecture, when there is no studio header yet.
+  await page.goto("/api/lectures/model-demo/source?view=read");
   const downloaded = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Vorlesungsunterlage herunterladen", exact: true }).click();
+  await page.getByRole("link", { name: "Markdown-Original herunterladen", exact: true }).click();
   const download = await downloaded;
   expect(download.suggestedFilename()).toBe("Modellbegriff-Vorlesungsunterlage.md");
   expect(await download.failure()).toBeNull();

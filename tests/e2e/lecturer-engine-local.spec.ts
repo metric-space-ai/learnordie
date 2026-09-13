@@ -86,7 +86,7 @@ async function save(page: Page, id: string) {
 async function addNativeText(page: Page, text: string) {
   const editor = page.getByLabel("Excalidraw-Folieneditor", { exact: true });
   await expect(editor).toHaveAttribute("data-canvas-ready", "true");
-  await editor.getByRole("radio", { name: "Text", exact: true }).click();
+  await editor.locator("label").filter({ has: page.getByRole("radio", { name: "Text", exact: true }) }).click();
   const canvas = editor.locator("canvas.interactive");
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
