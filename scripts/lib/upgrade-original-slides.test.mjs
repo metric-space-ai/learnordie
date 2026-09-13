@@ -4,7 +4,7 @@ import { upgradeOriginalSlides } from "./upgrade-original-slides.mjs";
 
 function fixture(overrides = {}) {
   const slides = Array.from({ length: 8 }, (_, i) => ({ id: `slide-${i}`, canvas: { elements: [] } }));
-  const document = { slides, createdBy: { promptVersion: "learnordie:model-original:clean-v1" } };
+  const document = { slides, createdBy: { promptVersion: "learnordie:model-original:clean-v2" } };
   const lecture = { id: "lecture", public_token: "original", series_id: "series", slide_document_json: document };
   const rows = slides.map((slide, i) => ({ id: slide.id, lecture_id: "lecture", position: i + 1, title: "Before", content_json: {} }));
   const writes = [], events = [];

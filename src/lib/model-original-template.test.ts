@@ -45,7 +45,7 @@ test("original snapshots and entire companion are independently hash-pinned", ()
   }
 });
 
-test("eight exact authored slides retain all visible fields, notes, source links and native scene mappings", () => {
+test("eight authored slides retain editable teaching text and sources while giving uncaptained animations the main area", () => {
   const document = doc();
   assert.equal(validateSlideDocument(document).ok, true);
   assert.equal(document.createdBy.mode, "import");
@@ -58,16 +58,26 @@ test("eight exact authored slides retain all visible fields, notes, source links
     assert.equal(canvasSceneSchema.safeParse(canvas).success, true);
     assert.equal(canvas.elements.some((e) => e.type === "image"), false);
     const texts = canvas.elements.filter((e) => e.type === "text").map((e) => e.originalText);
-    for (const field of ["title", "kicker", "lead", "formula", "takeaway", "question", "sceneTitle", "sceneSub", "source"] as const) {
+    for (const field of ["title", "kicker", "lead", "formula", "takeaway", "question"] as const) {
       assert.ok(texts.includes(originalModelText(source[field])), `${source.scene}.${field}`);
     }
     for (const block of slide.blocks.filter((b) => b.type === "paragraph")) assert.ok(texts.includes(block.text));
-    if (MODEL_ORIGINAL_SCENE_LABELS[source.scene]) assert.ok(texts.includes(MODEL_ORIGINAL_SCENE_LABELS[source.scene]));
+    for (const field of ["sceneTitle", "sceneSub", "source"] as const) {
+      assert.equal(texts.includes(originalModelText(source[field])), false, `${source.scene}.${field} is source context, not a canvas caption`);
+    }
+    if (MODEL_ORIGINAL_SCENE_LABELS[source.scene]) assert.equal(texts.includes(MODEL_ORIGINAL_SCENE_LABELS[source.scene]), false);
     assert.equal(slide.speakerNotes!.slice(0, -1).map((n) => n.text).join("\n\n"), originalModelText(source.notes));
     assert.equal(slide.sourceRefs[0].slide, index + 1);
     const embeds = canvas.elements.filter((e) => e.type === "embeddable");
     assert.equal(embeds.length, 1);
-    assert.deepEqual(embeds[0].customData?.learnordie, { type: "scene3d", sceneId: `modell.${source.scene}`, caption: source.sceneSub, accent: source.accent });
+    assert.deepEqual(embeds[0].customData?.learnordie, { type: "scene3d", sceneId: `modell.${source.scene}`, accent: source.accent });
+    const scene = slide.blocks.find((block) => block.type === "scene3d");
+    assert.equal(scene?.altText, `${source.sceneTitle}. ${source.sceneSub}`);
+    assert.ok(embeds[0].width >= 880 && embeds[0].height >= 760);
+    assert.ok(embeds[0].width * embeds[0].height >= 800 * 540 * 1.5, "at least 50% more animation area");
+    for (const element of canvas.elements.filter((item) => item.type === "text" && !item.customData?.sourceBlockId?.endsWith("-kicker"))) {
+      assert.ok(element.fontSize! >= 28, `${source.scene}:${element.id} readable teaching text`);
+    }
     for (const element of canvas.elements) {
       assert.equal(element.locked, false);
       assert.ok(element.x >= 0 && element.y >= 0 && element.x + element.width <= 1600 && element.y + element.height <= 900, `${source.scene}:${element.id} within frame`);
@@ -130,7 +140,7 @@ test("a source-import shaped deck gets missing authored fields while retaining e
       canvas: undefined,
       blocks: slide.blocks
         .filter((block) => ["kicker", "lead", "formula", "scene"].some((field) => block.id.endsWith(`-${field}`)))
-        .map((block) => block.id.endsWith("-kicker") ? { ...block, type: "heading" as const } : block.id.endsWith("-formula") ? { ...block, type: "callout" as const, tone: "key" as const } : block.id.endsWith("-scene") && block.type === "scene3d" ? { ...block, altText: `${block.altText}. ${block.caption}`, caption: undefined } : block)
+        .map((block) => block.id.endsWith("-kicker") ? { ...block, type: "heading" as const } : block.id.endsWith("-formula") ? { ...block, type: "callout" as const, tone: "key" as const } : block)
     }))
   });
   const plan = planOriginalModelUpgrade(reduced);
@@ -169,7 +179,7 @@ test("the recognized historical import keeps 4/5 existing notes, bundles missing
             const id = `${slide.id}-${block.id.split("-").at(-1)}`;
             if (block.id.endsWith("-kicker")) return { ...block, id, type: "heading" as const };
             if (block.id.endsWith("-formula")) return { ...block, id, type: "callout" as const, tone: "key" as const, text: index === 6 ? "pθ(nächstes Token | Kontext)" : ("text" in block ? block.text : "") };
-            if (block.id.endsWith("-scene") && block.type === "scene3d") return { ...block, id, altText: `${block.altText}. ${block.caption}`, caption: undefined };
+            if (block.id.endsWith("-scene") && block.type === "scene3d") return { ...block, id };
             return { ...block, id };
           })
       };

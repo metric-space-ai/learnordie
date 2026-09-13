@@ -4,7 +4,7 @@
 
 `POST /api/lectures/model-demo` remains authenticated, CSRF-protected and bodyless.
 It now imports **Der Begriff „Modell“ im Wandel der Zeit** using identity key
-`learnordie:model-original:clean-v1`. First call: `201 {lectureId, created:true}`;
+`learnordie:model-original:clean-v2`. First call: `201 {lectureId, created:true}`;
 repeat: `200 {lectureId, created:false}`, preserving edits. The owner-scoped
 transaction, advisory lock, random public token, draft status, rollback and
 no-seeding rules are unchanged. No migrations or database mutations accompany
@@ -51,13 +51,24 @@ owner's lecture is asserted.
 | 8 | Wir gestalten / das Lernen. | modell.transfer |
 
 Each of 8 × 13 authored fields is retained in `model-original-html` source data.
-Title, kicker, lead, formula, takeaway, question, scene title/subtitle and source
-are separate native editable text elements. Scene ID/accent map to the existing
-interactive Three.js embed. Navigation labels remain in the source snapshot;
+Title, kicker, lead, formula, takeaway and question are separate native editable
+text elements. Scene title/subtitle and source are preserved in that source
+snapshot, not duplicated around the animation. Scene title/subtitle also form
+the accessible scene description, and source references remain attached.
+Scene ID/accent map to the existing interactive Three.js embed. Navigation labels remain in the source snapshot;
 normal app slide navigation uses the authored title. Original HTML notes become
 complete speaker notes, with separate source references. No screenshots or
-invented replacement teaching text are used. Static formula/explanation labels
-from `extra()`/`updateUI()` are additionally preserved as editable text.
+invented replacement teaching text are used. Redundant static scene labels are
+not added to the canvas. The v2 composition reserves an 880 × 760 native scene
+area (previously 800 × 540), with 28 px body text in the 1600 × 900 slide.
+Text is stacked from measured wrapped element heights, not overlapping fixed
+rows. This is a source-coordinate contract; screen readability still requires
+browser verification at the actual presentation viewport.
+
+Existing saved v1 canvases are not silently reflowed: differing native elements
+or metadata produce an upgrade conflict. The versioned importer does not replace
+previous imports or user edits. The guarded migration must be reviewed separately
+against the intended lecture before any stored document changes.
 
 The **entire 1,350-line companion** remains byte-exact in `model-original-companion`
 sourceDocument structured data, including introduction, chapters 1–8, A–B
@@ -87,16 +98,16 @@ contexts, token step and illustrative candidates; all five transfer steps and
 their exact explanations. Pause/reset-camera remain existing scene-host actions.
 This conversion does not alter any renderer, runtime or general CSS.
 
-The integration restores the original law scene's dynamic ω readout, conditional
-force/energy explanation, energy legend and learning plot legend. Static
-solution, m and A are retained as editable native text. HTML emphasis becomes editable
+Scene controls and physical calculations are independent of this layout change;
+the preceding renderer work and its browser acceptance must be tracked separately.
+HTML emphasis becomes editable
 plain text; θ subscript becomes explicit `p_θ` notation, with original markup in
 provenance. These are known typography/dynamic-display differences, not a claim
 of pixel-identical reproduction.
 
 ## Verification and release boundary
 
-Focused gated Node tests: **11 passed**, no DB connection. Coverage includes all
+Historical focused gated Node tests: **11 passed**, no DB connection. Coverage includes all
 source hashes/companion sections, exact field and note text, valid native schema,
 one correctly mapped live embed per slide, no flattened images, pairwise
 non-overlapping within-frame element geometry (including lead/formula/takeaway/
@@ -104,6 +115,12 @@ question/source order), edit/JSON round-trip preserving provenance, owner/versio
 isolation, repeat preservation, rollback/retry and source endpoint session denial/
 reader/download through mocked session access. Known Node loader deprecation/
 module-type warnings remain. Added tests are in the existing identity unit runner.
+
+The v2 layout and migration helper have 14 passing focused Node contracts:
+unchanged source hashes and full notes, six editable visible text fields,
+accessible uncaptained scene, at least 50% more scene area, within-frame / no
+overlap geometry, edit protection, historical import upgrade and backup guards.
+These tests do not establish visual or production acceptance.
 
 Parent acceptance on preview `7cfaf74` (2026-09-13): all eight original slides
 opened and their concept/abstraction/stiffness/energy/execution/training/language/

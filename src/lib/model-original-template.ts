@@ -3,7 +3,7 @@ import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
 import { originalModelSlides, originalModelCompanion, originalModelSourcesHtml, originalModelProvenance } from "./model-original-source";
 import { createModelDemoDocument, MODEL_DEMO_KEY } from "./model-demo-template";
 
-export const MODEL_ORIGINAL_KEY = "learnordie:model-original:clean-v1";
+export const MODEL_ORIGINAL_KEY = "learnordie:model-original:clean-v2";
 export const MODEL_ORIGINAL_TITLE = "Der Begriff „Modell“ im Wandel der Zeit";
 export const MODEL_ORIGINAL_SERIES_TITLE = "Modellbegriff · Originalvorlesung";
 export const MODEL_ORIGINAL_SLIDE_COUNT = originalModelSlides.length;
@@ -48,22 +48,21 @@ function placeText(element: CanvasElement, x: number, y: number, width: number, 
   Object.assign(element, { x, y, width, height: lines.length * fontSize * 1.3, fontSize, lineHeight: 1.3, text: lines.join("\n"), originalText: original });
 }
 
-// These are author fields, not newly written teaching examples. Each field has
-// its own editable native element. The full handout remains a distinct source
-// document: it is not silently substituted for the eight authored slides.
+// Teaching text remains editable. Scene captions and provenance stay in the
+// source asset / accessible scene description instead of competing with the
+// animation. The full handout remains distinct from the eight authored slides.
 export function createOriginalModelDocument(lectureId: string, slideIds: readonly string[]): SlideDocument {
   if (slideIds.length !== MODEL_ORIGINAL_SLIDE_COUNT || new Set(slideIds).size !== MODEL_ORIGINAL_SLIDE_COUNT) {
     throw new Error("The original lecture requires eight distinct slide IDs.");
   }
   const slides = originalModelSlides.map((source, index): SlideNode => {
     const key = `original-${source.scene}`;
-    const textFields = ["kicker", "lead", "formula", "takeaway", "question", "sceneTitle", "sceneSub", "source"] as const;
+    const textFields = ["kicker", "lead", "formula", "takeaway", "question"] as const;
     const slide: SlideNode = {
       id: slideIds[index], title: originalModelText(source.title), layout: "technical_figure_right", intent: index === 0 ? "title" : "explanation",
       blocks: [
         ...textFields.map((field) => ({ id: `${key}-${field}`, type: "paragraph" as const, text: originalModelText(source[field]) })),
-        ...(MODEL_ORIGINAL_SCENE_LABELS[source.scene] ? [{ id: `${key}-extra`, type: "paragraph" as const, text: MODEL_ORIGINAL_SCENE_LABELS[source.scene] }] : []),
-        { id: `${key}-scene`, type: "scene3d", sceneId: `modell.${source.scene}`, altText: source.sceneTitle, caption: source.sceneSub, accent: source.accent }
+        { id: `${key}-scene`, type: "scene3d", sceneId: `modell.${source.scene}`, altText: `${source.sceneTitle}. ${source.sceneSub}`, accent: source.accent }
       ],
       speakerNotes: [
         ...originalModelText(source.notes).split(/\n\n/).map((text, n) => ({ id: `${key}-note-${n}`, kind: "talkingPoint" as const, text })),
@@ -80,20 +79,18 @@ export function createOriginalModelDocument(lectureId: string, slideIds: readonl
     // columns and a fixed scene area, with no truncation or screenshot flattening.
     canvas.elements = canvas.elements.filter((element) => element.id !== `${slide.id}:underline`);
     const title = canvas.elements.find((element) => element.id === `${slide.id}:title`)!;
-    placeText(title, 64, 88, 640, 50);
-    const positions: Record<typeof textFields[number], [number, number, number, number]> = {
-      kicker: [64, 40, 640, 20], lead: [64, 255, 610, 28], formula: [64, 452, 610, 26],
-      takeaway: [64, 582, 610, 26], question: [64, 716, 610, 23],
-      sceneTitle: [730, 114, 800, 27], sceneSub: [730, 194, 800, 18], source: [64, 853, 1472, 16]
-    };
+    placeText(title, 48, 96, 576, 46);
+    let cursor = title.y + title.height + 32;
     for (const field of textFields) {
       const element = canvas.elements.find((item) => item.customData?.sourceBlockId === `${key}-${field}`)!;
-      placeText(element, ...positions[field]);
+      if (field === "kicker") placeText(element, 48, 40, 576, 22);
+      else {
+        placeText(element, 48, cursor, 576, 28);
+        cursor = element.y + element.height + 28;
+      }
     }
     const embed = canvas.elements.find((element) => element.type === "embeddable")!;
-    Object.assign(embed, { x: 730, y: 250, width: 800, height: 540 });
-    const extra = canvas.elements.find((element) => element.customData?.sourceBlockId === `${key}-extra`);
-    if (extra) placeText(extra, 730, 800, 800, 18);
+    Object.assign(embed, { x: 672, y: 80, width: 880, height: 760 });
     slide.canvas = canvas;
     return slide;
   });
@@ -150,7 +147,7 @@ export type OriginalModelUpgradePlan = {
 };
 
 const originalSourceFields = ["nav", "kicker", "title", "lead", "formula", "takeaway", "question", "scene", "sceneTitle", "sceneSub", "accent", "source", "notes"] as const;
-const nativeBlockFields = ["kicker", "lead", "formula", "takeaway", "question", "sceneTitle", "sceneSub", "source"] as const;
+const nativeBlockFields = ["kicker", "lead", "formula", "takeaway", "question"] as const;
 const MODEL_ORIGINAL_LEGACY_LANGUAGE_FORMULA = originalModelText(originalModelSlides.find((source) => source.scene === "language")!.formula).replace("p_θ", "pθ");
 
 function jsonEqual(left: unknown, right: unknown): boolean {
@@ -318,7 +315,7 @@ function mergeCanvas(existing: SlideNode["canvas"], authored: SlideNode["canvas"
 function originalCoverage(sourceIndex: number, slide: SlideNode, blockIds: Partial<Record<(typeof nativeBlockFields)[number], string>>, statuses: Partial<Record<OriginalModelSourceField, OriginalModelCoverageStatus>>): OriginalModelFieldEvidence[] {
   const source = originalModelSlides[sourceIndex];
   const target = (field: OriginalModelSourceField) => {
-    if (field === "nav" || field === "accent") return `asset:model-original-html.structuredData.slides[${sourceIndex}].${field}`;
+    if (field === "nav" || field === "accent" || field === "sceneTitle" || field === "sceneSub" || field === "source") return `asset:model-original-html.structuredData.slides[${sourceIndex}].${field}`;
     if (field === "title") return `slides.${slide.id}.title`;
     if (field === "scene") return `slides.${slide.id}.blocks[scene3d].sceneId`;
     if (field === "notes") return `slides.${slide.id}.speakerNotes`;
@@ -417,7 +414,8 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
         && sourceElement?.altText === `${originalModelText(expectedSource.sceneTitle)}. ${originalModelText(expectedSource.sceneSub)}`
         && sourceElement.caption === undefined
         && sourceElement.accent === expectedSource.accent;
-      if (sourceElement && !legacySceneMetadata && (sourceElement.altText !== originalModelText(expectedSource.sceneTitle) || sourceElement.caption !== originalModelText(expectedSource.sceneSub) || sourceElement.accent !== expectedSource.accent)) {
+      const authoredScene = sceneBlock(authored);
+      if (sourceElement && !legacySceneMetadata && (sourceElement.altText !== authoredScene?.altText || sourceElement.caption !== authoredScene?.caption || sourceElement.accent !== expectedSource.accent)) {
         conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks.${sourceElement.id}`, slideId: current.id, message: "Existing scene metadata differs from the original source." });
         statuses.sceneTitle = "conflict";
         statuses.sceneSub = "conflict";

@@ -33,7 +33,7 @@ export async function upgradeOriginalSlides(sql, options) {
     const plan = options.plan(original);
     insist(["ready", "noop"].includes(plan.status) && plan.conflicts?.length === 0, "Resolve source conflicts before migration");
     const next = plan.document;
-    insist(next?.createdBy?.promptVersion === "learnordie:model-original:clean-v1", "Expected complete original source document");
+    insist(next?.createdBy?.promptVersion === "learnordie:model-original:clean-v2", "Expected complete original source document");
     insist(same(next.slides.map(slide => slide.id), rows.map(row => row.id)), "Upgrade changed slide IDs or order");
     insist(next.slides.every(slide => slide.canvas), "All eight slides require a native canvas");
     const projected = options.project(next, rows);
