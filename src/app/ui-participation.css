@@ -44,6 +44,26 @@
 .lb-scene3d-inline-controls { display: flex; align-items: center; gap: 12px; }
 .lb-scene3d-inline-controls > .lb-scene3d-range { flex: 1; min-width: 0; }
 .learnordie-canvas-scene .lb-scene3d-tool { font-size: 30px; }
+/* Language has a context selector plus actual token/probability output. Give
+   those intrinsic space instead of clipping three rows into a 28% viewport. */
+.learnordie-canvas-scene .lb-scene3d[data-scene-key="language"] { container-type: inline-size; }
+.learnordie-canvas-scene .lb-scene3d[data-scene-key="language"] .lb-scene3d-stage { min-height: 40%; }
+.learnordie-canvas-scene .lb-scene3d[data-scene-key="language"] .lb-scene3d-controls {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  max-height: 55%;
+  padding: 6px 12px;
+  font-size: clamp(18px, 3.5cqi, 30px);
+}
+.learnordie-canvas-scene .lb-scene3d[data-scene-key="language"] .lb-scene3d-controls > .lb-scene3d-row:first-child {
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+.learnordie-canvas-scene .lb-scene3d[data-scene-key="language"] :is(.lb-scene3d-tokens, .lb-scene3d-candidates) {
+  gap: .2em .4em;
+  min-height: 0;
+}
+.learnordie-canvas-scene .lb-scene3d[data-scene-key="language"] .lb-scene3d-candidates { justify-content: flex-end; }
 @media (max-width: 700px) {
   .lecture-join-slide { padding: 64px 20px 28px; gap: 12px; }
   .lecture-join-qr { max-width: min(40vh, 340px); }

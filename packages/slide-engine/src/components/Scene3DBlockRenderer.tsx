@@ -187,6 +187,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
       data-block-id={block.id}
       data-block-type={block.type}
       data-scene-id={block.sceneId}
+      data-scene-key={sceneKey}
       data-scene-mode={failed ? "no-webgl" : mode}
       data-scene-theme={dark ? "dark" : "light"}
       ref={rootRef}
@@ -406,6 +407,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
               })}
             />
             <button
+              aria-label={state.tokenAdded ? "Neu beginnen" : "Token ergänzen"}
               className="lb-scene3d-button"
               data-primary="true"
               type="button"
@@ -414,7 +416,9 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
                 next.langStep = next.tokenAdded ? 4 : 0;
               })}
             >
-              {state.tokenAdded ? "Neu beginnen" : "Token ergänzen"}
+              <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d={state.tokenAdded ? "M4 10a8 8 0 1 1 1 8M4 4v6h6" : "M4 12h16M14 6l6 6-6 6"} />
+              </svg>
             </button>
           </div>
           <div className="lb-scene3d-row lb-scene3d-tokens">

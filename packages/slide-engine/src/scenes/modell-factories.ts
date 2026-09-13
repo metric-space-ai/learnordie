@@ -172,7 +172,7 @@ function makeLanguage(root,lab,state){
  for(let i=0;i<3;i++)for(let j=0;j<=i;j++){path(attn,[[-.58,.62-i*.62,.42],[-.03,(.62-i*.62+.62-j*.62)/2,.7],[.57,.62-j*.62,.42]],i===2?C.violet:C.blue,.009);}
  const ffn=group(root,1.45,0,0);groups.push(ffn);box(ffn,.63,1.85,.44,0x44325a,0,0,0,{emissive:C.violet,emissiveIntensity:.07});edges(ffn,new T.BoxGeometry(.66,1.88,.46),C.violet,.65);for(let j=0;j<6;j++)line(ffn,[[-.19,-.64+j*.25,.24],[.19,-.64+j*.25,.24]],C.violet,.55);
  const out=group(root,3.0,0,0);groups.push(out);const bars=[];for(let i=0;i<3;i++){const b=box(out,.9,.25,.25,C.cream,-.12,.64-i*.64,0,{emissive:C.cream,emissiveIntensity:.16});bars.push(b);}
- const xs=[-3.65,-2.05,-.28,1.45,3],names=['Tokens','Repräsentation','Attention','FFN','pθ'];xs.forEach((x,i)=>lab(group(root,x,-1.51,0),names[i],i===2?'highlight':'dim'));lab(group(root,.55,1.57,0),'WIEDERHOLTE VERARBEITUNG · × N','dim');
+ const xs=[-3.65,-2.05,-.28,1.45,3];
  for(let i=0;i<4;i++)line(root,[[xs[i]+.45,0,-.35],[xs[i+1]-.45,0,-.35]],C.blue,.55);
  const pulse=ball(root,.07,C.cream,0,0,.55,true);const feedback=path(root,[[3.3,-.4,-.1],[3,-1.9,-.7],[-3.2,-1.9,-.7],[-3.7,-.5,-.1]],C.line,.01);
  return {width:9.1,height:4.8,camera:[1.0,1.3,10],top:170,update(t){const vals=modellLanguageContexts[state.context].candidates.map(([,share])=>Number(share)/100);bars.forEach((b,i)=>{b.scale.x=vals[i]*2.6;b.position.x=-.5+(.9*vals[i]*2.6)/2;});const active=state.tokenAdded?0:Math.min(4,state.langStep);groups.forEach((g,i)=>{g.scale.setScalar(i===active?1.07:1);});pulse.position.set(-3.4+(t*.7%1)*6.3,.08,.65);pulse.visible=!state.tokenAdded;feedback.mesh.material.color.set(state.tokenAdded?C.cream:C.line);}};
