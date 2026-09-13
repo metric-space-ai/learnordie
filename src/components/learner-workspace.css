@@ -186,6 +186,13 @@
   border: 1px dashed var(--app-border); background: transparent; box-shadow: none;
 }
 
+/* These are menu toggles, not the old disappearing hotspots on the slide. */
+.learn-shell.slide-screen.question-open .learner-control-menu-panel .hotspot {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
 .learn-shell.slide-screen .overlay-panel,
 .learn-shell .learner-live-panel {
   max-height: calc(100svh - 92px);
