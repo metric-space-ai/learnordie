@@ -78,8 +78,12 @@ test("student question becomes a reviewed live round while presenter and three s
     await ticker.getByRole("button", { name: "Live stellen · 60 s", exact: true }).click();
     await expect(ticker).toContainText("Veröffentlicht");
     await toggle.click();
-    await teacher.locator("main").click({ position: { x: 450, y: 35 } });
+    // Keep focus on the collapsed ticker. A coordinate click at the top of
+    // the stage can hit the participation link and intentionally open its QR
+    // dialog, where slide navigation must be suspended.
+    await expect(teacher.getByRole("dialog", { name: "Teilnahme-Link und QR-Code" })).toBeHidden();
     await teacher.keyboard.press("ArrowRight");
+    await expect(slide(teacher)).toHaveAttribute("data-slide-id", lecture.slides[1].id);
     for (const student of students) {
       await expect(slide(student)).toHaveAttribute("data-slide-id", lecture.slides[1].id);
       await expect(student.getByLabel("Quizfrage", { exact: true })).toBeVisible();

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { attachedScriptBlocks, packScriptContext } from "./lecture-script-context";
 
 import { demoLecture } from "@/lib/demo-data";
 import { qaMechanicsLectures } from "@/lib/qa-fixture-mechanics";
@@ -384,22 +385,7 @@ export class LocalLectureStore {
       .split(/\n{2,}|(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9])/u)
       .map((content) => ({ source, content: content.trim() }))
       .filter((block) => block.content.length > 0));
-    const totalLength = blocks.reduce((total, block) => total + block.source.length + block.content.length, 0);
-    if (totalLength <= 12_000) return blocks.map((block) => `${block.source}: ${block.content}`).join("\n");
-    const focusTerms = [...new Set((_focusText?.toLocaleLowerCase("de-DE").match(/[\p{L}\p{N}]{4,}/gu) ?? []))];
-    const ranked = blocks.map((block, index) => {
-      const content = block.content.toLocaleLowerCase("de-DE");
-      return { ...block, index, score: focusTerms.reduce((score, term) => score + (content.includes(term) ? 1 : 0), 0) };
-    }).sort((left, right) => right.score - left.score || left.index - right.index);
-    const selected: typeof ranked = [];
-    let packedLength = 0;
-    for (const block of ranked) {
-      const blockLength = block.source.length + block.content.length + 2;
-      if (packedLength + blockLength > 12_000) continue;
-      selected.push(block);
-      packedLength += blockLength;
-    }
-    return selected.sort((left, right) => left.index - right.index).map((block) => `${block.source}: ${block.content}`).join("\n");
+    return packScriptContext([...blocks, ...attachedScriptBlocks(lecture)], _focusText, 12_000);
   }
 
   async createLecture(input: CreateLectureInput, ownerEmail?: string) {

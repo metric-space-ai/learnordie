@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { attachedScriptBlocks, packScriptContext } from "./lecture-script-context";
 
 import { and, asc, count, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 
@@ -782,31 +783,17 @@ export class PostgresLectureRepository implements LectureRepository {
 
   async getLectureScriptContext(lectureId: string, ownerEmail?: string, focusText = "") {
     await this.ensureSeeded();
-    if (!await this.getLectureById(lectureId, ownerEmail)) return "";
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return "";
     const rows = await this.db.select({ sourceRef: assetChunks.sourceRef, content: assetChunks.content })
       .from(assetChunks)
       .where(eq(assetChunks.lectureId, lectureId))
       .orderBy(asc(assetChunks.createdAt))
       .limit(256);
-    const totalChars = rows.reduce((total, row) => total + row.sourceRef.length + row.content.length, 0);
-    if (totalChars <= 14_000) return rows.map((row) => `${row.sourceRef}: ${row.content}`).join("\n");
-
-    const terms = [...new Set((focusText.toLocaleLowerCase("de-DE").match(/[\p{L}\p{N}]{4,}/gu) ?? []))];
-    const ranked = rows.map((row, index) => {
-      const text = row.content.toLocaleLowerCase("de-DE");
-      const score = terms.reduce((total, term) => total + (text.includes(term) ? 1 : 0), 0);
-      return { ...row, index, score, packedLength: row.sourceRef.length + row.content.length + 2 };
-    }).sort((left, right) => right.score - left.score || left.index - right.index);
-    const selected: typeof ranked = [];
-    let selectedLength = 0;
-    for (const row of ranked) {
-      if (selectedLength + row.packedLength > 14_000) continue;
-      selected.push(row);
-      selectedLength += row.packedLength;
-    }
-    return selected.sort((left, right) => left.index - right.index)
-      .map((row) => `${row.sourceRef}: ${row.content}`)
-      .join("\n");
+    return packScriptContext([
+      ...rows.map((row) => ({ source: row.sourceRef, content: row.content })),
+      ...attachedScriptBlocks(lecture)
+    ], focusText);
   }
 
   async createLecture(input: CreateLectureInput, ownerEmail?: string) {
