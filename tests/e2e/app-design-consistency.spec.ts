@@ -12,10 +12,12 @@ const variants = [
   { name: "compact dark", colorScheme: "dark", viewport: { width: 320, height: 500 } }
 ] as const;
 
-function diagnostics(page: Page) {
+function diagnostics(page: Page, expectedBadRequestPath = "") {
   const problems: string[] = [];
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("console", (message) => {
+    if (expectedBadRequestPath && message.location().url.endsWith(expectedBadRequestPath) &&
+      message.text() === "Failed to load resource: the server responded with a status of 400 (Bad Request)") return;
     if (message.type() === "error") problems.push(message.text());
   });
   page.on("response", (response) => {
@@ -134,7 +136,7 @@ for (const variant of variants) {
     });
 
     test("OTP, retry errors and alternate email retain the shared design", async ({ page }, testInfo) => {
-      const assertClean = diagnostics(page);
+      const assertClean = diagnostics(page, "/api/auth/verify-code");
       // Synthetic responses isolate visual states. Actual OTP/login/logout is
       // independently exercised below using the real isolated mail fixture.
       await page.route("**/api/auth/magic-link", (route) => route.fulfill({ json: { sent: true } }));
