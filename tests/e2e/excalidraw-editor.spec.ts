@@ -549,10 +549,12 @@ test("three.js embeds are real WebGL, independently interactive and survive save
     if ((await toggle.getAttribute("aria-pressed")) !== String(dark)) await toggle.click();
     await expect(scene).toHaveAttribute("data-scene-theme", dark ? "dark" : "light");
     await expect(scene).toHaveAttribute("data-scene-mode", "live");
-    await expect(scene).toHaveCSS("background-color", dark ? "rgb(18, 18, 18)" : "rgb(255, 255, 255)");
+    await expect(scene).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(scene).toHaveCSS("background-image", "none");
     await expect(slider).toHaveCSS("accent-color", dark ? "rgb(168, 165, 255)" : "rgb(105, 101, 219)");
-    await expect(scene.locator(".lb-scene3d-controls")).toHaveCSS("background-color", dark ? "rgb(35, 35, 41)" : "rgb(255, 255, 255)");
+    await expect(scene.locator(".lb-scene3d-controls")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(scene).toHaveCSS("font-family", /Learnordie Sketch/);
+    await expect(scene.getByRole("button", { name: "3D-Blick zurücksetzen" })).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   }
   await slider.focus();
   await slider.press("Home");

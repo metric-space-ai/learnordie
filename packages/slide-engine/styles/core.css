@@ -215,6 +215,14 @@
  * (button/input font) die Regler nicht zuruecksetzen. Die Buehne bleibt in
  * jedem Theme dunkel, weil Szenenfarben und Licht auf dunklen Grund abgestimmt sind.
  */
+@font-face {
+  font-family: "Learnordie Sketch";
+  src: url("/vendor/excalidraw/fonts/Virgil/Virgil-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 .lb-scene3d {
   --lb-scene-ground: #ffffff;
   --lb-scene-panel: #ffffff;
@@ -229,9 +237,9 @@
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: var(--lb-scene-ground);
+  background: transparent;
   color: var(--lb-scene-ink);
-  font-family: var(--app-font, "Assistant"), system-ui, sans-serif;
+  font-family: "Learnordie Sketch", "Comic Sans MS", cursive;
   font-size: clamp(12px, 0.95vw, 16px);
   line-height: 1.35;
 }
@@ -284,7 +292,7 @@
   padding: 0.3em 0.55em;
   border: 0;
   border-radius: 4px;
-  background: var(--lb-scene-ground);
+  background: transparent;
   color: var(--lb-scene-ink);
   font-size: 1em;
   letter-spacing: 0;
@@ -580,6 +588,53 @@
   border-top: 1px solid var(--lb-scene-line);
   color: var(--lb-scene-muted);
   font-size: 0.85em;
+}
+
+/* Controls are annotations on the drawing, not another application panel.
+   Native button/range semantics preserve keyboard and assistive-tech access. */
+.lb-scene3d-controls { border: 0; background: transparent; }
+.lb-scene3d-tools { gap: 18px; }
+.lb-scene3d :is(.lb-scene3d-tool, .lb-scene3d-button, .lb-scene3d-segmented button, .lb-scene3d-steps button) {
+  position: relative; border: 0; border-radius: 0; background: transparent;
+  color: var(--lb-scene-ink); font-family: inherit; font-weight: 400;
+  transition: color 140ms ease, transform 140ms ease;
+}
+.lb-scene3d :is(.lb-scene3d-tool, .lb-scene3d-button, .lb-scene3d-segmented button, .lb-scene3d-steps button)::after {
+  content: ""; position: absolute; inset: auto 5% 1px; height: 5px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 5' preserveAspectRatio='none'%3E%3Cpath d='M1 3Q25 1 49 3T99 2M5 4Q48 2 93 4' fill='none' stroke='black' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E") center/100% 100%;
+  transform: scaleX(.15); transform-origin: left; opacity: 0;
+  transition: transform 220ms ease, opacity 140ms ease;
+}
+.lb-scene3d :is(button:hover, button:focus-visible, button[aria-pressed="true"], button[data-primary="true"]) {
+  color: var(--lb-scene-accent); background: transparent;
+}
+.lb-scene3d :is(button:hover, button:focus-visible, button[aria-pressed="true"], button[data-primary="true"])::after {
+  opacity: 1; transform: scaleX(1);
+}
+.lb-scene3d button:focus-visible { outline: 2px dashed var(--lb-scene-accent); outline-offset: 4px; }
+.lb-scene3d-segmented { border: 0; padding: 0; gap: 14px; background: transparent; }
+.lb-scene3d-tokens span, .lb-scene3d-candidates span {
+  padding: .2em .3em; border: 0; border-radius: 0; background: transparent;
+}
+.lb-scene3d-tokens [data-token="new"] { border-bottom: 2px dashed var(--lb-scene-accent); animation: scene-pencil-in 220ms ease-out; }
+.lb-scene3d-range input[type="range"] {
+  height: 3px; border: 0; border-radius: 58% 42% 63% 37%;
+  background: var(--lb-scene-muted); transform: rotate(-.35deg);
+}
+.lb-scene3d-range input[type="range"]::-webkit-slider-thumb {
+  width: 22px; height: 22px; border: 2px solid var(--lb-scene-accent);
+  border-radius: 46% 54% 43% 57%; background: var(--lb-scene-ground);
+  box-shadow: 1px 1px 0 var(--lb-scene-accent);
+}
+.lb-scene3d-range input[type="range"]::-moz-range-thumb {
+  width: 20px; height: 20px; border: 2px solid var(--lb-scene-accent);
+  border-radius: 46% 54% 43% 57%; background: var(--lb-scene-ground);
+}
+.lb-scene3d-explain { animation: scene-pencil-in 180ms ease-out; }
+@keyframes scene-pencil-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .lb-scene3d *, .lb-scene3d *::after { animation: none !important; transition: none !important; }
 }
 
 @media (max-width: 760px) {

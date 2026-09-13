@@ -199,7 +199,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           <img
             alt={block.altText}
             className="lb-scene3d-fallback"
-            src={modellFallbackDataUri(sceneKey, state, accent, block.altText, dark)}
+            src={modellFallbackDataUri(sceneKey, state, accent, block.altText, dark, true)}
           />
         )}
         <div className="lb-scene3d-port" hidden={mode !== "live"} ref={portRef}>
@@ -444,7 +444,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
               </button>
             ))}
           </div>
-          <p className="lb-scene3d-explain">{modellTransferText[state.transferStep]}</p>
+          <p key={state.transferStep} className="lb-scene3d-explain">{modellTransferText[state.transferStep]}</p>
         </>
       );
   }

@@ -114,11 +114,11 @@ export function modellFitEquation(state: ModellSceneState) {
 }
 
 function svgText(x: number, y: number, text: string, size = 14, color = "currentColor") {
-  return `<text x="${x}" y="${y}" fill="${color}" font-family="Arial,sans-serif" font-size="${size}" text-anchor="middle">${text}</text>`;
+  return `<text x="${x}" y="${y}" fill="${color}" font-family="Virgil,Comic Sans MS,cursive" font-size="${size}" text-anchor="middle">${text}</text>`;
 }
 
 // 2D-Ersatzansicht der Vorlage (ohne WebGL, Druck, Standalone-Export, Miniaturen).
-export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string, dark = false) {
+export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string, dark = false, transparent = false) {
   const theme = modellTheme(dark);
   accent = theme.accent;
   let inner = "";
@@ -165,9 +165,9 @@ export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, 
     inner += svgText(430, 197, key === "miniature" ? "Vereinfachtes Abbild" : "Idealisierte Beziehung", 14);
   }
   const safeLabel = label.replace(/[<>&"]/g, "");
-  return `<svg viewBox="0 0 600 340" xmlns="http://www.w3.org/2000/svg" style="color:${theme.ink}" role="img" aria-label="2D-Ersatzansicht: ${safeLabel}"><rect width="600" height="340" fill="${theme.paper}"/>${inner}</svg>`;
+  return `<svg viewBox="0 0 600 340" xmlns="http://www.w3.org/2000/svg" style="color:${theme.ink}" role="img" aria-label="2D-Ersatzansicht: ${safeLabel}">${transparent ? "" : `<rect width="600" height="340" fill="${theme.paper}"/>`}${inner}</svg>`;
 }
 
-export function modellFallbackDataUri(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string, dark = false) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(modellFallbackSvg(key, state, accent, label, dark))}`;
+export function modellFallbackDataUri(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string, dark = false, transparent = false) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(modellFallbackSvg(key, state, accent, label, dark, transparent))}`;
 }
