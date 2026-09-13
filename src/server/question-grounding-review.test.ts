@@ -101,3 +101,17 @@ test("source IDs resolve losslessly to originals and cannot bypass a refusal or 
   const refused = reviews.map((r,i)=>({...r,approved:i!==3,reason:"Sachlich falsch"}));
   assert.throws(() => parseQuestionGroundingReview(JSON.stringify({reviews:refused}), [original,sources]), /Fachprüfung 1.0: Sachlich falsch/);
 });
+
+test("global approval cannot override a joke, unrelated answer or missing per-answer assessment", () => {
+  const candidates = (["4.0","3.0","2.0","1.0"] as const).map(level=>({level,answers:(["A","B","C","D"] as const).map(key=>({key,text:"Testantwort",correct:key==="A"}))}));
+  const reviews = candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],reason:"Fachlich belegt",distractors:["B","C","D"].map(key=>({key,kind:"misconception",reason:"Verwechselte Wirkungsrichtung"}))}));
+  assert.doesNotThrow(()=>parseQuestionGroundingReview(JSON.stringify({reviews}),sources,candidates));
+  for(const kind of ["joke","unrelated","not_false"]) {
+    const contradictory = structuredClone(reviews); contradictory[0].distractors[0].kind=kind;
+    assert.throws(()=>parseQuestionGroundingReview(JSON.stringify({reviews:contradictory}),sources,candidates),/Unbrauchbarer Ablenker B/);
+  }
+  for(const replacement of [[], reviews[0].distractors.slice(0,2), [reviews[0].distractors[0],reviews[0].distractors[0],reviews[0].distractors[2]], [{key:"A",kind:"misconception",reason:""},...reviews[0].distractors.slice(1)]]) {
+    const malformed=structuredClone(reviews);malformed[0].distractors=replacement;
+    assert.throws(()=>parseQuestionGroundingReview(JSON.stringify({reviews:malformed}),sources,candidates),/Ablenkerprüfungen/);
+  }
+});

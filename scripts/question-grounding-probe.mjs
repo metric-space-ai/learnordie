@@ -20,6 +20,7 @@ provider.complete = async (input) => {
     reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
       level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
       sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
+      distractors: Array.isArray(entry?.distractors) ? entry.distractors.slice(0,3).map(check=>({key:check?.key,kind:check?.kind,reason:String(check?.reason??"").slice(0,200)})) : undefined,
       sourceQuote: String(entry?.sourceQuote ?? "").slice(0, 600), reason: String(entry?.reason ?? "").slice(0, 400)
     })) : null });
   } catch { reviewVerdicts.push({ malformedJson: true }); }
@@ -98,7 +99,7 @@ try {
   report.status="pass";
 } catch(error) {
   report.status="fail";
-  report.reason=error.message==="unsupported-numeric-claim-approved"?error.message:"review-failed-before-required-verdict";
+  report.reason=["unsupported-numeric-claim-approved","absurd-distractor-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
   if(error.diagnostic) {
     report.diagnostic=error.diagnostic;

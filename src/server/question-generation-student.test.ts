@@ -78,11 +78,11 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
     complete: async (input: { system: string; user: string }) => {
       if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
         reviews.push(input);
-        const { sources, candidates } = JSON.parse(input.user) as { sources: Array<{id:string;text:string}>; candidates: Array<{level: string;text: string;answers: unknown[];explanation: string}> };
+        const { sources, candidates } = JSON.parse(input.user) as { sources: Array<{id:string;text:string}>; candidates: Array<{level: string;text: string;answers: Array<{key:string;correct:boolean}>;explanation: string}> };
         assert.deepEqual(candidates.map(candidate => candidate.level), levels);
         assert.ok(candidates.every(candidate => candidate.text && candidate.answers.length === 4 && candidate.explanation));
         assert.ok(sources.length > 0);
-        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: levels.map(level => ({ level, approved: true, sourceIds: [sources[0].id], reason: "Testbeleg" })) }) };
+        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: candidates.map(candidate => ({ level:candidate.level, approved: true, sourceIds: [sources[0].id], distractors:candidate.answers.filter(answer=>!answer.correct).map(answer=>({key:answer.key,kind:"misconception",reason:"Testfehlvorstellung"})), reason: "Testbeleg" })) }) };
       }
       requests.push(input);
       return { answer: answers.shift() ?? JSON.stringify(validPayload()) };
