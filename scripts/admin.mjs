@@ -458,6 +458,10 @@ function secretIsSet(name) {
     && !value.includes("changeme");
 }
 
+function minimaxApiKeyIsSet() {
+  return secretIsSet("LEARNORDIE_MINIMAX_API_KEY") || secretIsSet("MINIMAX_API_KEY");
+}
+
 async function tableColumnExists(sql, tableName, columnName) {
   const [result] = await sql`
     select exists (
@@ -814,6 +818,19 @@ async function runPreflight(sql) {
   const ocrProvider = selectedOCRProvider();
   if (strict && ["", "disabled", "local", "none"].includes(ocrProvider)) {
     failCheck(checks, "ocr_provider", "critical", "Production benötigt einen externen OCR-/Vision-Provider für gescannte Materialien.", { provider: ocrProvider });
+  } else if (ocrProvider === "minimax") {
+    const configuredModel = envValue("LEARNBUDDY_OCR_MODEL");
+    if (configuredModel && configuredModel.toLowerCase() !== "minimax-m3") {
+      failCheck(checks, "ocr_provider", "critical", "MiniMax Vision OCR verwendet ausschließlich das Modell MiniMax-M3.", { provider: ocrProvider, model: configuredModel });
+    } else if (!minimaxApiKeyIsSet()) {
+      failCheck(checks, "ocr_provider", strict ? "critical" : "warning", "MiniMax Vision OCR benötigt LEARNORDIE_MINIMAX_API_KEY oder MINIMAX_API_KEY.", { provider: ocrProvider, missing: ["LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY"] });
+    } else {
+      passCheck(checks, "ocr_provider", "MiniMax M3 Vision OCR ist konfiguriert.", {
+        provider: ocrProvider,
+        model: "MiniMax-M3",
+        endpointHost: "api.minimax.io"
+      });
+    }
   } else if (["http", "external", "vision", "ocr"].includes(ocrProvider)) {
     const missing = [];
     if (!envValue("LEARNBUDDY_OCR_BASE_URL")) missing.push("LEARNBUDDY_OCR_BASE_URL");
@@ -853,6 +870,19 @@ async function runPreflight(sql) {
   const sttProvider = selectedSTTProvider();
   if (strict && ["", "local", "placeholder", "demo"].includes(sttProvider)) {
     failCheck(checks, "stt_provider", "critical", "Production benötigt einen externen STTProvider.", { provider: sttProvider });
+  } else if (sttProvider === "minimax") {
+    const configuredModel = envValue("LEARNBUDDY_STT_MODEL");
+    if (configuredModel && configuredModel.toLowerCase() !== "asr-1.0") {
+      failCheck(checks, "stt_provider", "critical", "MiniMax Speech-to-Text verwendet ausschließlich das Modell asr-1.0.", { provider: sttProvider, model: configuredModel });
+    } else if (!minimaxApiKeyIsSet()) {
+      failCheck(checks, "stt_provider", strict ? "critical" : "warning", "MiniMax ASR benötigt LEARNORDIE_MINIMAX_API_KEY oder MINIMAX_API_KEY.", { provider: sttProvider, missing: ["LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY"] });
+    } else {
+      passCheck(checks, "stt_provider", "MiniMax ASR ist konfiguriert.", {
+        provider: sttProvider,
+        model: "asr-1.0",
+        endpointHost: "api.minimax.io"
+      });
+    }
   } else if (["mistral", "mistral-voxtral", "voxtral", "external"].includes(sttProvider)) {
     const endpointName = envValue("LEARNBUDDY_STT_BASE_URL")
       ? "LEARNBUDDY_STT_BASE_URL"

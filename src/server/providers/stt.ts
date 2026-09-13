@@ -1,4 +1,13 @@
 import { assertDeploymentFetchEndpoint } from "@/server/providers/endpoint-policy";
+import { learnordieMinimaxApiKey } from "@/server/llm-proxy";
+
+const MINIMAX_ASR_ENDPOINT = "https://api.minimax.io/v1/speech_to_text";
+const MINIMAX_ASR_MODEL = "asr-1.0";
+const MINIMAX_ASR_MAX_BYTES = 50 * 1024 * 1024;
+const MINIMAX_ASR_MAX_SECONDS = 500;
+const MINIMAX_ASR_LANGUAGES = new Set([
+  "zh", "yue", "en", "ja", "ko", "th", "vi", "id", "ms", "fil", "ar", "tr", "fr", "de", "es", "it", "pt", "pl", "ru", "uk"
+]);
 
 export type TranscriptStatus = "idle" | "listening" | "error";
 
@@ -13,7 +22,7 @@ export type TranscribeAudioInput = {
 export type TranscribeAudioResult = {
   provider: string;
   text: string;
-  confidence: number;
+  confidence?: number;
   audioBytes: number;
   mimeType: string;
 };
@@ -59,6 +68,12 @@ type MistralTranscriptionResponse = {
   };
 };
 
+type MiniMaxASRResponse = {
+  text?: unknown;
+  duration?: unknown;
+  error?: { message?: unknown };
+};
+
 type RealtimeEventPayload = {
   type?: unknown;
   delta?: unknown;
@@ -78,6 +93,11 @@ function envValue(name: string) {
 function isPlaceholderSecret(value: string) {
   const lower = value.trim().toLowerCase();
   return !lower || lower.includes("replace") || lower.includes("placeholder") || lower.includes("changeme");
+}
+
+function minimaxApiKey() {
+  const candidates = [learnordieMinimaxApiKey(), envValue("MINIMAX_API_KEY")];
+  return candidates.find((value) => !isPlaceholderSecret(value)) ?? "";
 }
 
 function normalizeTranscriptionEndpoint(value: string, envName = "LEARNBUDDY_STT_BASE_URL") {
@@ -209,6 +229,101 @@ function audioUploadFilename(mimeType?: string) {
   if (normalized.includes("ogg")) return "lecture-audio.ogg";
   if (normalized.includes("mpeg") || normalized.includes("mp3")) return "lecture-audio.mp3";
   return "lecture-audio.bin";
+}
+
+function minimaxAudioFile(mimeType: string) {
+  const normalized = mimeType.split(";", 1)[0].trim().toLowerCase();
+  const formats: Record<string, { type: string; extension: string }> = {
+    "audio/wav": { type: "audio/wav", extension: "wav" },
+    "audio/x-wav": { type: "audio/wav", extension: "wav" },
+    "audio/aiff": { type: "audio/aiff", extension: "aiff" },
+    "audio/x-aiff": { type: "audio/aiff", extension: "aiff" },
+    "audio/flac": { type: "audio/flac", extension: "flac" },
+    "audio/x-flac": { type: "audio/flac", extension: "flac" },
+    "audio/mp4": { type: "audio/mp4", extension: "m4a" },
+    "audio/x-m4a": { type: "audio/mp4", extension: "m4a" },
+    "audio/mpeg": { type: "audio/mpeg", extension: "mp3" },
+    "audio/mp3": { type: "audio/mpeg", extension: "mp3" },
+    "audio/aac": { type: "audio/aac", extension: "aac" },
+    "audio/opus": { type: "audio/opus", extension: "opus" },
+    "audio/ogg": { type: "audio/ogg", extension: "ogg" }
+  };
+  const file = formats[normalized];
+  if (!file) {
+    throw new Error(`MiniMax ASR does not support ${normalized || "an unknown audio type"}; use WAV, AIFF, FLAC, M4A, MP3, AAC, Opus, or Ogg.`);
+  }
+  return file;
+}
+
+class MiniMaxASRSTTProvider implements STTProvider {
+  readonly name = "minimax-asr-1.0";
+  private readonly apiKey: string;
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  getInitialStatus(): TranscriptStatus {
+    return "idle";
+  }
+
+  async transcribeAudio(input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
+    if (input.audio.byteLength < 1) throw new Error("MiniMax ASR received empty audio.");
+    if (input.audio.byteLength > MINIMAX_ASR_MAX_BYTES) {
+      throw new Error("MiniMax ASR audio must be 50 MiB or smaller.");
+    }
+    const file = minimaxAudioFile(input.mimeType || "");
+    const language = sttLanguage(input);
+    if (!MINIMAX_ASR_LANGUAGES.has(language)) {
+      throw new Error(`MiniMax ASR does not support language ${language}.`);
+    }
+
+    const endpoint = MINIMAX_ASR_ENDPOINT;
+    assertDeploymentFetchEndpoint(endpoint, "MiniMax ASR endpoint");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), sttTimeoutMs());
+    const formData = new FormData();
+    formData.set("model", MINIMAX_ASR_MODEL);
+    formData.set("response_format", "json");
+    formData.set("file", new Blob([input.audio], { type: file.type }), `lecture-audio.${file.extension}`);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          language
+        },
+        body: formData,
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => null) as MiniMaxASRResponse | null;
+      if (!response.ok) {
+        const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
+        throw new Error(`MiniMax ASR request failed (HTTP ${response.status}): ${message}`);
+      }
+
+      const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+      const duration = Number(payload?.duration);
+      if (!text) throw new Error("MiniMax ASR response contained no transcript text.");
+      if (!Number.isFinite(duration) || duration < 0 || duration > MINIMAX_ASR_MAX_SECONDS) {
+        throw new Error("MiniMax ASR response contained an invalid audio duration.");
+      }
+      return {
+        provider: this.name,
+        text,
+        audioBytes: input.audio.byteLength,
+        mimeType: input.mimeType
+      };
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("MiniMax ASR request timed out.");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 class MistralVoxtralSTTProvider implements STTProvider {
@@ -381,6 +496,18 @@ class VllmRealtimeSTTProvider implements STTProvider {
 
 export function getSTTProvider(): STTProvider {
   const selected = envValue("LEARNBUDDY_STT_PROVIDER").toLowerCase();
+  if (selected === "minimax") {
+    const configuredModel = envValue("LEARNBUDDY_STT_MODEL");
+    if (configuredModel && configuredModel.toLowerCase() !== MINIMAX_ASR_MODEL) {
+      throw new Error(`LEARNBUDDY_STT_MODEL must be ${MINIMAX_ASR_MODEL} for LEARNBUDDY_STT_PROVIDER=minimax.`);
+    }
+    const apiKey = minimaxApiKey();
+    if (!apiKey) {
+      throw new Error("LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY is required for LEARNBUDDY_STT_PROVIDER=minimax.");
+    }
+    return new MiniMaxASRSTTProvider(apiKey);
+  }
+
   const mistralApiKey = envValue("MISTRAL_API_KEY");
   const genericApiKey = envValue("LEARNBUDDY_STT_API_KEY");
   const wantsVllmRealtime = selected === "vllm-realtime"
