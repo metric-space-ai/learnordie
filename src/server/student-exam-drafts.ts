@@ -4,7 +4,10 @@ import { acceptedTranscriptContext, generateStudentExamDraft, liveQuestionSlideC
 import { liveLecture, readLiveSession } from "./live-session-repository";
 import { getLectureRepository } from "./repository";
 
-export async function generateStudentQuestionExamDraft(lecture: Lecture, question: StudentChatQuestion) {
+export async function generateStudentQuestionExamDraft(lecture: Lecture, question: StudentChatQuestion, options: { deadlineAt?: number } = {}) {
+  if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+    throw new Error("Student exam draft generation timed out.");
+  }
   const live = await readLiveSession(await liveLecture(lecture.publicToken), null, false);
   if (live.status !== "active" || live.sessionStartedAt === null) {
     throw new Error("A current live lecture session is required to prepare an exam draft.");
@@ -22,6 +25,10 @@ export async function generateStudentQuestionExamDraft(lecture: Lecture, questio
     `${question.text}\n${transcript.accumulated}`
   );
 
+  if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+    throw new Error("Student exam draft generation timed out.");
+  }
+
   return generateStudentExamDraft({
     lecture,
     slide,
@@ -30,6 +37,7 @@ export async function generateStudentQuestionExamDraft(lecture: Lecture, questio
     studentQuestion: question.text,
     transcriptContext: transcript.accumulated,
     latestTranscript: transcript.latestAt !== null && Date.now() - transcript.latestAt <= 120_000 ? transcript.latest : "",
-    scriptContext
+    scriptContext,
+    deadlineAt: options.deadlineAt
   });
 }

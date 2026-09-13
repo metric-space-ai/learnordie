@@ -7,6 +7,8 @@ import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
 
+export const maxDuration = 60;
+
 const MAX_TICKER_BODY_BYTES = 2048;
 const TICKER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RETRY_COOLDOWN_MS = 30_000;
@@ -119,7 +121,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   if (attempt.status !== "started") return NextResponse.json({ error: "Diese Studierendenfrage wurde nicht als fachliche Frage übernommen." }, { status: 409 });
 
   try {
-    const generated = await generateStudentQuestionExamDraft(lecture, question);
+    const generated = await generateStudentQuestionExamDraft(lecture, question, { deadlineAt: Date.now() + 45_000 });
     if (!generated.supported) {
       await repository.updateStudentExamDraftStatus({
         lectureId: id,

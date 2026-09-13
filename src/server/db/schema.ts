@@ -248,6 +248,13 @@ export const studentExamDraftAttempts = pgTable("student_exam_draft_attempts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull()
 }, (table) => [index("student_exam_draft_attempts_lecture_created_idx").on(table.lectureId, table.createdAt)]);
 
+export const studentChatQuestionAttempts = pgTable("student_chat_question_attempts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  studentProfileId: uuid("student_profile_id").references(() => studentProfiles.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [index("student_chat_question_attempts_profile_lecture_created_idx").on(table.studentProfileId, table.lectureId, table.createdAt)]);
+
 export const transcriptSegments = pgTable("transcript_segments", {
   id: uuid("id").defaultRandom().primaryKey(),
   lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),

@@ -4,7 +4,7 @@ import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import type { LiveAnswerReceipt, LiveCommand, LiveSessionView } from "@/lib/live-session";
 import type { Lecture, QuestionLevel, QuestionVariant } from "@/lib/types";
 import { getDb } from "./db/client";
-import { analyticsEvents, lectureSeries, lectures, liveAnswers, liveSessions, participantSessions, questionReviewItems, studentChatQuestions, studentEnrollments, studentProfiles, users } from "./db/schema";
+import { analyticsEvents, lectureSeries, lectures, liveAnswers, liveSessions, participantSessions, questionReviewItems, questionVariants, questions, slides, studentChatQuestions, studentEnrollments, studentProfiles, users } from "./db/schema";
 import { rankingDisplayName } from "./student-claims";
 import { isIdempotentlyPublishedStudentDraft } from "./student-exam-draft-state";
 
@@ -44,6 +44,37 @@ function validatedDraftQuestions(value: unknown): QuestionVariant[] {
     throw new LiveSessionError(409, "Die vier Fragen müssen unterschiedlich sein.");
   }
   return variants as unknown as QuestionVariant[];
+}
+
+async function archivePublishedStudentQuestionFamily(tx: Transaction, lectureId: string, questionId: string, variants: QuestionVariant[]) {
+  const source = `student_question:${questionId}`;
+  const [existing] = await tx.select({ id: questions.id }).from(questions).where(and(
+    eq(questions.lectureId, lectureId),
+    eq(questions.source, source)
+  )).limit(1);
+  if (existing) return;
+
+  let slideId: string | null = null;
+  const candidateSlideId = variants[0]?.slideId;
+  if (candidateSlideId) {
+    const [slide] = await tx.select({ id: slides.id }).from(slides).where(and(
+      eq(slides.id, candidateSlideId),
+      eq(slides.lectureId, lectureId)
+    )).limit(1);
+    slideId = slide?.id ?? null;
+  }
+
+  const [family] = await tx.insert(questions).values({ lectureId, slideId, source }).returning({ id: questions.id });
+  await tx.insert(questionVariants).values(variants.map((variant) => ({
+    questionId: family.id,
+    level: variant.level,
+    points: variant.points,
+    text: variant.text,
+    answersJson: variant.answers,
+    correctAnswerKey: variant.answers.find((answer) => answer.correct)?.key ?? "A",
+    explanation: variant.explanation,
+    promptVersion: variant.promptVersion ?? "unknown"
+  })));
 }
 
 async function databaseNow(db: Transaction | ReturnType<typeof getDb>) {
@@ -126,6 +157,7 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
         throw new LiveSessionError(409, "Der Entwurf wurde abgelehnt oder ist nicht mehr verfügbar.");
       }
       const questions = validatedDraftQuestions(draft.variantsJson);
+      await archivePublishedStudentQuestionFamily(tx, lecture.id, command.questionId, questions);
       const roundId = randomUUID();
       update.round = { id: roundId, expiresAt: now + 60_000, questions };
       await tx.update(studentChatQuestions).set({ examDraftStatus: "published", examDraftError: null, examDraftRoundId: roundId, examDraftAttemptId: null })

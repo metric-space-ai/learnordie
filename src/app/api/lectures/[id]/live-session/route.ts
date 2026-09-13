@@ -33,10 +33,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     // Also enforce ownership at the database boundary (public token is not teacher authority).
     const context = await liveLecture(lecture.publicToken, session.email);
     await commandLiveSession(lecture, parsed.data);
-    if (parsed.data.action === "publishDraft") {
-      const archived = await repository.archivePublishedStudentExamDraft(id, parsed.data.questionId, session.email);
-      if (!archived) return liveJson({ error: "Der veröffentlichte Entwurf konnte nicht archiviert werden." }, 503);
-    }
     return liveJson(await readLiveSession(context, null, false));
   } catch (error) { return liveError(error); }
 }

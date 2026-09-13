@@ -73,6 +73,7 @@ const STORE_PATH = path.join(process.cwd(), ".data", "learnbuddy-local.json");
 type LocalStoreData = {
   lectures: Lecture[];
   studentExamDraftAttempts?: Array<{ id: string; lectureId: string; chatQuestionId: string; createdAt: string }>;
+  studentChatQuestionAttempts?: Array<{ id: string; lectureId: string; studentProfileId: string; createdAt: string }>;
   seriesEvaluationTemplates?: Record<string, Lecture["evaluationConfig"]>;
   seriesAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
   tenantAiBudgets?: Record<string, { aiDailyLimit: number; aiDailyTokenLimit: number }>;
@@ -343,6 +344,7 @@ async function readStore() {
     };
   });
   data.studentExamDraftAttempts ??= [];
+  data.studentChatQuestionAttempts ??= [];
   applyLocalSeriesBudgets(data);
   applyLocalTenantBudgets(data);
   if (seedQaLectures(data)) {
@@ -885,6 +887,31 @@ export class LocalLectureStore {
       item.anonymousKey === input.anonymousKey &&
       Date.parse(item.createdAt) >= sinceMs
     )).length;
+  }
+
+  async reserveStudentChatQuestionAttempt(input: { lectureToken: string; studentProfileId: string; now: Date; since: Date; maxAttempts: number }) {
+    return withStudentDraftOperation(async () => {
+      const store = await readStore();
+      const lecture = store.lectures.find((item) => item.publicToken === input.lectureToken);
+      if (!lecture) return null;
+
+      const attempts = store.studentChatQuestionAttempts ?? [];
+      const retained = attempts.filter((attempt) => Date.parse(attempt.createdAt) >= input.now.getTime() - 24 * 60 * 60 * 1000);
+      store.studentChatQuestionAttempts = retained;
+      const countInWindow = retained.filter((attempt) => (
+        attempt.lectureId === lecture.id &&
+        attempt.studentProfileId === input.studentProfileId &&
+        Date.parse(attempt.createdAt) >= input.since.getTime()
+      )).length;
+      if (countInWindow >= input.maxAttempts) {
+        await writeStore(store);
+        return "rate_limited" as const;
+      }
+
+      retained.push({ id: crypto.randomUUID(), lectureId: lecture.id, studentProfileId: input.studentProfileId, createdAt: input.now.toISOString() });
+      await writeStore(store);
+      return "reserved" as const;
+    });
   }
 
   async moderateStudentChatQuestion(input: { lectureId: string; chatQuestionId: string; status: StudentChatQuestion["status"]; actor?: string }, ownerEmail?: string) {

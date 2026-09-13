@@ -72,6 +72,16 @@ export type CountRecentStudentChatQuestionsInput = {
   since: Date;
 };
 
+export type ReserveStudentChatQuestionAttemptInput = {
+  lectureToken: string;
+  studentProfileId: string;
+  now: Date;
+  since: Date;
+  maxAttempts: number;
+};
+
+export type ReserveStudentChatQuestionAttemptResult = "reserved" | "rate_limited" | null;
+
 export type ModerateChatQuestionInput = {
   lectureId: string;
   chatQuestionId: string;
@@ -216,6 +226,7 @@ export interface LectureRepository {
   appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string): Promise<(Lecture & { appendedFamilyId: string }) | null>;
   enqueueMaterialProcessingRun?(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
   countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput): Promise<number | null>;
+  reserveStudentChatQuestionAttempt(input: ReserveStudentChatQuestionAttemptInput): Promise<ReserveStudentChatQuestionAttemptResult>;
   submitStudentChatQuestion(input: SubmitChatQuestionInput): Promise<StudentChatQuestion | null>;
   updateStudentExamDraftStatus(input: UpdateStudentExamDraftStatusInput, ownerEmail?: string): Promise<Lecture | null>;
   beginStudentExamDraftAttempt(input: BeginStudentExamDraftAttemptInput, ownerEmail?: string): Promise<BeginStudentExamDraftAttemptResult>;
@@ -278,6 +289,10 @@ class LocalJsonLectureRepository implements LectureRepository {
 
   async countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput) {
     return this.store.countRecentStudentChatQuestions(input);
+  }
+
+  async reserveStudentChatQuestionAttempt(input: ReserveStudentChatQuestionAttemptInput) {
+    return this.store.reserveStudentChatQuestionAttempt(input);
   }
 
   async submitStudentChatQuestion(input: SubmitChatQuestionInput) {

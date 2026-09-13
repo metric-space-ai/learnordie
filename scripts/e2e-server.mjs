@@ -9,11 +9,14 @@ import postgres from "postgres";
 
 const DEFAULT_DATABASE_URL = "postgres://michaelwelsch@127.0.0.1:55432/learnordie_e2e_smoke";
 const databaseUrl = process.env.E2E_DATABASE_URL || DEFAULT_DATABASE_URL;
+const preserveDatabase = process.env.E2E_PRESERVE_DATABASE === "1";
+const skipMigrations = process.env.E2E_SKIP_MIGRATIONS === "1";
 const host = process.env.E2E_HOST || "127.0.0.1";
 const port = process.env.E2E_PORT || "3070";
 const aiMockPort = process.env.E2E_AI_MOCK_PORT || "4070";
 const appUrl = process.env.E2E_BASE_URL || `http://${host}:${port}`;
 const ownerEmail = process.env.E2E_OWNER_EMAIL || "e2e@example.test";
+const useResponsesMock = process.env.E2E_AI_PROVIDER === "learnordie-responses";
 // Known credentials are confined to this isolated, resettable E2E server.
 const testAccountPassword = "e2e-only-test-password-not-for-production";
 const testAccountSalt = "f05d29175788acd8a4a8e4d65544f00f";
@@ -24,6 +27,7 @@ const testAccounts = ["qa-qr", "qa-other", "qa-rate", "qa-rate-retry", "qa-canva
 }));
 const rootDir = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 let aiMockServer;
+let aiMockStats = { moderationRequests: 0, studentDraftRequests: 0 };
 
 const HELP_TEXT = `
 Usage: node scripts/e2e-server.mjs
@@ -32,10 +36,14 @@ Starts the isolated learnordie.app E2E server: resets the E2E database, migrates
 
 Environment:
   E2E_DATABASE_URL                  E2E Postgres URL. Defaults to learnordie_e2e_smoke.
+  E2E_PRESERVE_DATABASE=1           Do not drop/recreate the configured database.
+  E2E_SKIP_MIGRATIONS=1             Skip db:migrate; requires a pre-provisioned isolated E2E schema.
   E2E_HOST                          Host for app and mock servers. Defaults to 127.0.0.1.
   E2E_PORT                          App port. Defaults to 3070.
   E2E_BASE_URL                      Public app URL passed to Next.js.
   E2E_AI_MOCK_PORT                  AI/OCR mock port. Defaults to 4070.
+  E2E_AI_PROVIDER                   Optional isolated provider fixture: learnordie-responses.
+  E2E_STUDENT_DRAFT_DELAY_MS         Delay only student exam-draft mock responses.
   E2E_OWNER_EMAIL                   Seeded lecturer owner email.
 
 Options:
@@ -82,10 +90,10 @@ function e2eEnv(extra = {}) {
     LEARNBUDDY_REPOSITORY: "postgres",
     LEARNBUDDY_AUTO_SEED: "0",
     LEARNBUDDY_MAIL_PROVIDER: "console",
-    LEARNBUDDY_AI_PROVIDER: "openai-compatible",
-    LEARNBUDDY_AI_BASE_URL: `http://${host}:${aiMockPort}`,
+    LEARNBUDDY_AI_PROVIDER: useResponsesMock ? "learnordie-responses" : "openai-compatible",
+    LEARNBUDDY_AI_BASE_URL: useResponsesMock ? `http://${host}:${aiMockPort}/v1/responses` : `http://${host}:${aiMockPort}`,
     LEARNBUDDY_AI_API_KEY: "e2e-ai-token",
-    LEARNBUDDY_AI_MODEL: "mock-e2e-chat",
+    LEARNBUDDY_AI_MODEL: useResponsesMock ? "MiniMax-M3" : "mock-e2e-chat",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
     LEARNBUDDY_CHAT_MODERATION_PROVIDER: "ai",
@@ -196,6 +204,60 @@ function mockQuestionGeneratorAnswer() {
           { text: "Das Lagerspiel ohne Auslegung beliebig verkleinern.", correct: false }
         ],
         explanation: "Auf 1.0-Niveau wird das Prinzip auf einen neuen technischen Startfall übertragen."
+      }
+    ]
+  });
+}
+
+function mockStudentExamDraftAnswer() {
+  return JSON.stringify({
+    supported: true,
+    topic: "hydrodynamischer Schmierfilm",
+    coreStatement: "Relativbewegung und ein keilförmiger Spalt bauen einen tragenden Schmierfilm auf.",
+    variants: [
+      {
+        level: "4.0",
+        text: "Welche Schicht trägt die Last im hydrodynamischen Gleitlager?",
+        answers: [
+          { text: "Der durch Relativbewegung aufgebaute Schmierfilm.", correct: true },
+          { text: "Ein dauerhafter direkter Kontakt der Festkörperflächen.", correct: false },
+          { text: "Die Passfeder zwischen Welle und Nabe.", correct: false },
+          { text: "Eine trockene Lagerstelle ohne Schmierstoff.", correct: false }
+        ],
+        explanation: "Der tragende Schmierfilm trennt die Flächen und überträgt die Lagerlast."
+      },
+      {
+        level: "3.0",
+        text: "Wie erzeugt Relativbewegung im keilförmigen Spalt tragenden Druck?",
+        answers: [
+          { text: "Sie fördert Schmierstoff in den enger werdenden Spalt.", correct: true },
+          { text: "Sie entfernt den Schmierstoff vollständig aus dem Lager.", correct: false },
+          { text: "Sie hält beide Oberflächen während jeder Phase in Kontakt.", correct: false },
+          { text: "Sie macht den Spalt unabhängig von seiner Geometrie.", correct: false }
+        ],
+        explanation: "Der enger werdende Spalt erzeugt im mitgeführten Schmierstoff einen Druckanstieg."
+      },
+      {
+        level: "2.0",
+        text: "Ein belastetes Gleitlager startet aus dem Stillstand. Warum besteht zunächst Mischreibung?",
+        answers: [
+          { text: "Der tragende Schmierfilm ist noch nicht vollständig aufgebaut.", correct: true },
+          { text: "Die Welle hat beim Stillstand bereits ihre höchste Drehzahl.", correct: false },
+          { text: "Der Schmierstoff kann bei jeder Geschwindigkeit keinen Druck tragen.", correct: false },
+          { text: "Die Lagerflächen sind durch den Schmierfilm sofort vollständig getrennt.", correct: false }
+        ],
+        explanation: "Vor ausreichender Relativbewegung tragen Schmierfilm und Oberflächenkontakt gemeinsam."
+      },
+      {
+        level: "1.0",
+        text: "Eine Welle startet häufig unter hoher Last. Welche Maßnahme senkt den Verschleiß beim Anfahren?",
+        answers: [
+          { text: "Die Startlast senken oder den Schmierfilm vorab versorgen.", correct: true },
+          { text: "Den Schmierstoff vor jedem Start aus dem Lager entfernen.", correct: false },
+          { text: "Das Lagerspiel ohne Auslegung beliebig verkleinern.", correct: false },
+          { text: "Die Welle während des Starts dauerhaft stillsetzen.", correct: false }
+        ],
+        explanation: "Weniger Last oder zusätzliche Schmierung hilft während des noch unvollständigen Filmaufbaus."
       }
     ]
   });
@@ -324,7 +386,38 @@ function mockOCRAnswer(payload) {
 
 function startAIProviderMock() {
   if (process.env.E2E_AI_MOCK === "0") return Promise.resolve();
+  aiMockStats = { moderationRequests: 0, studentDraftRequests: 0 };
   aiMockServer = createServer(async (request, response) => {
+    if (request.method === "GET" && request.url === "/__test/stats") {
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      response.end(JSON.stringify(aiMockStats));
+      return;
+    }
+
+    if (request.method === "POST" && request.url?.endsWith("/v1/responses")) {
+      const body = await readRequestBody(request);
+      const payload = JSON.parse(body || "{}");
+      const prompt = typeof payload.input === "string" ? payload.input : "";
+      let output;
+      if (prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")) {
+        aiMockStats.moderationRequests += 1;
+        output = mockModerationAnswer(prompt);
+      } else if (prompt.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")) {
+        aiMockStats.studentDraftRequests += 1;
+        const delayMs = Number(process.env.E2E_STUDENT_DRAFT_DELAY_MS);
+        const delayMarker = process.env.E2E_STUDENT_DRAFT_DELAY_MARKER;
+        if (Number.isFinite(delayMs) && delayMs > 0 && (!delayMarker || prompt.includes(delayMarker))) {
+          await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, 60_000)));
+        }
+        output = mockStudentExamDraftAnswer();
+      } else {
+        output = mockChatAnswer(prompt);
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ output_text: output, usage: { input_tokens: 21, output_tokens: 13, total_tokens: 34 } }));
+      return;
+    }
+
     if (request.method === "POST" && request.url?.endsWith("/v1/ocr")) {
       const body = await readRequestBody(request);
       const payload = JSON.parse(body || "{}");
@@ -361,9 +454,21 @@ function startAIProviderMock() {
     const prompt = messages
       .map((message) => typeof message?.content === "string" ? message.content : "")
       .join("\n");
-    const content = prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")
-      ? mockModerationAnswer(prompt)
-      : mockChatAnswer(prompt);
+    let content;
+    if (prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")) {
+      aiMockStats.moderationRequests += 1;
+      content = mockModerationAnswer(prompt);
+    } else if (prompt.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")) {
+      aiMockStats.studentDraftRequests += 1;
+      const delayMs = Number(process.env.E2E_STUDENT_DRAFT_DELAY_MS);
+      const delayMarker = process.env.E2E_STUDENT_DRAFT_DELAY_MARKER;
+      if (Number.isFinite(delayMs) && delayMs > 0 && (!delayMarker || prompt.includes(delayMarker))) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, 60_000)));
+      }
+      content = mockStudentExamDraftAnswer();
+    } else {
+      content = mockChatAnswer(prompt);
+    }
 
     if (payload.stream === true) {
       streamMockChatCompletion(response, content);
@@ -406,8 +511,11 @@ async function resetDatabase() {
 
 async function prepare() {
   await mkdir(path.join(rootDir, "output", "e2e-storage"), { recursive: true });
-  await resetDatabase();
-  await run("npm", ["run", "db:migrate"]);
+  if (skipMigrations && !preserveDatabase) {
+    throw new Error("E2E_SKIP_MIGRATIONS=1 requires E2E_PRESERVE_DATABASE=1.");
+  }
+  if (!preserveDatabase) await resetDatabase();
+  if (!skipMigrations) await run("npm", ["run", "db:migrate"]);
   await run("npm", ["run", "admin", "--", "seed-demo", "--owner", ownerEmail]);
 }
 

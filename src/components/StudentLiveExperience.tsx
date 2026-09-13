@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { seriesIdForLecture } from "@/lib/series";
-import { claimSeriesDisplayName, ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
+import { claimSeriesDisplayName, ensureStudentEnrollment } from "@/lib/student-client";
 import type { LiveAnswerReceipt } from "@/lib/live-session";
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
@@ -117,7 +117,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
     try {
       await enrollment();
       const response = await fetch(`/api/lecture/${lecture.publicToken}/chat-questions`, { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: chatText.trim(), pseudonym, anonymousKey: getOrCreateStudentKey() }), signal: AbortSignal.timeout(15000) });
+        body: JSON.stringify({ text: chatText.trim(), pseudonym }), signal: AbortSignal.timeout(15000) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht gesendet werden.");
       setChatText("");

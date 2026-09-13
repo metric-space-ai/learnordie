@@ -5,7 +5,7 @@ import { PSEUDONYM_MAX_LENGTH, validateClaimablePseudonym } from "@/lib/student-
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { readJsonBody } from "@/server/request-json";
 import { getStudentRepository } from "@/server/student-repository";
-import { getCurrentStudentProfile, isValidAnonymousKey, setStudentCookie, toPublicProfile } from "@/server/student-session";
+import { getCurrentStudentProfile, getStudentAnonymousKey, isValidAnonymousKey, setStudentCookie, toPublicProfile } from "@/server/student-session";
 
 const MAX_PROFILE_BYTES = 4 * 1024;
 
@@ -36,8 +36,11 @@ export async function POST(request: Request) {
   }
 
   const repository = getStudentRepository();
-  const existing = await repository.getProfileByAnonymousKey(parsed.data.anonymousKey);
-  const profile = await repository.getOrCreateStudentProfile(parsed.data);
+  // The browser key bootstraps a profile only before a cookie identity exists.
+  // Once established, an arbitrary request body must not rotate server identity.
+  const anonymousKey = (await getStudentAnonymousKey()) ?? parsed.data.anonymousKey;
+  const existing = await repository.getProfileByAnonymousKey(anonymousKey);
+  const profile = await repository.getOrCreateStudentProfile({ ...parsed.data, anonymousKey });
   await setStudentCookie(profile.anonymousKey);
 
   if (!existing) {

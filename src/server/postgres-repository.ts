@@ -92,7 +92,9 @@ import {
   standaloneExportJobs,
   standaloneExports,
   studentChatQuestions,
+  studentChatQuestionAttempts,
   studentExamDraftAttempts,
+  studentProfiles,
   transcriptSegments,
   users
 } from "./db/schema";
@@ -1326,8 +1328,9 @@ export class PostgresLectureRepository implements LectureRepository {
     await this.ensureSeeded();
     if (!await this.getLectureById(input.lectureId, ownerEmail)) return { status: "not_found" };
     return this.db.transaction(async (tx) => {
-      // Serialize the lecture-wide budget and this question's claim together.
-      await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, input.lectureId)).for("update");
+      // Parent-first with NO KEY UPDATE: serialize the lecture-wide budget while
+      // remaining compatible with KEY SHARE locks taken by foreign-key checks.
+      await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, input.lectureId)).for("no key update");
       const [question] = await tx.select().from(studentChatQuestions).where(and(
         eq(studentChatQuestions.id, input.chatQuestionId),
         eq(studentChatQuestions.lectureId, input.lectureId)
@@ -1386,6 +1389,9 @@ export class PostgresLectureRepository implements LectureRepository {
     await this.ensureSeeded();
     if (!await this.getLectureById(input.lectureId, ownerEmail)) return null;
     await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, input.lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
       const [question] = await tx.select().from(studentChatQuestions).where(and(
         eq(studentChatQuestions.id, input.chatQuestionId),
         eq(studentChatQuestions.lectureId, input.lectureId)
@@ -1429,6 +1435,9 @@ export class PostgresLectureRepository implements LectureRepository {
     const lecture = await this.getLectureById(input.lectureId, ownerEmail);
     if (!lecture) return null;
     const saved = await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, input.lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return false;
       const [question] = await tx.select().from(studentChatQuestions).where(and(
         eq(studentChatQuestions.id, input.chatQuestionId),
         eq(studentChatQuestions.lectureId, input.lectureId)
@@ -1476,6 +1485,9 @@ export class PostgresLectureRepository implements LectureRepository {
     await this.ensureSeeded();
     if (!await this.getLectureById(lectureId, ownerEmail)) return null;
     const archived = await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return false;
       const [question] = await tx.select().from(studentChatQuestions).where(and(
         eq(studentChatQuestions.id, chatQuestionId),
         eq(studentChatQuestions.lectureId, lectureId)
@@ -1540,12 +1552,51 @@ export class PostgresLectureRepository implements LectureRepository {
     return result?.value ?? 0;
   }
 
+  async reserveStudentChatQuestionAttempt(input: { lectureToken: string; studentProfileId: string; now: Date; since: Date; maxAttempts: number }) {
+    await this.ensureSeeded();
+    const [lecture] = await this.db.select({ id: lectures.id })
+      .from(lectures)
+      .where(eq(lectures.publicToken, input.lectureToken))
+      .limit(1);
+    if (!lecture) return null;
+
+    return this.db.transaction(async (tx) => {
+      const [profile] = await tx.select({ id: studentProfiles.id })
+        .from(studentProfiles)
+        .where(eq(studentProfiles.id, input.studentProfileId))
+        .for("update")
+        .limit(1);
+      if (!profile) return null;
+
+      await tx.delete(studentChatQuestionAttempts).where(and(
+        eq(studentChatQuestionAttempts.studentProfileId, input.studentProfileId),
+        lt(studentChatQuestionAttempts.createdAt, new Date(input.now.getTime() - 24 * 60 * 60 * 1000))
+      ));
+      const [attemptCount] = await tx.select({ count: count() }).from(studentChatQuestionAttempts).where(and(
+        eq(studentChatQuestionAttempts.lectureId, lecture.id),
+        eq(studentChatQuestionAttempts.studentProfileId, input.studentProfileId),
+        gte(studentChatQuestionAttempts.createdAt, input.since)
+      ));
+      if (Number(attemptCount?.count ?? 0) >= input.maxAttempts) return "rate_limited" as const;
+
+      await tx.insert(studentChatQuestionAttempts).values({
+        lectureId: lecture.id,
+        studentProfileId: input.studentProfileId,
+        createdAt: input.now
+      });
+      return "reserved" as const;
+    });
+  }
+
   async moderateStudentChatQuestion(input: ModerateChatQuestionInput, ownerEmail?: string) {
     await this.ensureSeeded();
     const lecture = await this.getLectureById(input.lectureId, ownerEmail);
     if (!lecture) return null;
 
     await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, input.lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
       const [existing] = await tx
         .select()
         .from(studentChatQuestions)
@@ -2137,6 +2188,9 @@ export class PostgresLectureRepository implements LectureRepository {
     const lecture = await this.getLectureById(lectureId, ownerEmail);
     if (!lecture) return null;
     await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
       const [candidate] = await tx
         .select()
         .from(questionReviewItems)
@@ -2149,6 +2203,7 @@ export class PostgresLectureRepository implements LectureRepository {
           eq(studentChatQuestions.id, candidate.sourceStudentQuestionId),
           eq(studentChatQuestions.lectureId, lectureId)
         )).for("update").limit(1);
+        if (sourceQuestion?.examDraftStatus === "published") return;
         if (decision === "rejected" && sourceQuestion && !studentExamDraftMayBeRejected({
           questionStatus: coerceChatQuestionStatus(sourceQuestion.status),
           draftStatus: sourceQuestion.examDraftStatus,
@@ -2183,7 +2238,10 @@ export class PostgresLectureRepository implements LectureRepository {
       }
 
       if (decision === "approved") {
-        await this.upsertQuestionFamilyInTransaction(tx, lectureId, decidedVariants, review.sourceTitle);
+        const source = review.sourceStudentQuestionId
+          ? `student_question:${review.sourceStudentQuestionId}`
+          : review.sourceTitle;
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, decidedVariants, source);
         await tx.update(lectures).set({ status: "ready_for_live" }).where(eq(lectures.id, lectureId));
         return;
       }
@@ -2203,10 +2261,14 @@ export class PostgresLectureRepository implements LectureRepository {
     const lecture = await this.getLectureById(lectureId, ownerEmail);
     if (!lecture) return null;
     await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
       const [review] = await tx
         .select()
         .from(questionReviewItems)
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)))
+        .for("update")
         .limit(1);
 
       if (!review) return;
@@ -2223,7 +2285,10 @@ export class PostgresLectureRepository implements LectureRepository {
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
       if (review.status === "approved") {
-        await this.upsertQuestionFamilyInTransaction(tx, lectureId, nextVariants, review.sourceTitle);
+        const source = review.sourceStudentQuestionId
+          ? `student_question:${review.sourceStudentQuestionId}`
+          : review.sourceTitle;
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, nextVariants, source);
       }
     });
 
