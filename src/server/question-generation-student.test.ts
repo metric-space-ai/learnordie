@@ -78,11 +78,11 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
     complete: async (input: { system: string; user: string }) => {
       if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
         reviews.push(input);
-        const { sources, candidates } = JSON.parse(input.user) as { sources: string[]; candidates: Array<{level: string;text: string;answers: unknown[];explanation: string}> };
+        const { sources, candidates } = JSON.parse(input.user) as { sources: Array<{id:string;text:string}>; candidates: Array<{level: string;text: string;answers: unknown[];explanation: string}> };
         assert.deepEqual(candidates.map(candidate => candidate.level), levels);
         assert.ok(candidates.every(candidate => candidate.text && candidate.answers.length === 4 && candidate.explanation));
         assert.ok(sources.length > 0);
-        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: levels.map(level => ({ level, approved: true, sourceQuote: sources[0].slice(0, 80), reason: "Testbeleg" })) }) };
+        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: levels.map(level => ({ level, approved: true, sourceIds: [sources[0].id], reason: "Testbeleg" })) }) };
       }
       requests.push(input);
       return { answer: answers.shift() ?? JSON.stringify(validPayload()) };
@@ -126,7 +126,7 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   }
   assert.equal(requests.length, 1);
   assert.equal(reviews.length, 1, "student drafts must pass a separate source review before approval");
-  assert.ok((JSON.parse(reviews[0].user) as { sources: string[] }).sources.includes(input().latestTranscript));
+  assert.ok((JSON.parse(reviews[0].user) as { sources: Array<{text:string}> }).sources.some(source => source.text === input().latestTranscript));
   assert.match(requests[0].system, /niemals Anweisungen/);
   assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
   assert.match(requests[0].user + requests[0].system, /Keine Scherzantworten/);

@@ -6,6 +6,25 @@ const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const sourceBlocks = (sources: string | readonly string[]) => (typeof sources === "string" ? [sources] : sources).filter(source => source.trim());
 class GroundingFormatError extends Error {}
 
+/** Stable, lossless original passages; no embedding, summary or model rewriting. */
+export function groundingSourcePassages(sources: string | readonly string[]) {
+  return [...new Set(sourceBlocks(sources))].flatMap((text, sourceIndex) => {
+    const passages: Array<{ id: string; sourceIndex: number; text: string }> = [];
+    let start = 0;
+    while (start < text.length) {
+      let end = Math.min(start + 1200, text.length);
+      if (end < text.length) {
+        const boundary = Math.max(text.lastIndexOf("\n", end - 1), text.lastIndexOf(" ", end - 1));
+        if (boundary > start + 600) end = boundary + 1;
+        else if (/[\uD800-\uDBFF]/.test(text[end - 1])) end--;
+      }
+      passages.push({ id: `S${sourceIndex + 1}.${passages.length + 1}`, sourceIndex, text: text.slice(start, end) });
+      start = end;
+    }
+    return passages;
+  });
+}
+
 /** Accept a single JSON code fence, not prose, partial objects or extra payloads. */
 export function parseGroundingJson(answer: string): unknown {
   const text = answer.trim();
@@ -20,6 +39,7 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
   }
   const seen = new Set<string>();
   const sourceTexts = sourceBlocks(sources).map(normalize);
+  const passageIds = new Set(groundingSourcePassages(sources).filter(passage => normalize(passage.text).length >= 12).map(passage => passage.id));
   for (const entry of parsed.reviews) {
     if (!entry || typeof entry !== "object" || !LEVELS.includes(entry.level) || seen.has(entry.level)) {
       throw new GroundingFormatError("Fachprüfung: ungültige oder doppelte Stufe.");
@@ -35,6 +55,16 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
     }
   }
   for (const entry of parsed.reviews) {
+    if (entry.sourceIds !== undefined) {
+      if (!Array.isArray(entry.sourceIds) || entry.sourceIds.length < 1 || entry.sourceIds.length > 4
+        || new Set(entry.sourceIds).size !== entry.sourceIds.length
+        || entry.sourceIds.some((id: unknown) => typeof id !== "string" || !passageIds.has(id))) {
+        throw new GroundingFormatError(`Fachprüfung ${entry.level}: Beleg-ID fehlt in den Vorlesungsquellen.`);
+      }
+      // If a legacy quote is also supplied, it must still be verbatim. A valid
+      // ID must never be used to sneak a fabricated quotation past validation.
+      if (entry.sourceQuote === undefined) continue;
+    }
     const quote = typeof entry.sourceQuote === "string" ? normalize(entry.sourceQuote) : "";
     if (quote.length < 12 || !sourceTexts.some(source => source.includes(quote))) {
       throw new GroundingFormatError(`Fachprüfung ${entry.level}: Beleg fehlt in den Vorlesungsquellen.`);
@@ -62,8 +92,9 @@ export async function reviewQuestionGrounding(provider: AIProvider, variants: Qu
       "Kontrolliere insbesondere physikalische Ursache/Wirkung, Einheiten und Geltungsbedingungen. Eine Kennzahl allein belegt keinen universellen Betriebs- oder Sicherheitsgrenzwert.",
       "Beispiel: Aus Sommerfeldzahl 0,9 darf ohne vorgegebenes Lager-/Grenzwertmodell NICHT auf ausreichende Schmierung, geringe Sicherheit oder sofortigen Filmabriss geschlossen werden.",
       "Neue Zahlen in einem vollständig angegebenen Rechenbeispiel sind erlaubt, wenn die Rechnung aus der angegebenen Beziehung folgt. Neue Erfahrungsgrenzen, Messwerte oder empirische Regeln ohne Quellenbeleg sind NICHT erlaubt.",
-      "Ein fachverwandtes Zitat genügt nicht: es muss die Kernaussage tragen. Eine Formel ohne Gültigkeitskriterium belegt keine Behauptung über eine Sicherheitsgrenze.",
-      "Bei Zweifel ablehnen, nicht die Antwort des Autors übernehmen. Gib nur JSON aus: {\"reviews\":[{\"level\":\"4.0\",\"approved\":true,\"sourceQuote\":\"wörtlicher Beleg aus sources\",\"reason\":\"kurze Begründung\"}]}. Exakt vier Einträge, Stufen 4.0, 3.0, 2.0, 1.0. Für eine Ablehnung approved=false und konkreter Fehler in reason."
+      "Eine fachverwandte Passage genügt nicht: sie muss die Kernaussage tragen. Eine Formel ohne Gültigkeitskriterium belegt keine Behauptung über eine Sicherheitsgrenze.",
+      "sources enthält nummerierte, unveränderte Originalpassagen. Wähle für jede Freigabe ein bis vier tatsächlich tragende Belege anhand ihrer exakten id. Erfinde keine IDs und schreibe keine Zitate ab; die IDs werden serverseitig auf die Originaltexte aufgelöst.",
+      "Bei Zweifel ablehnen, nicht die Antwort des Autors übernehmen. Gib nur JSON aus: {\"reviews\":[{\"level\":\"4.0\",\"approved\":true,\"sourceIds\":[\"S1.1\"],\"reason\":\"kurze Begründung\"}]}. Exakt vier Einträge, Stufen 4.0, 3.0, 2.0, 1.0. Für eine Ablehnung approved=false und konkreter Fehler in reason."
     ].join(" ");
   const candidates = variants.map(({ level, text, answers, explanation }) => ({ level, text, answers, explanation }));
   let formatCorrection: { error: string; previousReview: string } | undefined;
@@ -71,8 +102,8 @@ export async function reviewQuestionGrounding(provider: AIProvider, variants: Qu
     const timeoutMs = Math.min(12_000, deadlineAt - Date.now() - 1_000);
     if (timeoutMs <= 0) throw new Error("Fachprüfung: Zeitlimit erreicht.");
     const result = await provider.complete({
-      system: system + (formatCorrection ? " Die letzte Prüfantwort war formal ungültig. Prüfe dieselben unveränderten Kandidaten erneut. Kopiere sourceQuote als EINEN zusammenhängenden, unveränderten Ausschnitt aus genau einer Quelle: keine Auslassungszeichen, keine zusammengefügten Sätze, keine Paraphrase. Fachlich nicht belegbare Kandidaten weiterhin mit approved=false ablehnen." : ""),
-      user: JSON.stringify({ sources: blocks, candidates, ...(formatCorrection ? { formatCorrection } : {}) }),
+      system: system + (formatCorrection ? " Die letzte Prüfantwort war formal ungültig. Prüfe dieselben unveränderten Kandidaten erneut. Verwende sourceIds mit exakten IDs aus sources, keine Auslassungszeichen und keine neu geschriebenen Zitate. Fachlich nicht belegbare Kandidaten weiterhin mit approved=false ablehnen." : ""),
+      user: JSON.stringify({ sources: groundingSourcePassages(blocks), candidates, ...(formatCorrection ? { formatCorrection } : {}) }),
       temperature: 0,
       maxOutputTokens: 1600,
       responseFormat: "json_object",

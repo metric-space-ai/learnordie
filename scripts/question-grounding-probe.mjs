@@ -19,6 +19,7 @@ provider.complete = async (input) => {
     const parsed = parseGroundingJson(result.answer);
     reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
       level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
+      sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
       sourceQuote: String(entry?.sourceQuote ?? "").slice(0, 600), reason: String(entry?.reason ?? "").slice(0, 400)
     })) : null });
   } catch { reviewVerdicts.push({ malformedJson: true }); }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseQuestionGroundingReview, reviewQuestionGrounding } from "./question-grounding-review";
+import { groundingSourcePassages, parseQuestionGroundingReview, reviewQuestionGrounding } from "./question-grounding-review";
 import type { AIProvider } from "./providers/ai";
 
 const sources = "Die Eigenfrequenz einer Feder-Masse-Schwingung ist proportional zur Wurzel der Federkonstante bei gleichbleibender Masse.";
@@ -76,11 +76,28 @@ test("citation formatting gets one bounded repair, but a factual refusal is neve
 });
 
 test("long sources never displace the latest passage and over-budget sources fail without a call", async () => {
-  let submitted: { sources: string[] } | undefined;
+  let submitted: { sources: Array<{id:string;sourceIndex:number;text:string}> } | undefined;
   const provider = { complete: async (input: {user:string}) => { submitted = JSON.parse(input.user); return {answer:JSON.stringify(valid())}; } } as unknown as AIProvider;
   await reviewQuestionGrounding(provider, [], ["x".repeat(30_000), sources], Date.now()+2000);
-  assert.deepEqual(submitted?.sources, ["x".repeat(30_000), sources]);
+  assert.equal(submitted?.sources.filter(source => source.sourceIndex === 0).map(source => source.text).join(""), "x".repeat(30_000));
+  assert.equal(submitted?.sources.filter(source => source.sourceIndex === 1).map(source => source.text).join(""), sources);
   submitted=undefined;
   await assert.rejects(reviewQuestionGrounding(provider, [], ["x".repeat(120_001)], Date.now()+2000), /Anfragebudget/);
   assert.equal(submitted, undefined);
+});
+
+test("source IDs resolve losslessly to originals and cannot bypass a refusal or fabricated quote", () => {
+  const original = (sources + "\n").repeat(40);
+  const passages = groundingSourcePassages([original, sources]);
+  assert.equal(passages.filter(p => p.sourceIndex === 0).map(p => p.text).join(""), original);
+  assert.ok(passages.every(p => p.text.length <= 1200));
+  assert.deepEqual(groundingSourcePassages([original, sources]), passages);
+  const reviews = valid().reviews.map(({sourceQuote, ...review}) => ({...review, sourceIds:[passages[0].id]}));
+  assert.doesNotThrow(() => parseQuestionGroundingReview(JSON.stringify({reviews}), [original,sources]));
+  for (const ids of [[], ["S999.1"], [1], [passages[0].id, passages[0].id], passages.slice(0,5).map(p=>p.id)]) {
+    assert.throws(() => parseQuestionGroundingReview(JSON.stringify({reviews:reviews.map(r=>({...r,sourceIds:ids}))}), [original,sources]), /Beleg-ID/);
+  }
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify({reviews:reviews.map(r=>({...r,sourceQuote:"Erfundenes Zitat ohne Beleg"}))}), [original,sources]), /Beleg fehlt/);
+  const refused = reviews.map((r,i)=>({...r,approved:i!==3,reason:"Sachlich falsch"}));
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify({reviews:refused}), [original,sources]), /Fachprüfung 1.0: Sachlich falsch/);
 });
