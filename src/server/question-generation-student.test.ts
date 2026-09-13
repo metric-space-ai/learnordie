@@ -137,6 +137,8 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.ok(requests[0].user.includes(input().transcriptContext));
   assert.ok(requests[0].user.includes(input().latestTranscript));
   assert.match(requests[0].system, /auch früheren Folien/);
+  assert.match(requests[0].system, /hypothetische Fälle und Rechenwerte erlaubt/);
+  assert.match(requests[0].system, /Erfinde keine empirischen Fakten/);
   assert.match(requests[0].user, /Studierendenfrage bestimmt das zu prüfende Thema/);
   const earlierSlide = liveQuestionSlideContext(demoLecture, demoLecture.slides[0].id);
   assert.ok(earlierSlide?.lines.length);
@@ -232,6 +234,14 @@ test("student drafts reject unseen source lookups and dangling references but al
   const domainKnowledge = validPayload();
   domainKnowledge.variants[3].text = "Wie verändert sich die kinetische Energie, wenn sich die Geschwindigkeit eines Körpers verdoppelt?";
   assert.doesNotThrow(() => parseStudentExamDraft(JSON.stringify(domainKnowledge), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }));
+  for (const explanation of ["Laut Abschnitt 1.1 gilt die gezeigte Randbedingung.", "Im Skript wird diese Lösung beschrieben."]) {
+    const dependentExplanation = validPayload();
+    dependentExplanation.variants[0].explanation = explanation;
+    assert.throws(() => parseStudentExamDraft(JSON.stringify(dependentExplanation), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /explanation.*unavailable context/);
+  }
+  const linkedToOwnQuestion = validPayload();
+  linkedToOwnQuestion.variants[0].explanation = "Diese Randbedingung setzt die Auslenkung am Rand auf null und schränkt damit die zulässigen Lösungen ein.";
+  assert.doesNotThrow(() => parseStudentExamDraft(JSON.stringify(linkedToOwnQuestion), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }));
 });
 
 test("invalid M3 output gets one strict repair attempt; unsupported questions stay unpublished", async (t) => {
