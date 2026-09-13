@@ -40,6 +40,7 @@ async function fitsViewport(page: Page, locator: Locator) {
 }
 
 async function panelContract(page: Page, panel: Locator) {
+  await expect(page.locator("body")).toHaveAttribute("data-ui-design", "excalidraw");
   await fitsViewport(page, panel);
   await expect(panel).toHaveCSS("border-radius", "12px");
   await expect(panel).toHaveCSS("font-family", /Learnordie Assistant/);

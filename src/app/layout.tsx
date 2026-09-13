@@ -40,7 +40,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <script id="app-theme-init" dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
-      <body>
+      <body data-ui-design="excalidraw" data-release={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12)}>
         <ThemeProvider>
           {children}
           <aside className="app-theme-control" aria-label="Darstellung">
