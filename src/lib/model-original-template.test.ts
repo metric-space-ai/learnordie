@@ -17,15 +17,13 @@ test("source download and readable original notes require a mocked valid session
     const request = new Request(`https://example.test/api/lectures/model-demo/source${view}`);
     assert.equal((await handleModelOriginalSource(request, async () => null)).status, 401);
     const response = await handleModelOriginalSource(request, async () => ({ email: "reader@example.test" }));
-    assert.equal(response.status, 200);
+    assert.equal(response.status, view ? 303 : 200);
     assert.equal(response.headers.get("cache-control"), "private, no-store");
     const body = await response.text();
     if (!view) assert.equal(body, originalModelCompanion);
     else {
-      assert.match(response.headers.get("content-security-policy")!, /default-src 'none'/);
-      for (const slide of originalModelSlides) assert.ok(body.includes(originalModelText(slide.notes)));
-      assert.ok(body.includes("F.5 Reichweite der Unterlage"));
-      assert.doesNotMatch(body, /<script|reader@example.test|\/Users\//);
+      assert.equal(response.headers.get("location"), "/lecturer/model-original");
+      assert.equal(body, "");
     }
   }
 });

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { buildStandaloneCanvasRuntime } from "../../src/server/standalone-canvas-runtime";
 import { renderStandaloneSlideDocumentHtml } from "../../packages/slide-engine/src/standalone";
 import { legacySlidesToSlideDocument } from "../../packages/slide-engine/src/legacy";
@@ -7,7 +8,7 @@ import { canvasSceneForSlide } from "../../packages/slide-engine/src/excalidraw/
 import type { CanvasElement } from "../../packages/slide-engine/src/excalidraw/canvas-schema";
 
 // Same already-locked PNG decoder used by the QR screenshot regression suite.
-const { PNG } = createRequire(import.meta.url)("pngjs") as { PNG: { sync: { read(bytes: Buffer): { data: Buffer } } } };
+const { PNG } = createRequire(path.resolve("package.json"))("pngjs") as { PNG: { sync: { read(bytes: Buffer): { data: Buffer } } } };
 
 async function offlineHtml(imageData?: string) {
   const document = legacySlidesToSlideDocument([{ id: "offline-native", title: "Native Offline QA", eyebrow: "QA", topic: "Export", copy: ["Stale block must not reappear"], diagram: "bearing" }]);

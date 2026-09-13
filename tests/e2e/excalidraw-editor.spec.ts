@@ -3,6 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { crc32, deflateSync } from "node:zlib";
 import { originalModelCompanion } from "../../src/lib/model-original-source";
+import { toggleStudioPreview } from "./studio-controls";
 
 // These stories run against the real isolated Postgres E2E server. Only its
 // explicitly configured, expiring test account is used; no auth/scene mocks.
@@ -162,10 +163,10 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   await input.fill(revisedText);
   // Text-editing keys belong to the native editor, not slide navigation.
   await input.press("ArrowRight");
-  await expect(page.locator(".studio-stepper span")).toHaveText(`1 / ${lecture.slides.length}`);
+  await expect(page.getByRole("combobox", { name: "Folie auswählen", exact: true })).toHaveValue("0");
   await input.press("Escape");
   await expect(page.locator(".studio-save-status")).toHaveText("Ungespeichert");
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await viewCanvas(page);
   const saved = await save(page, lecture);
   const textElement = firstScene(saved).elements.find((element) => !element.isDeleted && element.type === "text" && element.text === revisedText);
@@ -177,7 +178,7 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   await input.press("Escape");
   await testInfo.attach("native-text-after-reload", { body: await page.screenshot(), contentType: "image/png" });
   await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
-  await expect(page.locator(".studio-stepper span")).toHaveText(`2 / ${lecture.slides.length}`);
+  await expect(page.getByRole("combobox", { name: "Folie auswählen", exact: true })).toHaveValue("1");
   await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
   await nativeEditor(page);
 
@@ -372,6 +373,31 @@ test("native image import persists a real PNG and rejects invalid image bytes wi
   expect(firstScene(await savedLecture(page, lecture.id))).toEqual(saved);
 });
 
+test("original reader renders the complete handout with native formulas, tables and working anchors", async ({ page }, testInfo) => {
+  await page.goto("/lecturer/model-original");
+  await expect(page).toHaveURL(/\/lecturer\/login$/);
+  await login(page);
+  const clean = diagnostics(page);
+  await page.goto("/api/lectures/model-demo/source?view=read");
+  await expect(page).toHaveURL(/\/lecturer\/model-original$/);
+  const handout = page.getByRole("article", { name: "Vollständiges Begleitskript", exact: true });
+  await expect(handout).toContainText("F.5 Reichweite der Unterlage");
+  await expect(handout.locator(".katex-error")).toHaveCount(0);
+  await expect(handout.locator('math[display="block"]')).toHaveCount(61);
+  expect(await handout.locator("table").count()).toBeGreaterThan(0);
+  const missingAnchors = await handout.locator('a[href^="#"]').evaluateAll((links) => links.map((link) => link.getAttribute("href")!).filter((href) => !document.getElementById(decodeURIComponent(href.slice(1)))));
+  expect(missingAnchors).toEqual([]);
+  await page.getByText("Originalnotizen der acht Folien", { exact: true }).click();
+  for (let i = 1; i <= 8; i++) await expect(page.locator(`#slide-${i}`)).toBeVisible();
+  await page.getByText("Originalnotizen der acht Folien", { exact: true }).click();
+  await handout.locator('math[display="block"]').first().scrollIntoViewIfNeeded();
+  await testInfo.attach("original-handout-formulas", { body: await page.screenshot(), contentType: "image/png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await testInfo.attach("original-handout-mobile", { body: await page.screenshot(), contentType: "image/png" });
+  clean();
+});
+
 test("the original companion downloads through the browser without changing a byte", async ({ page }) => {
   await login(page);
   await page.getByLabel("Studio-Menü", { exact: true }).click();
@@ -409,7 +435,7 @@ test("HTML/CSS embeds persist but scripts, parent DOM access, forms and external
   // preview remount repairs missing native defaults.
   await expect(page.locator("iframe.learnordie-canvas-html")).toBeVisible();
   await expect(page.frameLocator("iframe.learnordie-canvas-html").getByRole("heading", { name: "Native HTML Probe" })).toBeVisible();
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await viewCanvas(page);
   const assertHtml = async (target: Page) => {
     const iframe = target.locator("iframe.learnordie-canvas-html");
@@ -427,7 +453,7 @@ test("HTML/CSS embeds persist but scripts, parent DOM access, forms and external
   })]));
   await page.reload();
   await selectLecture(page, lecture);
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await assertHtml(page);
   await testInfo.attach("native-html-isolated", { body: await page.screenshot(), contentType: "image/png" });
   const context = await browser.newContext();
@@ -456,7 +482,7 @@ test("three.js embeds are real WebGL, independently interactive and survive save
   await page.getByLabel("3D-Szene auswählen", { exact: true }).selectOption("modell.morph");
   await page.getByRole("button", { name: "3D-Szene einfügen", exact: true }).click();
   await expect(page.locator('.learnordie-canvas-scene [data-scene-id="modell.morph"] canvas')).toBeVisible();
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await viewCanvas(page);
   const scene = page.locator('.learnordie-canvas-scene [data-scene-id="modell.morph"]');
   await expect(scene).toHaveAttribute("data-scene-mode", "live");
@@ -472,7 +498,7 @@ test("three.js embeds are real WebGL, independently interactive and survive save
   await expect(slider).toHaveValue("0");
   await slider.press("End");
   await expect(slider).toHaveValue("4");
-  await expect(page.locator(".studio-stepper span")).toHaveText(`1 / ${lecture.slides.length}`);
+  await expect(page.getByRole("combobox", { name: "Folie auswählen", exact: true })).toHaveValue("0");
   await scene.getByRole("button", { name: "3D-Blick zurücksetzen", exact: true }).click();
   const saved = await save(page, lecture);
   expect(firstScene(saved).elements).toEqual(expect.arrayContaining([expect.objectContaining({
@@ -480,7 +506,7 @@ test("three.js embeds are real WebGL, independently interactive and survive save
   })]));
   await page.reload();
   await selectLecture(page, lecture);
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await expect(scene).toHaveAttribute("data-scene-mode", "live");
   await expect(scene.locator("canvas")).toBeVisible();
   await testInfo.attach("native-three-webgl-after-reload", { body: await page.screenshot(), contentType: "image/png" });

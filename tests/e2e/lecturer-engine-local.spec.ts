@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { openStudioActions, toggleStudioPreview } from "./studio-controls";
 
 // Native text/double-click, HTML sandbox and WebGL user stories are covered in
 // excalidraw-editor.spec.ts. These complementary stories retain the actual
@@ -29,6 +30,7 @@ function diagnostics(page: Page) {
 }
 
 async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen") {
+  await openStudioActions(page);
   await page.getByRole("button", { name: "Folienwerkzeuge öffnen", exact: true }).click();
   await page.getByLabel("Folienwerkzeuge", { exact: true }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
 }
@@ -119,13 +121,13 @@ test("Native Studio preserves canonical text and quiz anchors through preview an
   expect(metadata.ok()).toBe(true);
   await page.reload();
   await expect(page.getByLabel("Excalidraw-Folieneditor", { exact: true })).toHaveAttribute("data-canvas-ready", "true");
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await expect(page.getByRole("toolbar", { name: "Folienelemente" })).toHaveCount(0);
   await expect(page.locator('[data-canvas-engine="excalidraw"]')).toHaveAttribute("data-canvas-ready", "true");
   const secondSave = await save(page, lecture.id);
   expect(secondSave.slideDocument.slides[0].canvas).toEqual(scene);
   expect(secondSave.slideDocument.slides[0].quizAnchors).toContainEqual(anchor);
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  await toggleStudioPreview(page, "Bearbeiten");
   await expect(page.getByRole("toolbar", { name: "Folienelemente" })).toBeVisible();
   clean();
 });
@@ -203,14 +205,14 @@ test("Material extraction, question generation and HTML formula/table editing re
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "HTML", exact: true }).click();
   await page.getByLabel("HTML und CSS", { exact: true }).fill(`<h2>Sommerfeldzahl ${nonce}</h2><p>S = η · n / p</p><table><thead><tr><th>Betriebspunkt</th><th>Reibzustand</th></tr></thead><tbody><tr><td>Anlauf</td><td>Mischreibung ${nonce}</td></tr></tbody></table>`);
   await page.getByRole("button", { name: "HTML einfügen", exact: true }).click();
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   const embedded = page.frameLocator("iframe.learnordie-canvas-html");
   await expect(embedded.getByRole("cell", { name: `Mischreibung ${nonce}`, exact: true })).toBeVisible();
   await expect(embedded.getByText("S = η · n / p", { exact: true })).toBeVisible();
   await save(page, lecture.id);
   await page.reload();
   await expect(page.getByLabel("Excalidraw-Folieneditor", { exact: true })).toHaveAttribute("data-canvas-ready", "true");
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await toggleStudioPreview(page);
   await expect(embedded.getByRole("cell", { name: `Mischreibung ${nonce}`, exact: true })).toBeVisible();
   await testInfo.attach("native-materials-formula-table-reload", { body: await page.screenshot(), contentType: "image/png" });
   clean();

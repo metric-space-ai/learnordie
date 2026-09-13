@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createRequire } from "node:module";
+import path from "node:path";
 import jsQR from "jsqr";
 
 const password = "e2e-only-test-password-not-for-production";
 // PNG decoding is supplied by qrcode's locked pngjs dependency.
-const { PNG } = createRequire(import.meta.url)("pngjs") as {
+const { PNG } = createRequire(path.resolve("package.json"))("pngjs") as {
   PNG: { sync: { read(input: Buffer): { data: Buffer; width: number; height: number } } };
 };
 

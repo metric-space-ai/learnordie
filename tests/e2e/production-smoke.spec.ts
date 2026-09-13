@@ -8,6 +8,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { expect, type Browser, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { openStudioActions } from "./studio-controls";
 import type { Lecture } from "../../src/lib/types";
 import { seriesIdForLecture } from "../../src/lib/series";
 
@@ -47,6 +48,7 @@ function attachBrowserDiagnostics(page: Page) {
 }
 
 async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen" | "Auswertung" | "Evaluation") {
+  await openStudioActions(page);
   await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
   await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: new RegExp(`^${name}`) }).click();
 }
@@ -3591,25 +3593,11 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Vorlesung beitreten" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Für Dozierende" })).toHaveAttribute("href", "/lecturer");
+  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer/login");
   await expect(page.getByText("Hydrodynamische Gleitlagerung")).toHaveCount(0);
-  await page.getByRole("link", { name: "Für Dozierende" }).click();
-  await expect(page.locator(".home-route-cover[data-route='lecturer']")).toBeAttached();
-  const homeRouteCoverMotion = await page.evaluate(() => {
-    const cover = document.querySelector<HTMLElement>(".home-route-cover");
-    if (!cover) throw new Error("Home route cover missing.");
-    return {
-      route: cover.dataset.route,
-      animationName: getComputedStyle(cover).animationName,
-      originY: getComputedStyle(cover).transformOrigin.split(" ")[1],
-      grid: getComputedStyle(cover).backgroundImage
-    };
-  });
-  expect(homeRouteCoverMotion.route).toBe("lecturer");
-  expect(homeRouteCoverMotion.animationName).toContain("lb-route-cover-in");
-  expect(Number.parseFloat(homeRouteCoverMotion.originY)).toBeGreaterThan(400);
-  expect(homeRouteCoverMotion.grid).toContain("linear-gradient");
+  await page.getByRole("link", { name: "Dozentenlogin" }).click();
+  await expect(page.locator(".home-route-cover")).toHaveCount(0);
   await expect(page).toHaveURL(/\/lecturer\/login$/);
   await page.goto("/l/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/l\/gleitlagerung-demo$/);
@@ -3757,7 +3745,8 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   });
   expect(studioStageMotion.hasTechnicalGrid).toBe(true);
 
-  const filmstripButtons = page.getByLabel("Folie auswählen").getByRole("button");
+  await page.getByLabel("Folienübersicht", { exact: true }).click();
+  const filmstripButtons = page.locator(".studio-filmstrip-list").getByRole("button");
   await expect(filmstripButtons.nth(1)).toBeVisible();
   await filmstripButtons.nth(1).click();
   await expect(page.locator(".studio-slide-shared-ghost")).toBeAttached();
@@ -3793,6 +3782,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator('.studio-filmstrip-list button[aria-current="true"]')).toContainText(studioLecture.slides[1].title);
   await testInfo.attach("native-filmstrip-selection", { body: await page.screenshot(), contentType: "image/png" });
 
+  await openStudioActions(page);
   await page.getByLabel("Folienwerkzeuge öffnen").click();
   await expect(page.getByLabel("Folienwerkzeuge", { exact: true })).toBeVisible();
   await page.waitForTimeout(500);
@@ -3851,6 +3841,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toHaveCount(0, { timeout: 1500 });
   await page.getByLabel("Quellen schließen").click();
 
+  await openStudioActions(page);
   await page.getByLabel("Folienwerkzeuge öffnen").click();
   await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Auswertung/ }).click();
   await expect(page.getByLabel("Auswertung direkt an der Folie")).toBeVisible();
@@ -3902,6 +3893,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
   await expectNativeCanvas(page);
   await expect(page.getByLabel("Transkriptstatus")).toHaveCount(0);
+  await page.getByLabel("Präsentationssteuerung", { exact: true }).click();
   await page.getByRole("button", { name: "Transkript und Mikrofon" }).click();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
   await expect(page.getByRole("button", { name: "Mikrofon an" })).toBeVisible();
