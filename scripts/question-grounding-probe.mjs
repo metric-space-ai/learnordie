@@ -36,15 +36,21 @@ const stems = [
   "Eine Masse hängt an einer linearen Feder. Was passiert bei kleinerer Steifigkeit und unveränderter Masse?",
   "Warum schwingt dieselbe Masse an einer weicheren linearen Feder langsamer?",
   "Die Steifigkeit einer linearen Feder wird vervierfacht, die Masse bleibt gleich. Wie ändert sich die Schwingungsdauer?",
-  "Ein ungedämpftes Feder-Masse-System soll bei gleicher Masse eine kürzere Schwingungsdauer erhalten. Welche Änderung erreicht das?"
+  "Ein ungedämpftes lineares Feder-Masse-System soll bei gleicher Masse die halbe Schwingungsdauer erhalten. Welche Änderung erreicht das?"
 ];
 const choices = [
   ["Die Masse hängt tiefer und schwingt langsamer.", "Die Masse hängt höher und schwingt schneller.", "Die Masse hängt tiefer und schwingt schneller.", "Die Masse hängt höher und schwingt langsamer."],
-  ["Die Eigenkreisfrequenz sinkt mit der Wurzel der Steifigkeit.", "Die weichere Feder vergrößert die Masse.", "Die Gewichtskraft verschwindet.", "Die Eigenkreisfrequenz steigt mit kleinerer Steifigkeit."],
+  ["Die Eigenkreisfrequenz sinkt mit der Wurzel der Steifigkeit.", "Die Eigenkreisfrequenz ist umgekehrt proportional zur Wurzel der Steifigkeit.", "Die kleinere Steifigkeit verändert nur die Ruhelage, nicht die Eigenkreisfrequenz.", "Die Eigenkreisfrequenz ist direkt proportional zur Steifigkeit, ohne Wurzel."],
   ["Sie halbiert sich.", "Sie verdoppelt sich.", "Sie bleibt gleich.", "Sie vervierfacht sich."],
-  ["Die Steifigkeit erhöhen.", "Die Steifigkeit verringern.", "Nur die Anfangsauslenkung vergrößern.", "Nur die Anfangsauslenkung verkleinern."]
+  ["Die Steifigkeit vervierfachen.", "Die Steifigkeit verdoppeln, weil die Schwingungsdauer umgekehrt proportional zu k sei.", "Die Steifigkeit vierteln, weil eine weichere Feder schneller zurückschwinge.", "Nur die Anfangsauslenkung verdoppeln, damit die größere Federkraft die Schwingung beschleunige."]
 ];
-const valid = levels.map((level,i)=>({ level, text:stems[i], answers:choices[i].map((text,j)=>({key:"ABCD"[j],text,correct:j===0})), explanation:"Es gilt omega = sqrt(k/m); die statische Auslenkung ist m*g/k." }));
+const explanations = [
+  "Bei kleinerem k wächst die statische Verlängerung mg/k. Zugleich sinkt omega = sqrt(k/m), daher hängt die Masse tiefer und schwingt langsamer.",
+  "Bei gleicher Masse sinkt omega = sqrt(k/m) mit kleinerem k. Weniger Rückstellkraft je Auslenkung führt zur langsameren Schwingung; die Abhängigkeit ist weder linear noch umgekehrt proportional.",
+  "Vierfaches k verdoppelt omega = sqrt(k/m). Mit T = 2π/omega halbiert sich deshalb die Schwingungsdauer.",
+  "Für halbes T braucht man doppeltes omega und damit vierfaches k. Die Anfangsauslenkung kommt in omega = sqrt(k/m) nicht vor: Eine größere Amplitude verkürzt die Periode des linearen Systems nicht."
+];
+const valid = levels.map((level,i)=>({ level, text:stems[i], answers:choices[i].map((text,j)=>({key:"ABCD"[j],text,correct:j===0})), explanation:explanations[i] }));
 const invalid = structuredClone(valid);
 invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0,9. Welche Aussage über die Schmierung ist richtig?", answers:[
   {key:"A",text:"Der Schmierfilm ist ausreichend, aber die Sicherheit gegen Trockenlauf gering.",correct:true},
