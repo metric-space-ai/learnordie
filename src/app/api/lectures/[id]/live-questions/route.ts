@@ -17,13 +17,17 @@ const MIN_TRANSCRIPT_CHARS = 120;
 
 const liveQuestionSchema = z.object({
   slideId: z.string().min(1).max(120),
-  transcript: z.string().max(8000).optional()
+  transcript: z.string().max(8000).optional(),
+  allowSlideContext: z.boolean().optional()
 });
 
 function slideContext(lecture: Lecture, slideId: string): LiveQuestionSlideContext | null {
   const node = lecture.slideDocument?.slides.find((slide) => slide.id === slideId);
   if (node) {
     const lines: string[] = [];
+    for (const element of node.canvas?.elements ?? []) {
+      if (!element.isDeleted && element.type === "text" && element.text) lines.push(element.text);
+    }
     for (const block of node.blocks) {
       if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") lines.push(block.text);
       else if (block.type === "callout") lines.push(block.text);
@@ -80,7 +84,9 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const slide = slideContext(lecture, parsed.data.slideId);
   if (!slide) return NextResponse.json({ error: "Folie nicht gefunden." }, { status: 404 });
 
-  const transcript = (parsed.data.transcript?.trim() || recentTranscript(lecture)).trim();
+  let transcript = (parsed.data.transcript?.trim() || recentTranscript(lecture)).trim();
+  const contextSource = transcript.length >= MIN_TRANSCRIPT_CHARS ? "transcript" : "slide";
+  if (contextSource === "slide" && parsed.data.allowSlideContext) transcript = [slide.title, ...slide.lines].join("\n");
   if (transcript.length < MIN_TRANSCRIPT_CHARS) {
     return NextResponse.json({ error: "Das Transkript ist noch zu kurz für eine Frage." }, { status: 422 });
   }
@@ -88,7 +94,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const existingQuestionTexts = questionsForSlide(lecture.questions, parsed.data.slideId).map((question) => question.text);
   let variants;
   try {
-    variants = await generateLiveQuestionFamily({ lecture, slide, transcript, existingQuestionTexts });
+    variants = await generateLiveQuestionFamily({ lecture, slide, transcript, existingQuestionTexts, contextSource });
   } catch (error) {
     console.warn("live question generation failed", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: clientSafeError(error) }, { status: 502 });

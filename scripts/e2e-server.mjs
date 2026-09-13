@@ -202,6 +202,14 @@ function mockQuestionGeneratorAnswer() {
 }
 
 function mockChatAnswer(input) {
+  // Real generation route/provider transport, deterministic provider fixture.
+  // Keep this distinct from imported material questions so duplicate detection
+  // remains active when the lecturer generates a new family during a talk.
+  if (input.includes('"coreStatement"') && input.includes("GRUNDLAGE")) {
+    const family = JSON.parse(mockQuestionGeneratorAnswer());
+    for (const variant of family.variants) variant.text = `Live: ${variant.text}`;
+    return JSON.stringify({ coreStatement: "Relativbewegung baut einen tragenden Schmierfilm auf.", ...family });
+  }
   if (input.includes("Schwierigkeitsstufen:") && input.includes("JSON-Schema:")) {
     return mockQuestionGeneratorAnswer();
   }

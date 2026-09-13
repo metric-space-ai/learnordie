@@ -19,5 +19,5 @@ export type LiveSessionView = {
 export type LiveCommand =
   | { action: "start"; revision: number }
   | { action: "slide"; revision: number; slideIndex: number; showIntro: boolean }
-  | { action: "fire"; revision: number; familyIndex: number; durationSeconds: number }
+  | { action: "fire"; revision: number; familyIndex: number; durationSeconds: number; familyId?: string; sessionId?: string }
   | { action: "close" | "end"; revision: number };

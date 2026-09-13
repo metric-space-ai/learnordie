@@ -248,12 +248,12 @@ export type LiveQuestionSlideContext = {
   lines: string[];
 };
 
-function liveQuestionSystemPrompt() {
+function liveQuestionSystemPrompt(contextSource: "transcript" | "slide" = "transcript") {
   return [
     "Du bist ein deutschsprachiger Aufgabenautor und begleitest eine laufende technische Universitätsvorlesung.",
     "Du erzeugst genau EINE Frage als Fragenfamilie: dieselbe Kernaussage, geprüft in vier Schwierigkeitsstufen.",
-    "Das Thema kommt ausschließlich aus dem Transkript, also aus dem, was die Lehrperson gerade gesagt hat.",
-    "Der Folieninhalt dient nur zur Einordnung und nur, soweit er zum Transkript passt; Folienthemen, die im Transkript nicht vorkommen, sind tabu.",
+    contextSource === "slide" ? "Es liegt kein ausreichendes Transkript vor. Verwende ausschließlich die bereitgestellten Inhalte der Folie als Grundlage; behaupte nicht, dass sie gesprochen wurden." : "Das Thema kommt ausschließlich aus dem Transkript, also aus dem, was die Lehrperson gerade gesagt hat.",
+    contextSource === "slide" ? "Erzeuge eine Frage zur sichtbaren Folie, ohne zusätzliche Fakten oder Aussagen der Lehrperson zu erfinden." : "Der Folieninhalt dient nur zur Einordnung und nur, soweit er zum Transkript passt; Folienthemen, die im Transkript nicht vorkommen, sind tabu.",
     "Erfinde keine Fakten. Rechne Zahlen selbst nach.",
     "Verwende korrektes Deutsch mit Umlauten und Unicode-Formelzeichen, kein LaTeX.",
     "Gib ausschließlich valides JSON zurück. Keine Markdown-Umrandung, keine Erklärung außerhalb des JSON."
@@ -265,17 +265,18 @@ function liveQuestionUserPrompt(input: {
   slide: LiveQuestionSlideContext;
   transcript: string;
   existingQuestionTexts: string[];
+  contextSource?: "transcript" | "slide";
 }) {
   return [
     `Vorlesung: ${input.lecture.seriesTitle} / ${input.lecture.title}`,
-    "GRUNDLAGE – Transkript der letzten Minuten (automatisch erkannt, kann Erkennungsfehler enthalten):",
+    input.contextSource === "slide" ? "GRUNDLAGE – Inhalte der Folie (kein Transkript):" : "GRUNDLAGE – Transkript der letzten Minuten (automatisch erkannt, kann Erkennungsfehler enthalten):",
     compact(input.transcript, 3200),
-    `KONTEXT – aktuelle Folie „${input.slide.title}“ (nur verwenden, soweit sie zum Transkript passt):`,
+    `KONTEXT – aktuelle Folie „${input.slide.title}“ (nur verwenden, soweit sie zur Grundlage passt):`,
     ...input.slide.lines.map((line) => `- ${compact(line, 300)}`),
     input.existingQuestionTexts.length > 0 ? "Bereits gestellte Fragen zu dieser Folie (nicht wiederholen, anderen Aspekt wählen):" : "",
     ...input.existingQuestionTexts.slice(0, 12).map((text) => `- ${compact(text, 200)}`),
     "Vorgehen:",
-    "1. Wähle EINE Kernaussage, die im Transkript ausdrücklich vorkommt, und formuliere sie als \"coreStatement\" (ein Satz).",
+    "1. Wähle EINE Kernaussage, die in der Grundlage ausdrücklich vorkommt, und formuliere sie als \"coreStatement\" (ein Satz).",
     "2. Erzeuge vier Varianten, die ALLE diese Kernaussage prüfen – nur die Schwierigkeit steigt:",
     "4.0 Wiedergeben: die Kernaussage oder ihren zentralen Begriff erkennen.",
     "3.0 Verstehen: erklären, warum die Kernaussage gilt oder wie ihre Teile zusammenhängen.",
@@ -306,11 +307,13 @@ export async function generateLiveQuestionFamily(input: {
   slide: LiveQuestionSlideContext;
   transcript: string;
   existingQuestionTexts: string[];
+  contextSource?: "transcript" | "slide";
 }): Promise<QuestionVariant[]> {
+  const sourceLabel = input.contextSource === "slide" ? "Live-Folie" : "Live-Transkript";
   const liveMetadata = {
-    promptVersion: "live-transcript-v1",
+    promptVersion: input.contextSource === "slide" ? "live-slide-v1" : "live-transcript-v1",
     reviewStatus: "approved" as const,
-    sourceRef: `Live-Transkript · ${input.slide.title}`
+    sourceRef: `${sourceLabel} · ${input.slide.title}`
   };
 
   if (!usesAIQuestionGenerator()) {
@@ -319,7 +322,7 @@ export async function generateLiveQuestionFamily(input: {
       lectureId: input.lecture.id,
       kind: "notes",
       source: "notes",
-      originalName: `Live-Transkript ${input.slide.title}`,
+      originalName: `${sourceLabel} ${input.slide.title}`,
       status: "ready",
       extractedTextPreview: compact(input.transcript, 240)
     } as unknown as LectureMaterial;
@@ -338,10 +341,10 @@ export async function generateLiveQuestionFamily(input: {
     let result;
     try {
       result = await provider.complete({
-        system: liveQuestionSystemPrompt(),
+        system: liveQuestionSystemPrompt(input.contextSource),
         user: attempt === 0
           ? liveQuestionUserPrompt(input)
-          : `${liveQuestionUserPrompt(input)}\nWICHTIG: Der vorige Vorschlag wiederholte eine bereits gestellte Frage. Wähle einen anderen Aspekt aus dem Transkript.`,
+          : `${liveQuestionUserPrompt(input)}\nWICHTIG: Der vorige Vorschlag wiederholte eine bereits gestellte Frage. Wähle einen anderen Aspekt aus der Grundlage.`,
         maxOutputTokens: 2600,
         temperature: attempt === 0 ? 0.3 : 0.6,
         responseFormat: "json_object",
@@ -358,5 +361,5 @@ export async function generateLiveQuestionFamily(input: {
     if (attempt === 1) throw new Error("Question generator returned a duplicate of an existing question.");
   }
   const model = `${provider.info.provider}:${provider.info.model}`;
-  return variants.map((variant) => ({ ...variant, ...liveMetadata, promptVersion: `live-transcript-v1:${model}` }));
+  return variants.map((variant) => ({ ...variant, ...liveMetadata, promptVersion: `${liveMetadata.promptVersion}:${model}` }));
 }

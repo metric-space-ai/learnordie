@@ -52,11 +52,16 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
       if (command.slideIndex < 0 || command.slideIndex >= lecture.slides.length || (command.showIntro && command.slideIndex !== 0)) {
         throw new LiveSessionError(400, "Ungültige Folie.");
       }
-      Object.assign(update, { slideIndex: command.slideIndex, showIntro: command.showIntro, round: null });
+      // Presentation and the students' answering window are independent timelines.
+      Object.assign(update, { slideIndex: command.slideIndex, showIntro: command.showIntro });
     } else if (command.action === "fire") {
       if (current.showIntro) throw new LiveSessionError(409, "Bitte zuerst die Präsentation starten.");
-      const families = groupQuestionFamilies(questionsForSlide(lecture.questions, lecture.slides[current.slideIndex]?.id));
-      const questions = families[command.familyIndex];
+      if (command.sessionId && command.sessionId !== current.sessionId) throw new LiveSessionError(409, "Die ursprüngliche Live-Sitzung ist beendet.");
+      if (current.round && current.round.expiresAt > now) throw new LiveSessionError(409, "Eine Fragerunde läuft bereits. Ihre Antwortzeit bleibt unverändert.");
+      // A generated family belongs to the slide at request time, not necessarily
+      // the current slide after the asynchronous provider call has completed.
+      const families = groupQuestionFamilies(command.familyId ? lecture.questions : questionsForSlide(lecture.questions, lecture.slides[current.slideIndex]?.id));
+      const questions = command.familyId ? families.find((family) => family[0]?.familyId === command.familyId) : families[command.familyIndex];
       if (!questions?.length) throw new LiveSessionError(400, "Fragenfamilie nicht gefunden.");
       update.round = { id: randomUUID(), expiresAt: now + command.durationSeconds * 1000, questions };
     } else {

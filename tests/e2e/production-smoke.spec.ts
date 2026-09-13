@@ -3814,9 +3814,9 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       choiceDelays: choices.map((choice) => toMs(getComputedStyle(choice).animationDelay))
     };
   });
-  expect(toolMotion.popoverAnimation).toContain("lb-popover-from-control");
+  expect(toolMotion.popoverAnimation).toContain("app-panel-enter");
   expect(toolMotion.popoverOriginMarkerContent).toBe("none");
-  expect(toolMotion.choiceDelays[4]).toBeGreaterThan(toolMotion.choiceDelays[0]);
+  expect(toolMotion.choiceDelays).toEqual([0, 0, 0, 0, 0]);
 
   await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Quellen/ }).click();
   await expect(page.getByLabel("Quellen direkt an der Folie")).toBeVisible();
@@ -3842,8 +3842,8 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSourceMotion.sharedElement).toBe("studio-sources");
   expect(studioSourceMotion.tool).toBe("materials");
   expect(studioSourceMotion.durations).toContain(560);
-  expect(studioSourceMotion.sheetAnimation).toContain("lb-tool-sheet-in");
-  expect(studioSourceMotion.sheetRadius).toBe("18px");
+  expect(studioSourceMotion.sheetAnimation).toContain("app-panel-enter");
+  expect(studioSourceMotion.sheetRadius).toBe("12px");
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toHaveCount(0, { timeout: 1500 });
   await page.getByLabel("Quellen schließen").click();
 
@@ -3873,8 +3873,8 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioAnalyticsMotion.sharedElement).toBe("studio-analytics");
   expect(studioAnalyticsMotion.tool).toBe("analytics");
   expect(studioAnalyticsMotion.durations).toContain(560);
-  expect(studioAnalyticsMotion.sheetAnimation).toContain("lb-inspector-right-in");
-  expect(studioAnalyticsMotion.sheetRadius).toBe("18px");
+  expect(studioAnalyticsMotion.sheetAnimation).toContain("app-panel-enter");
+  expect(studioAnalyticsMotion.sheetRadius).toBe("12px");
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toHaveCount(0, { timeout: 1500 });
   await page.getByLabel("Auswertung schließen").click();
 
@@ -3890,8 +3890,8 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(studioSheetMotion.isContextDrawer).toBe(true);
-  expect(studioSheetMotion.animationName).toContain("lb-tool-sheet-in");
-  expect(studioSheetMotion.radius).toBe("18px");
+  expect(studioSheetMotion.animationName).toContain("app-panel-enter");
+  expect(studioSheetMotion.radius).toBe("12px");
 
   await page.goto("/lecturer/live/gleitlagerung-demo");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();

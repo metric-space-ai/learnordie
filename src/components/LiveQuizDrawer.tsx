@@ -4,6 +4,8 @@ import type { LiveAnswerReceipt, LiveSessionView } from "@/lib/live-session";
 import type { QuestionLevel } from "@/lib/types";
 import type { PresenceState } from "./Presence";
 
+const difficulty: Record<QuestionLevel, string> = { "4.0": "Wiedergeben", "3.0": "Verstehen", "2.0": "Anwenden", "1.0": "Übertragen" };
+
 /** A shared deadline and server receipt replace the local practice timer/scoring. */
 export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose, motionState = "open" }: {
   round: NonNullable<LiveSessionView["round"]>; serverOffset: number; receipt: LiveAnswerReceipt | null;
@@ -53,10 +55,11 @@ export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose
     <div className="drawer-main">
       <div className="question-head">
         <div className="levels" role="group" aria-label="Niveau">
-          {round.questions.map((item) => <button type="button" key={item.level} aria-pressed={question.level === item.level} disabled={pending || Boolean(effectiveReceipt)} onClick={() => setLevel(item.level)}>{item.level}</button>)}
+          {round.questions.map((item) => <button type="button" key={item.level} aria-label={item.level} title={`${difficulty[item.level]} · ${item.points} Punkte`} aria-pressed={question.level === item.level} disabled={pending || Boolean(effectiveReceipt)} onClick={() => setLevel(item.level)}>{item.level}<small>{difficulty[item.level]}</small></button>)}
         </div>
         {onClose && <button type="button" className="plain-button" onClick={onClose}>Frage schließen</button>}
       </div>
+      <p className="live-difficulty-hint">{difficulty[question.level]} · {question.points} Punkte · eine Antwort pro Runde</p>
       <p className="question" id={titleId}>{question.text}</p>
       <div className="answers">
         {question.answers.map((option) => <button className={`answer ${effectiveReceipt?.selected === option.key ? (effectiveReceipt.correct ? "correct" : "wrong") : ""}`} key={option.key} type="button" disabled={!onAnswer || pending || Boolean(effectiveReceipt)} onClick={() => void answer(option.key)}>

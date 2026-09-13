@@ -20,6 +20,11 @@ Local modifications:
 - `runtime.mjs`: rename the minimal menu/welcome adapter for Learnordie.
 - `excalidraw.mjs`: replace the `esm.sh` font fallback with the local module
   directory, so a missing local font never causes a CDN request.
+- `excalidraw.mjs`: await the asynchronous image cursor decoder and translate
+  invalid-raster decoding failures into the existing localized error dialog.
+  Previously its detached promise rejected without informing the user. The
+  exact pinned transformation is in `scripts/patch-excalidraw-image-import.mjs`.
+  Image validation, supported formats and sandbox restrictions are unchanged.
 - `chunk-SQ5PDB2P.js`: local no-op repair for a missing file in the archive.
   In upstream 0.18.0 this module only exports build configuration constants;
   the supplied subset-worker/subset-shared chunks use side-effect-only imports.

@@ -233,6 +233,13 @@ body:has(:is(.overlay-panel, .chat-question-panel, .transcript-panel, .question-
 .question-ai-link.lb-enter-control {
   animation: app-panel-enter 160ms ease-out both;
 }
+.native-workspace :is(.studio-tool-popover, .studio-slide-tool-overlay, .studio-slide-source-overlay) {
+  border-radius: 12px;
+  animation: app-panel-enter 160ms ease-out both;
+}
+.native-workspace .studio-tool-choice {
+  animation: none;
+}
 @keyframes app-panel-enter {
   from { opacity: 0; }
   to { opacity: 1; }

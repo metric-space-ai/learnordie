@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Slide } from "@/lib/types";
 import {
@@ -18,6 +18,7 @@ export function SlideEngineCanvas({
   lectureToken,
   lectureTitle,
   showJoinIntro = false,
+  joinAction,
   navigationDisabled = false,
   showNavigation = true,
   onPrevious,
@@ -29,6 +30,7 @@ export function SlideEngineCanvas({
   lectureToken?: string;
   lectureTitle?: string;
   showJoinIntro?: boolean;
+  joinAction?: ReactNode;
   navigationDisabled?: boolean;
   showNavigation?: boolean;
   onPrevious: () => void;
@@ -85,7 +87,7 @@ export function SlideEngineCanvas({
       >
         {lectureUrl && <a className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`}>{lectureUrl}</a>}
         {showJoinIntro && lectureUrl ? (
-          <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} />
+          <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} action={joinAction} />
         ) : <ExcalidrawCanvas key={currentSlide.id} slideId={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} readOnly />}
       </article>
       {showNavigation && <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">

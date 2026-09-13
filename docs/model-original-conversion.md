@@ -75,8 +75,8 @@ responsive text reader. Parent Dashboard exposes the reader and download.
 These are immutable source materials, not a view of later user edits. Both paths
 require a lecturer session, use no DB or arbitrary filesystem input, and return
 private/no-store. Reader content is escaped and scripts/network assets are
-prohibited by CSP. Markdown syntax is intentionally shown as source text,
-including LaTeX; it is not a typeset PDF replacement.
+prohibited by CSP. The reader renders GFM tables and KaTeX/MathML equations
+server-side with trust disabled; the separate Markdown download remains exact.
 
 ## Existing control inventory and fidelity limits
 
@@ -105,8 +105,9 @@ isolation, repeat preservation, rollback/retry and source endpoint session denia
 reader/download through mocked session access. Known Node loader deprecation/
 module-type warnings remain. Added tests are in the existing identity unit runner.
 
-Not independently browser-verified by this content worker: glyph layout, source
-reader link in Dashboard, import/reload against PostgreSQL, all eight live scene
-controls and the unchanged dynamic/readout differences above. Parent owns the
-consolidated Vercel lint/unit/build and real-browser validation. No merge, deploy,
-production-readiness claim or database write is performed by this worker.
+Parent acceptance on preview `7cfaf74` (2026-09-13): all eight original slides
+opened and their concept/abstraction/stiffness/energy/execution/training/language/
+transfer controls operated in the internal browser; mobile slide selection and
+reader navigation inspected. CI34746266459 passed reader equations/tables/source
+downloads and native persistence. Overall CI was 69 passed, 3 failed, with no
+skips/flaky cases; this is not a full application or production acceptance.

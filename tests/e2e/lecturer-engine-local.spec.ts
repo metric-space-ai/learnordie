@@ -172,7 +172,7 @@ test("Pi block edits fail clearly on a canonical canvas; the surrounding plannin
   expect((await readLecture(page, lecture.id)).slideDocument.slides[0].canvas).toEqual(before.slideDocument.slides[0].canvas);
   await page.reload();
   await openStudioTool(page, "Assistent");
-  await expect(page.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier|Stribeck/i);
+  await expect(page.locator('.assistant-message.assistant[data-ai-provider-used="true"]')).toContainText(/Gleitlager|Mischreibung|Schmier|Stribeck/i);
   clean();
 });
 

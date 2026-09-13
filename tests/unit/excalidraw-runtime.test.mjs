@@ -145,6 +145,8 @@ test("vendored module closure is local and all imported chunks exist", () => {
   const engine = readFileSync(resolve(vendor, "excalidraw.mjs"), "utf8");
   assert.match(engine, /"ASSETS_FALLBACK_URL",new URL\("\.\/",import.meta.url\).href/);
   assert.doesNotMatch(engine, /"ASSETS_FALLBACK_URL",`https?:/);
+  assert.ok(engine.includes("await this.setImagePreviewCursor(U||d)"), "cursor decoding must remain in the native insertion error boundary");
+  assert.ok(engine.includes('new Error(vA(m.cause==="UNSUPPORTED"?"errors.unsupportedFileType":"errors.imageInsertError"))'), "corrupt images need a localized visible error");
 });
 
 test("HTML sidecar security contract is scripts-off opaque sandbox with no app DOM insertion", () => {

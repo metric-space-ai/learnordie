@@ -11,7 +11,7 @@ const revision = z.number().int().min(0).max(2147483646);
 const command = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start"), revision }),
   z.object({ action: z.literal("slide"), revision, slideIndex: z.number().int().min(0), showIntro: z.boolean() }),
-  z.object({ action: z.literal("fire"), revision, familyIndex: z.number().int().min(0), durationSeconds: z.number().int().min(5).max(180) }),
+  z.object({ action: z.literal("fire"), revision, familyIndex: z.number().int().min(0), durationSeconds: z.number().int().min(5).max(180), familyId: z.string().min(1).max(120).optional(), sessionId: z.string().uuid().optional() }),
   z.object({ action: z.literal("close"), revision }),
   z.object({ action: z.literal("end"), revision })
 ]);

@@ -77,7 +77,9 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     for (const page of [first, second]) await expect(page.locator(".slide-nav .slide-count")).toHaveText("Beitreten");
     await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     await teacher.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
-    for (const page of [teacher, first, second]) await expect(page.getByLabel("Quizfrage", { exact: true })).toBeVisible();
+    for (const page of [first, second]) await expect(page.getByLabel("Quizfrage", { exact: true })).toBeVisible();
+    await expect(teacher.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
+    await expect(teacher.getByRole("timer", { name: "Fragerunde läuft" })).toBeVisible();
     const initial = await state();
     expect(initial.round).not.toBeNull();
     const roundId = initial.round!.id;
@@ -165,8 +167,11 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     for (const page of [first, second, third]) await expect(page.getByText("Die Live-Sitzung ist beendet.", { exact: false })).toBeVisible();
     await teacher.goto(`/lecturer/live/${lecture.publicToken}`);
     await expect(teacher.locator("main")).toHaveAttribute("data-live-status", "ended");
-    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
-    await teacher.getByRole("button", { name: "Neue Live-Sitzung starten", exact: true }).click();
+    // An ended session must offer an obvious next action on the QR slide,
+    // without requiring the lecturer to discover the collapsed tools menu.
+    const restart = teacher.getByRole("region", { name: "Vorlesung beitreten", exact: true }).getByRole("button", { name: "Neue Live-Sitzung starten", exact: true });
+    await expect(restart).toBeVisible();
+    await restart.click();
     await expect(first.locator(".slide-nav .slide-count")).toHaveText("Beitreten");
     expect((await state()).sessionId).not.toBe(initial.sessionId);
     expect(problems).toEqual([]);
@@ -174,6 +179,119 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
     await sql.end();
+  }
+});
+
+test("Space generates an asynchronous 60-second round while the lecturer keeps presenting", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const contexts: BrowserContext[] = [];
+  const errors: string[] = [];
+  const open = async () => {
+    const context = await browser.newContext(); contexts.push(context);
+    const page = await context.newPage();
+    page.on("pageerror", (error) => errors.push(error.message));
+    return page;
+  };
+  let releaseGeneration = () => {};
+  try {
+    const teacher = await open();
+    const { lecture, csrf } = await fixture(teacher);
+    const api = `/api/lecture/${lecture.publicToken}/live`;
+    const command = `/api/lectures/${lecture.id}/live-session`;
+    const state = async () => await (await teacher.request.get(api)).json() as LiveSessionView;
+    const students = await Promise.all([open(), open(), open()]);
+    await students[2].setViewportSize({ width: 390, height: 844 });
+    await Promise.all(students.map((page) => page.goto(`/l/${lecture.publicToken}`)));
+    await teacher.goto(`/lecturer/live/${lecture.publicToken}`);
+    await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
+    // A failed provider call must be visible without opening an interrupting
+    // modal, and the same shortcut must permit a deliberate retry.
+    const generationPath = `**/api/lectures/${lecture.id}/live-questions`;
+    await teacher.route(generationPath, (route) => route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Fragengenerator vorübergehend nicht erreichbar." }) }));
+    await teacher.locator("body").click({ position: { x: 8, y: 100 } });
+    await teacher.keyboard.press("Space");
+    await expect(teacher.locator(".presenter-round-toast")).toContainText("vorübergehend nicht erreichbar");
+    expect((await state()).round).toBeNull();
+    await teacher.unroute(generationPath);
+
+    // Hold the actual route response, not fake question state, to exercise
+    // navigation while the real server/provider/DB pipeline is in flight.
+    let requests = 0;
+    let family: Lecture["questions"] = [];
+    const held = new Promise<void>((resolve) => { releaseGeneration = resolve; });
+    await teacher.route(generationPath, async (route) => {
+      requests++;
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      family = (await response.json()).family;
+      await held;
+      await route.fulfill({ response });
+    });
+    await teacher.keyboard.press("Space");
+    await expect(teacher.getByText("Frage wird erstellt …", { exact: true })).toBeVisible();
+    await teacher.keyboard.press("Space");
+    await teacher.keyboard.press("ArrowRight");
+    await expect(teacher.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[1].id);
+    releaseGeneration();
+    await expect(teacher.getByRole("timer", { name: "Fragerunde läuft" })).toBeVisible({ timeout: 20_000 });
+    expect(requests).toBe(1);
+    const started = await state();
+    expect(started.round).not.toBeNull();
+    expect(started.round!.expiresAt - started.serverNow).toBeGreaterThan(57_000);
+    expect(started.round!.expiresAt - started.serverNow).toBeLessThanOrEqual(60_000);
+    expect(family.every((question) => question.slideId === lecture.slides[0].id)).toBe(true);
+    await expect(teacher.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
+    await expect(teacher.locator("header:visible, footer:visible")).toHaveCount(0);
+    await expect(teacher.locator(".slide-engine-stage")).toHaveCSS("transform", "none");
+    const stageBefore = await teacher.locator(".slide-engine-stage").boundingBox();
+    for (const page of students) await expect(page.getByLabel("Quizfrage", { exact: true })).toHaveAttribute("data-round-id", started.round!.id);
+
+    // A second trigger cannot replace a round or extend students' deadline.
+    await teacher.keyboard.press("Space");
+    const refused = await teacher.request.post(command, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "fire", revision: started.revision, familyIndex: 0, durationSeconds: 60 } });
+    expect(refused.status()).toBe(409);
+    await teacher.keyboard.press("ArrowRight");
+    for (const page of [teacher, ...students]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[2].id);
+    expect((await state()).round!.expiresAt).toBe(started.round!.expiresAt);
+    expect(await teacher.locator(".slide-engine-stage").boundingBox()).toEqual(stageBefore);
+    const levels = ["4.0", "2.0", "1.0"] as const;
+    const answer = async (index: number) => {
+      const page = students[index];
+      const question = family.find((item) => item.level === levels[index])!;
+      await page.getByRole("group", { name: "Niveau" }).getByRole("button", { name: levels[index], exact: true }).click();
+      const key = question.answers.find((option) => option.correct)!.key;
+      await page.locator(".answers .answer").filter({ has: page.locator(".letter", { hasText: key }) }).click();
+      await expect(page.locator(".question-feedback")).toContainText(`Richtig · ${question.points} Punkte`);
+    };
+    await Promise.all([answer(0), answer(1)]);
+    await expect(teacher.locator(".presenter-round-toast")).toHaveText("", { timeout: 7000 });
+    await test.info().attach("presenter-uninterrupted-round", { body: await teacher.screenshot(), contentType: "image/png" });
+    // Real elapsed time and PostgreSQL expiry: no fast-forwarded browser clock,
+    // no shortened fixture duration. The third student answers near the end.
+    await expect.poll(async () => {
+      const current = await state();
+      return started.round!.expiresAt - current.serverNow;
+    }, { timeout: 65_000, intervals: [1000] }).toBeLessThan(8000);
+    await answer(2);
+    for (const page of students) await expect(page.getByLabel("Quizfrage", { exact: true })).toHaveCount(0, { timeout: 12_000 });
+    await expect(teacher.locator(".presenter-round-toast")).toHaveText("Fragerunde beendet · Rangliste aktualisiert.");
+    await expect(teacher.getByRole("timer", { name: "Fragerunde läuft" })).toHaveCount(0);
+    const rejected = await students[2].request.post(api, { data: { sessionId: started.sessionId, roundId: started.round!.id, level: "1.0", selected: "A" } });
+    expect(rejected.status()).toBe(409);
+    for (const [index, page] of students.entries()) {
+      await page.getByRole("button", { name: "Rangliste", exact: true }).click();
+      await expect(page.locator(".leader-row")).toHaveCount(3);
+      await expect(page.locator(".leader-row.self strong")).toHaveText(String(family.find((item) => item.level === levels[index])!.points));
+    }
+    await teacher.keyboard.press("ArrowLeft");
+    await expect(teacher.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[1].id);
+    expect(errors).toEqual([]);
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
+    await teacher.getByRole("button", { name: "Beenden", exact: true }).click();
+    await expect(teacher).toHaveURL(/\/lecturer$/);
+  } finally {
+    releaseGeneration();
+    await Promise.all(contexts.map((context) => context.close()));
   }
 });
 
