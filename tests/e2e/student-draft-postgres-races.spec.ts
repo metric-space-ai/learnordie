@@ -352,6 +352,12 @@ test("ticker exposes stale generation actions, reclaims safely, and fences the o
       generationStale: false
     });
     expect(retryBody.questions.find((question) => question.id === staleQuestionId)?.draft).toBeTruthy();
+    const [reclaimedQuestion] = await sql<{ exam_draft_status: string; exam_draft_attempt_id: string | null }[]>`
+      select exam_draft_status, exam_draft_attempt_id
+      from student_chat_questions where id = ${staleQuestionId}
+    `;
+    expect(reclaimedQuestion.exam_draft_status).toBe("draft");
+    expect(reclaimedQuestion.exam_draft_attempt_id).not.toBe(staleAttemptId);
 
     const lateSave = await repo.saveStudentExamDraft({
       lectureId: lecture.id,
