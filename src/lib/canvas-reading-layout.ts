@@ -18,9 +18,19 @@ export function canvasReadingElements(scene: CanvasScene, slideId: string): Canv
   const content = visible.filter(element => !prosePanel(element) && !(element.id === `${slideId}:underline` && element.type === "line" && !element.boundElements?.length));
   const groupSizes = new Map<string, number>();
   for (const element of content) for (const group of element.groupIds ?? []) groupSizes.set(group, (groupSizes.get(group) ?? 0) + 1);
+  // The legacy migrator groups a formula with its caption. Both are prose,
+  // not a spatial diagram; retaining that generated group must not force
+  // every text element into a microscopic landscape canvas on a phone.
+  const isGeneratedFormulaGroup = (group: string) => {
+    const members = content.filter(element => element.groupIds?.includes(group));
+    if (members.length !== 2 || members.some(element => element.type !== "text" || element.groupIds?.length !== 1)) return false;
+    const block = members[0].customData?.sourceBlockId;
+    return Boolean(block && group === `group:${block}` && members.every(element => element.customData?.sourceBlockId === block) &&
+      members.some(element => element.id === `${block}:formula`) && members.some(element => element.id === `${block}:caption`));
+  };
   if (!content.length || content.some(element =>
     !["text", "embeddable"].includes(element.type) || element.angle || element.frameId ||
-    element.groupIds?.some(group => groupSizes.get(group)! > 1) || element.boundElements?.length || element.containerId ||
+    element.groupIds?.some(group => groupSizes.get(group)! > 1 && !isGeneratedFormulaGroup(group)) || element.boundElements?.length || element.containerId ||
     (element.type === "text" && element.link)
   )) return null;
   // Side-by-side prose is read one column at a time. A full-width source/footer

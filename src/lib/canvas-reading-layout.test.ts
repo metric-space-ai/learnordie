@@ -3,6 +3,8 @@ import test from "node:test";
 import { canvasReadingElements } from "@/lib/canvas-reading-layout";
 import { createOriginalModelDocument } from "@/lib/model-original-template";
 import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
+import { legacySlidesToSlideDocument } from "../../packages/slide-engine/src/legacy";
+import { demoLecture } from "@/lib/demo-data";
 
 test("all eight original slides reflow their actual editable elements without mutating the deck", () => {
   const document = createOriginalModelDocument("test", Array.from({ length: 8 }, (_, i) => `s${i}`));
@@ -42,4 +44,19 @@ test("legacy generated prose callouts reflow, but an added rectangle is not disc
   const rectangle = scene.elements.find(item => item.type === "rectangle")!;
   rectangle.id = "user-rectangle";
   assert.equal(canvasReadingElements(scene, "legacy"), null);
+});
+
+test("generated formula/caption groups reflow without splitting arbitrary user groups", () => {
+  const document = legacySlidesToSlideDocument(demoLecture.slides, { id: "qa", title: "QA", language: "de", theme: "learnordie-technical" });
+  const slide = document.slides[1];
+  const scene = canvasSceneForSlide(slide, document.assets);
+  const before = JSON.stringify(scene);
+  const elements = canvasReadingElements(scene, slide.id);
+  assert.ok(elements, "the Sommerfeld slide must use readable mobile prose, not full-canvas fit");
+  assert.ok(elements.some(element => element.id.endsWith(":formula")));
+  assert.ok(elements.some(element => element.id.endsWith(":caption")));
+  assert.equal(JSON.stringify(scene), before, "student reading layout never edits the author's canvas");
+  const changed = structuredClone(scene);
+  changed.elements.find(element => element.id.endsWith(":caption"))!.id = "user-caption";
+  assert.equal(canvasReadingElements(changed, slide.id), null);
 });
