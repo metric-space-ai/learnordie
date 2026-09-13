@@ -85,8 +85,9 @@ test.describe("standalone learner workspace", () => {
     await density.focus();
     await density.press("End");
     await expect(density).toHaveValue(maximumDensity!);
-    await expect(density).toHaveAttribute("aria-valuetext", "jede Folie");
-    await expect(page.locator(".hotspots .hotspot")).toHaveCount(4);
+    await expect(density).toHaveAttribute("aria-valuetext", "bis zu 7 Fragen-Spots");
+    await expect(page.locator(".hotspots .hotspot")).toHaveCount(1);
+    await more.click();
     await page.locator(".hotspots .hotspot").first().click();
     const question = page.locator(".question-drawer");
     await expect(question).toBeVisible();
@@ -94,7 +95,6 @@ test.describe("standalone learner workspace", () => {
     await expect(question).not.toBeVisible();
     await page.locator(".hotspots .hotspot").first().click();
     await expect(question).toBeVisible();
-    await more.click();
     const levels = question.locator(".levels button");
     await expect(levels).toHaveCount(4);
     await levels.filter({ hasText: "1.0" }).click();

@@ -24,6 +24,7 @@ export function SlideEngineCanvas({
   navigationDisabled = false,
   showNavigation = true,
   mobileReading = false,
+  overlay,
   onPrevious,
   onNext
 }: {
@@ -38,6 +39,7 @@ export function SlideEngineCanvas({
   navigationDisabled?: boolean;
   showNavigation?: boolean;
   mobileReading?: boolean;
+  overlay?: ReactNode;
   onPrevious: () => void;
   onNext: () => void;
 }) {
@@ -105,6 +107,7 @@ export function SlideEngineCanvas({
         {showJoinIntro && lectureUrl ? (
           <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} action={joinAction} />
         ) : <SlideReaderCanvas key={currentSlide.id} slideId={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} mobileReading={mobileReading} />}
+        {!showJoinIntro && overlay}
       </article>
       {lectureUrl && <dialog ref={qrDialog} className="lecture-qr-overlay" aria-label="Teilnahme-Link und QR-Code"
         onCancel={(event) => { event.preventDefault(); closeQr(); }}

@@ -262,7 +262,7 @@ for (const variant of variants) {
       await density.press("Home");
       await density.press("ArrowRight");
       await expect(density).toHaveValue("2");
-      await expect(densityRoot.locator("output")).toHaveText("alle 6 Folien");
+      await expect(densityRoot.locator("output")).toHaveText("2");
       await fitsViewport(page, density);
       await menu.getByRole("button", { name: "Rangliste", exact: true }).click();
       const leaderboard = page.getByRole("complementary", { name: "Rangliste", exact: true });

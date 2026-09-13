@@ -3603,13 +3603,12 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   await page.goto("/learn/gleitlagerung-demo");
   await expectNativeCanvas(page);
 
-  const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
-  await expect(hotspots).toHaveCount(4);
+  const hotspots = page.getByLabel("Fragen-Spots auf der Folie").locator("button");
+  await expect(hotspots).toHaveCount(1);
 
-  await page.locator(".learn-more summary").click();
-  await page.getByLabel("Frage Niveau 1.0 anzeigen").first().click();
+  await hotspots.first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
-  await page.locator(".learn-more summary").click();
+  await page.getByLabel("Quizfrage").getByRole("button", { name: "1.0", exact: true }).click();
   await expect(page.getByText("Eine stark belastete Welle läuft häufig langsam an. Welche Maßnahme schützt das Gleitlager beim Start am besten?", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();

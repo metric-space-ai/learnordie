@@ -177,24 +177,32 @@
 }
 
 .learn-shell .slide-engine-stage .slide-lecture-link { max-width: calc(100% - 76px); }
-.learn-shell .learner-control-menu-panel .hotspots {
-  position: static; inset: auto; transform: none; width: 100%; max-height: none;
-  display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 10px;
-  visibility: visible !important; background: none; border: 0; box-shadow: none;
+.learn-shell.slide-screen .learn-question-spots {
+  position: absolute; inset: 0; z-index: 20;
+  display: block; width: auto; height: auto; max-height: none; max-width: none;
+  padding: 0; transform: none; pointer-events: none;
+  visibility: visible; background: transparent; border: 0; box-shadow: none;
 }
-.learn-shell .learner-control-menu-panel .hotspot-row-label { flex-basis: 100%; }
-.learn-shell .learner-control-menu-panel .hotspot {
-  position: static; inset: auto; transform: none; min-width: 44px; min-height: 44px;
-  width: auto; height: auto; padding: 4px; font: inherit;
-  border: 1px dashed var(--app-border); background: transparent; box-shadow: none;
+.learn-shell .learn-question-spots .hotspot {
+  position: absolute; display: grid; place-items: center;
+  min-width: 44px; min-height: 44px; width: 44px; height: 44px; padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px dashed var(--ink); border-radius: 46% 54% 49% 51%;
+  background: var(--panel); color: var(--ink);
+  font: 22px "Learnordie Sketch", var(--app-font), sans-serif;
+  box-shadow: 2px 2px 0 color-mix(in oklab, var(--ink) 15%, transparent);
+  pointer-events: auto;
 }
 
-/* These are menu toggles, not the old disappearing hotspots on the slide. */
-.learn-shell.slide-screen.question-open .learner-control-menu-panel .hotspot {
+.learn-shell.slide-screen.question-open .learn-question-spots .hotspot {
   opacity: 1;
   pointer-events: auto;
-  transform: none;
+  transform: translate(-50%, -50%);
 }
+.learn-shell .learn-question-spots .hotspot:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.learn-shell .learn-question-spots .hotspot[aria-expanded="true"] { border-style: solid; }
+.learn-shell.slide-screen.question-open:not(.slide-peek) .learn-question-spots { visibility: visible; }
+.learn-shell.slide-screen.question-open:not(.slide-peek) .slide-engine-stage { max-height: none; padding-bottom: 0; }
 
 .learn-shell.slide-screen .overlay-panel,
 .learn-shell .learner-live-panel {

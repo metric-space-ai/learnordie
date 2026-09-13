@@ -21,6 +21,7 @@ export function QuizDrawer({
   onAnswered,
   onExpired,
   onContinue,
+  onClose,
   onPeekSlide
 }: {
   questions: QuestionVariant[];
@@ -33,6 +34,7 @@ export function QuizDrawer({
   onAnswered?: (payload: { level: QuestionLevel; correct: boolean; question: QuestionVariant; selected: string }) => void;
   onExpired?: () => void;
   onContinue?: () => void;
+  onClose?: () => void;
   onPeekSlide?: () => void;
 }) {
   const [level, setLevel] = useState<QuestionLevel>(initialLevel);
@@ -175,6 +177,7 @@ export function QuizDrawer({
               </button>
             )}
             {headerAction}
+            {onClose && <button className="plain-button small" type="button" aria-label="Frage schließen" onClick={onClose}>×</button>}
           </div>
         </div>
         <p className="question lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>{question.text}</p>
