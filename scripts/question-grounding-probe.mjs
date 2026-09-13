@@ -66,11 +66,29 @@ try {
   }
   if(!rejected)throw new Error("unsupported-numeric-claim-approved");
   report.cases.push({name:"unsupported-Sommerfeld-0.9-claim",status:"pass",elapsedMs:Date.now()-started});
+  // Reproduce the student-ticker authoring path, not merely its independent
+  // reviewer. This public demo fixture contains no user or production data.
+  const { demoLecture } = await import("@/lib/demo-data");
+  const { generateStudentExamDraft, liveQuestionSlideContext } = await import("@/server/question-generation");
+  const lecture = { ...demoLecture, title: "Synthetic student ticker acceptance", questions: [], transcriptSegments: [] };
+  const slide = liveQuestionSlideContext(lecture, lecture.slides[0].id);
+  started=Date.now();
+  const draft = await generateStudentExamDraft({lecture, slide, slideId:lecture.slides[0].id,
+    sourceQuestionId:"synthetic-friction", studentQuestion:"Warum ist die Reibung beim Anfahren höher, obwohl sich die Welle langsamer dreht?",
+    transcriptContext:"", latestTranscript:"", scriptContext:"", deadlineAt:Date.now()+45000}, provider);
+  if(!draft.supported || draft.variants.length!==4)throw new Error("supported-student-fixture-rejected");
+  report.cases.push({name:"student-friction-draft-four-by-four",status:"pass",elapsedMs:Date.now()-started});
   report.status="pass";
 } catch(error) {
   report.status="fail";
   report.reason=error.message==="unsupported-numeric-claim-approved"?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
+  if(error.diagnostic) {
+    report.diagnostic=error.diagnostic;
+    // This probe only sends the hard-coded synthetic cases above. Never do
+    // this in runtime request handlers (they log fixed diagnostic codes only).
+    report.syntheticValidationReason=String(error.cause?.message??"").slice(0,500);
+  }
   process.exitCode=1;
 }
 globalThis.fetch=originalFetch;

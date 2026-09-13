@@ -5,6 +5,7 @@ import type { Lecture, QuestionLevel } from "@/lib/types";
 import { demoLecture } from "@/lib/demo-data";
 import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, liveQuestionContextSource, liveQuestionSlideContext, parseStudentExamDraft } from "./question-generation";
 import type { AIProvider } from "./providers/ai";
+import { StudentDraftError, studentDraftDiagnostic } from "./student-draft-error";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 test("normal Space selects the current slide even with previous speech; Shift+Space requires transcript", () => {
@@ -244,6 +245,33 @@ test("invalid M3 output gets one strict repair attempt; unsupported questions st
   const unsupportedProvider = makeProvider([JSON.stringify({ supported: false, reason: "Keine passende Vorlesungsgrundlage." })]).provider;
   const unsupported = await generateStudentExamDraft(input(), unsupportedProvider);
   assert.equal(unsupported.supported, false);
+});
+
+test("draft failure diagnostics distinguish schema and source review without exposing model text", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  const malformed = validPayload();
+  malformed.topic = "x";
+  const schema = makeProvider([JSON.stringify(malformed), JSON.stringify(malformed)]);
+  await assert.rejects(generateStudentExamDraft(input(), schema.provider), error => {
+    assert.ok(error instanceof StudentDraftError);
+    assert.deepEqual(studentDraftDiagnostic(error), { stage: "schema", attempt: 2, code: "field-length" });
+    return true;
+  });
+  const secret = "PRIVATE STUDENT CONTENT AND PROVIDER TOKEN";
+  const refusal = JSON.stringify({ reviews: levels.map(level => ({ level, approved: false, reason: secret })) });
+  const grounding = makeProvider([], [refusal, refusal]);
+  await assert.rejects(generateStudentExamDraft(input(), grounding.provider), error => {
+    assert.ok(error instanceof StudentDraftError);
+    assert.deepEqual(studentDraftDiagnostic(error), { stage: "grounding", attempt: 2, code: "factual-review" });
+    assert.ok(!JSON.stringify(studentDraftDiagnostic(error)).includes(secret));
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+  assert.deepEqual(studentDraftDiagnostic(new Error(secret)), { stage: "pipeline", code: "unexpected-failure" });
+  const providerFailure = new StudentDraftError("provider", 1, new Error(`request timed out: ${secret}`));
+  assert.deepEqual(studentDraftDiagnostic(providerFailure), { stage: "provider", attempt: 1, code: "timeout" });
+  assert.ok(!JSON.stringify(studentDraftDiagnostic(providerFailure)).includes(secret));
 });
 
 test("transcript shortcut generation is MiniMax-only and retries strict grounded four-by-four output without clipping", async (t) => {

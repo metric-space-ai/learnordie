@@ -5,6 +5,7 @@ import { generateReviewVariants, levelPoints, withVariantMetadata } from "./lect
 import { getAIProvider } from "./providers/ai";
 import type { AIProvider } from "./providers/ai";
 import { reviewQuestionGrounding } from "./question-grounding-review";
+import { StudentDraftError } from "./student-draft-error";
 
 const LEVELS: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 const ANSWER_KEYS: AnswerOption["key"][] = ["A", "B", "C", "D"];
@@ -765,7 +766,7 @@ export async function generateStudentExamDraft(input: {
   for (let attempt = 0; attempt < 2; attempt++) {
     let result;
     const remainingMs = Math.min(25_000, deadlineAt - Date.now() - 2_000);
-    if (remainingMs <= 0) throw new Error("Student exam draft generation timed out.");
+    if (remainingMs <= 0) throw new StudentDraftError("provider", attempt + 1, new Error("Student exam draft generation timed out."));
     try {
       result = await provider.complete({
         system: studentExamDraftSystemPrompt(),
@@ -776,11 +777,9 @@ export async function generateStudentExamDraft(input: {
         timeoutMs: remainingMs
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(message.toLowerCase().includes("timed out") || message.toLowerCase().includes("abort")
-        ? "Student exam draft generation timed out."
-        : "Student exam draft generation failed.");
+      throw new StudentDraftError("provider", attempt + 1, error);
     }
+    let validationStage: "schema" | "grounding" = "schema";
     try {
       const draft = parseStudentExamDraft(result.answer, {
         lectureId: input.lecture.id,
@@ -788,6 +787,7 @@ export async function generateStudentExamDraft(input: {
         sourceQuestionId: input.sourceQuestionId
       });
       if (!draft.supported) return { ...draft, provider: provider.info.provider, model: provider.info.model };
+      validationStage = "grounding";
       await reviewQuestionGrounding(provider, draft.variants, reviewSources, deadlineAt);
       return {
         ...draft,
@@ -802,7 +802,7 @@ export async function generateStudentExamDraft(input: {
       };
     } catch (error) {
       lastValidationError = error;
-      if (attempt === 1) throw new Error("Student exam draft was invalid after one retry.");
+      if (attempt === 1) throw new StudentDraftError(validationStage, attempt + 1, error);
     }
   }
   throw new Error("Student exam draft generation failed.");

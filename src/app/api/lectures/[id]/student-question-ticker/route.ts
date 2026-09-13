@@ -6,6 +6,7 @@ import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
+import { studentDraftDiagnostic } from "@/server/student-draft-error";
 
 export const maxDuration = 60;
 
@@ -139,8 +140,8 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     } else {
       await repository.saveStudentExamDraft({ lectureId: id, chatQuestionId: question.id, attemptId: attempt.attemptId, variants: generated.variants }, session.email);
     }
-  } catch {
-    console.warn("student exam draft retry failed");
+  } catch (error) {
+    console.warn("student exam draft retry failed", studentDraftDiagnostic(error));
     await repository.updateStudentExamDraftStatus({
       lectureId: id,
       chatQuestionId: question.id,

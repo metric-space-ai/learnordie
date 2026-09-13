@@ -5,6 +5,7 @@ import { seriesIdForLecture } from "@/lib/series";
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
 import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
+import { studentDraftDiagnostic } from "@/server/student-draft-error";
 import { getStudentRepository } from "@/server/student-repository";
 import { getCurrentStudentProfile } from "@/server/student-session";
 
@@ -140,8 +141,8 @@ export async function POST(request: Request, context: { params: Promise<unknown>
                 variants: generated.variants
               });
             }
-          } catch {
-            console.warn("student exam draft generation failed");
+          } catch (error) {
+            console.warn("student exam draft generation failed", studentDraftDiagnostic(error));
             try {
               await repository.updateStudentExamDraftStatus({
                 lectureId: chatQuestion.lectureId,
