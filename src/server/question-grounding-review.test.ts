@@ -113,6 +113,8 @@ test("global approval cannot override a joke, unrelated answer or missing per-an
   const candidates = (["4.0","3.0","2.0","1.0"] as const).map(level=>({level,answers:(["A","B","C","D"] as const).map(key=>({key,text:"Testantwort",correct:key==="A"}))}));
   const reviews = candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],reason:"Fachlich belegt",distractors:["B","C","D"].map(key=>({key,kind:"misconception",reason:"Verwechselte Wirkungsrichtung"}))}));
   assert.doesNotThrow(()=>parseQuestionGroundingReview(JSON.stringify({reviews}),sources,candidates));
+  const compact = reviews.map(review=>({...review,distractors:review.distractors.map(({key,kind})=>({key,kind}))}));
+  assert.doesNotThrow(()=>parseQuestionGroundingReview(JSON.stringify({reviews:compact}),sources,candidates));
   for(const kind of ["joke","unrelated","not_false"]) {
     const contradictory = structuredClone(reviews); contradictory[0].distractors[0].kind=kind;
     assert.throws(()=>parseQuestionGroundingReview(JSON.stringify({reviews:contradictory}),sources,candidates),/Unbrauchbarer Ablenker B/);
