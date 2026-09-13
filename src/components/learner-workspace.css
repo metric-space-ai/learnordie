@@ -193,7 +193,8 @@
 .learn-shell .learn-question-spots .hotspot {
   position: absolute; display: grid; place-items: center;
   min-width: 44px; min-height: 44px; width: 44px; height: 44px; padding: 0;
-  transform: translate(-50%, -50%);
+  translate: -50% -50%;
+  transform: none;
   border: 2px dashed var(--ink); border-radius: 46% 54% 49% 51%;
   background: var(--panel); color: var(--ink);
   font: 22px "Learnordie Sketch", var(--app-font), sans-serif;
@@ -204,7 +205,7 @@
 .learn-shell.slide-screen.question-open .learn-question-spots .hotspot {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, -50%);
+  transform: none;
 }
 .learn-shell .learn-question-spots .hotspot:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .learn-shell .learn-question-spots .hotspot[aria-expanded="true"] { border-style: solid; }
