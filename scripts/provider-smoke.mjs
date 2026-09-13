@@ -2,10 +2,13 @@
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
+import { deflateSync } from "node:zlib";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const EMBEDDING_DIMENSIONS = 1536;
 const ALL_CHECKS = ["ai", "lecturer_assistant", "chat_moderation", "question_generator", "embedding", "ocr", "storage", "mail", "stt"];
+const HTTP_OCR_PROVIDERS = new Set(["http", "external", "vision", "ocr"]);
+const OPENAI_COMPATIBLE_OCR_PROVIDERS = new Set(["openai-compatible", "openai-vision", "vision-chat"]);
 
 const HELP_TEXT = `
 Usage: npm run provider:smoke -- [options]
@@ -389,6 +392,92 @@ function normalizeOcrEndpoint(value) {
   if (!trimmed) return "";
   const endpoint = trimmed.endsWith("/ocr") ? trimmed : `${trimmed}/v1/ocr`;
   return assertProductionSmokeEndpoint(endpoint, "LEARNBUDDY_OCR_BASE_URL");
+}
+
+function normalizeOpenAICompatibleOcrEndpoint(value) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  const endpoint = trimmed.endsWith("/chat/completions")
+    ? trimmed
+    : trimmed.endsWith("/v1")
+      ? `${trimmed}/chat/completions`
+      : `${trimmed}/v1/chat/completions`;
+  return assertProductionSmokeEndpoint(endpoint, "LEARNBUDDY_OCR_BASE_URL");
+}
+
+function createOCRSmokePng() {
+  const text = "GLEITLAGERUNG";
+  const glyphs = {
+    A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    G: ["01111", "10000", "10000", "10111", "10001", "10001", "01110"],
+    I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    N: ["10001", "11001", "11001", "10101", "10011", "10011", "10001"],
+    R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"]
+  };
+  const scale = 5;
+  const padding = 12;
+  const width = padding * 2 + (text.length * 6 - 1) * scale;
+  const height = padding * 2 + 7 * scale;
+  const pixels = Buffer.alloc(width * height * 3, 255);
+
+  for (const [index, character] of [...text].entries()) {
+    const rows = glyphs[character];
+    for (let y = 0; y < rows.length; y += 1) {
+      for (let x = 0; x < rows[y].length; x += 1) {
+        if (rows[y][x] !== "1") continue;
+        for (let dy = 0; dy < scale; dy += 1) {
+          for (let dx = 0; dx < scale; dx += 1) {
+            const px = padding + (index * 6 + x) * scale + dx;
+            const py = padding + y * scale + dy;
+            const offset = (py * width + px) * 3;
+            pixels[offset] = 20;
+            pixels[offset + 1] = 30;
+            pixels[offset + 2] = 40;
+          }
+        }
+      }
+    }
+  }
+
+  const scanlines = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    const rowOffset = y * (width * 3 + 1);
+    pixels.copy(scanlines, rowOffset + 1, y * width * 3, (y + 1) * width * 3);
+  }
+
+  const crc32 = (buffer) => {
+    let crc = 0xffffffff;
+    for (const byte of buffer) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const typeBuffer = Buffer.from(type, "ascii");
+    const content = Buffer.concat([typeBuffer, data]);
+    const length = Buffer.alloc(4);
+    const checksum = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    checksum.writeUInt32BE(crc32(content));
+    return Buffer.concat([length, content, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(scanlines)),
+    chunk("IEND", Buffer.alloc(0))
+  ]);
 }
 
 function normalizeStorageEndpoint(value) {
@@ -911,7 +1000,8 @@ async function smokeEmbedding() {
 async function smokeOCR() {
   if (!shouldRun("ocr")) return;
   const provider = selectedOCRProvider();
-  if (!["http", "external", "vision", "ocr"].includes(provider)) {
+  const openAICompatible = OPENAI_COMPATIBLE_OCR_PROVIDERS.has(provider);
+  if (!HTTP_OCR_PROVIDERS.has(provider) && !openAICompatible) {
     const message = "OCR provider is not configured for external scan extraction.";
     if (productionLike) fail("ocr", message, { provider });
     else skip("ocr", message, { provider });
@@ -919,18 +1009,38 @@ async function smokeOCR() {
   }
 
   try {
-    const endpoint = normalizeOcrEndpoint(envValue("LEARNBUDDY_OCR_BASE_URL"));
+    const endpoint = openAICompatible
+      ? normalizeOpenAICompatibleOcrEndpoint(envValue("LEARNBUDDY_OCR_BASE_URL"))
+      : normalizeOcrEndpoint(envValue("LEARNBUDDY_OCR_BASE_URL"));
     if (!endpoint) throw new Error("LEARNBUDDY_OCR_BASE_URL is missing.");
     const apiKey = envValue("LEARNBUDDY_OCR_API_KEY");
-    if (productionLike && !apiKey) throw new Error("LEARNBUDDY_OCR_API_KEY is missing.");
-    const model = envValue("LEARNBUDDY_OCR_MODEL") || "learnbuddy-ocr";
-    const { response, payload } = await fetchJson(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
-      },
-      body: JSON.stringify({
+    if ((productionLike || openAICompatible) && !apiKey) throw new Error("LEARNBUDDY_OCR_API_KEY is missing.");
+    const model = envValue("LEARNBUDDY_OCR_MODEL") || (openAICompatible ? "gpt-4o-mini" : "learnbuddy-ocr");
+    const requestBody = openAICompatible
+      ? {
+        model,
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content: `Extrahiere sichtbaren Text aus Vorlesungsfolien. Antworte nur mit dem erkannten Text in ${envValue("LEARNBUDDY_OCR_LANGUAGE") || "de"}.`
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Extrahiere den gut lesbaren Text aus dieser Vorlesungsfolie." },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${createOCRSmokePng().toString("base64")}`,
+                  detail: "auto"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      : {
         model,
         language: envValue("LEARNBUDDY_OCR_LANGUAGE") || "de",
         fileName: "provider-smoke-scan.png",
@@ -940,16 +1050,30 @@ async function smokeOCR() {
           mimeType: "image/png",
           contentBase64: Buffer.from("OCR_TEXT: Gleitlagerung Schmierfilm Stribeck-Kurve", "utf8").toString("base64")
         }]
-      })
+      };
+    const { response, payload } = await fetchJson(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
+      },
+      body: JSON.stringify(requestBody)
     }, providerTimeoutMs("LEARNBUDDY_OCR"));
     if (!response.ok) throw new Error(`OCR provider returned HTTP ${response.status}.`);
-    const text = String(payload?.text ?? payload?.output_text ?? "").trim();
+    const content = payload?.choices?.[0]?.message?.content;
+    const visionText = typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content.map((item) => (typeof item?.text === "string" ? item.text : "")).filter(Boolean).join("\n")
+        : "";
+    const text = String(openAICompatible ? visionText : payload?.text ?? payload?.output_text ?? "").trim();
     if (!text || !/Gleitlagerung|Schmierfilm|Stribeck/i.test(text)) {
       throw new Error("OCR provider returned no usable scan text.");
     }
     pass("ocr", "OCR provider returned usable scan text.", {
       provider,
       model,
+      ...(openAICompatible ? { requestFormat: "openai-compatible-chat-completions" } : {}),
       endpointHost: endpointHost(endpoint),
       characters: text.length,
       layoutRegions: [
@@ -1430,18 +1554,45 @@ async function startMockServer() {
 
     if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
       const payload = JSON.parse(body.toString("utf8") || "{}");
+      const userMessage = Array.isArray(payload.messages)
+        ? payload.messages.find((message) => message?.role === "user")
+        : null;
+      const imageItem = Array.isArray(userMessage?.content)
+        ? userMessage.content.find((item) => item?.type === "image_url")
+        : null;
+      if (imageItem) {
+        const imageUrl = imageItem.image_url?.url;
+        const imageMatch = typeof imageUrl === "string" ? imageUrl.match(/^data:image\/png;base64,([a-z0-9+/=]+)$/i) : null;
+        const imageBytes = imageMatch ? Buffer.from(imageMatch[1], "base64") : Buffer.alloc(0);
+        const validRequest = request.headers.authorization === "Bearer provider-smoke-mock-token"
+          && typeof payload.model === "string"
+          && payload.temperature === 0
+          && imageBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+        if (!validRequest) {
+          response.writeHead(400, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: { message: "Invalid OpenAI-compatible OCR smoke request." } }));
+          return;
+        }
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({
+          model: payload.model,
+          choices: [{ message: { content: "Gleitlagerung Schmierfilm Stribeck-Kurve" } }]
+        }));
+        return;
+      }
+
       const prompt = JSON.stringify(payload.messages ?? []);
       const content = mockAIResponseContent(prompt);
-	      if (payload.stream === true) {
-	        writeSseResponse(response, [
-	          ...streamChunks(content).map((chunk) => ({ choices: [{ delta: { content: `${chunk} ` } }] })),
-	          { choices: [], usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 } }
-	        ]);
-	        return;
-	      }
-	      response.writeHead(200, { "content-type": "application/json" });
-	      response.end(JSON.stringify({
-	        choices: [{ message: { content } }],
+      if (payload.stream === true) {
+        writeSseResponse(response, [
+          ...streamChunks(content).map((chunk) => ({ choices: [{ delta: { content: `${chunk} ` } }] })),
+          { choices: [], usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 } }
+        ]);
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        choices: [{ message: { content } }],
         usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 }
       }));
       return;
@@ -1573,10 +1724,10 @@ async function startMockServer() {
   process.env.LEARNBUDDY_EMBEDDING_BASE_URL = baseUrl;
   process.env.LEARNBUDDY_EMBEDDING_API_KEY = "provider-smoke-mock-token";
   process.env.LEARNBUDDY_EMBEDDING_MODEL = "mock-embedding";
-  process.env.LEARNBUDDY_OCR_PROVIDER = "http";
+  process.env.LEARNBUDDY_OCR_PROVIDER = envValue("LEARNBUDDY_OCR_PROVIDER") || "http";
   process.env.LEARNBUDDY_OCR_BASE_URL = baseUrl;
   process.env.LEARNBUDDY_OCR_API_KEY = "provider-smoke-mock-token";
-  process.env.LEARNBUDDY_OCR_MODEL = "mock-ocr";
+  process.env.LEARNBUDDY_OCR_MODEL = envValue("LEARNBUDDY_OCR_MODEL") || "mock-ocr";
   process.env.LEARNBUDDY_STORAGE_PROVIDER = "http";
   process.env.LEARNBUDDY_STORAGE_ENDPOINT = baseUrl;
   process.env.LEARNBUDDY_STORAGE_API_KEY = "provider-smoke-mock-token";

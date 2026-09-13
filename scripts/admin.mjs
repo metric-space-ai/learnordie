@@ -827,6 +827,21 @@ async function runPreflight(sql) {
         model: envValue("LEARNBUDDY_OCR_MODEL") || "learnbuddy-ocr"
       });
     }
+  } else if (["openai-compatible", "openai-vision", "vision-chat"].includes(ocrProvider)) {
+    const missing = [];
+    if (!envValue("LEARNBUDDY_OCR_BASE_URL")) missing.push("LEARNBUDDY_OCR_BASE_URL");
+    if (!envValue("LEARNBUDDY_OCR_API_KEY")) missing.push("LEARNBUDDY_OCR_API_KEY");
+    const endpointError = deploymentEndpointError("LEARNBUDDY_OCR_BASE_URL", envValue("LEARNBUDDY_OCR_BASE_URL"), profile);
+    if (endpointError) {
+      failCheck(checks, "ocr_provider", "critical", endpointError, { provider: ocrProvider });
+    } else if (missing.length) {
+      failCheck(checks, "ocr_provider", strict ? "critical" : "warning", "OCR-/Vision-Provider ist unvollständig.", { missing, provider: ocrProvider });
+    } else {
+      passCheck(checks, "ocr_provider", "OpenAI-kompatibler OCR-/Vision-Provider ist konfiguriert.", {
+        provider: ocrProvider,
+        model: envValue("LEARNBUDDY_OCR_MODEL") || "gpt-4o-mini"
+      });
+    }
   } else if (["", "disabled", "local", "none"].includes(ocrProvider)) {
     warnCheck(checks, "ocr_provider", "OCR-/Vision-Provider ist deaktiviert; gescannte Materialien liefern nur Warnhinweise.", { provider: ocrProvider || "disabled" });
   } else {
