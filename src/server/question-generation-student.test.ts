@@ -191,7 +191,7 @@ test("invalid M3 output gets one strict repair attempt; unsupported questions st
   assert.equal(unsupported.supported, false);
 });
 
-test("live L generation is MiniMax-only and retries strict four-by-four output without clipping", async (t) => {
+test("transcript shortcut generation is MiniMax-only and retries strict grounded four-by-four output without clipping", async (t) => {
   restoreGeneratorEnvironment(t);
   process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
   process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
@@ -212,6 +212,8 @@ test("live L generation is MiniMax-only and retries strict four-by-four output w
   assert.equal(generated.length, 4);
   assert.equal(requests.length, 2);
   assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
+  assert.match(requests[0].system, /Kennzahl allein keine universelle/);
+  assert.match(requests[0].system, /alle benötigten Größen, Einheiten und Randbedingungen/);
   assert.match(requests[1].user, /OUTPUT VALIDATION RETRY/);
   assert.ok(generated.every((variant) => variant.text.length <= 240 && variant.explanation.length <= 480));
   assert.ok(generated.every((variant) => variant.answers.every((answer) => answer.text.length <= 400)));

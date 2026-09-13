@@ -349,6 +349,8 @@ function liveQuestionSystemPrompt(contextSource: "transcript" | "slide" = "trans
     contextSource === "slide" ? "Erzeuge eine Frage zur sichtbaren Folie, ohne zusätzliche Fakten oder Aussagen der Lehrperson zu erfinden." : "Das Skript dient als fachliche Quelle, aber das neueste aktuelle Transkript bestimmt das Thema. Ältere Transkriptteile dürfen das Thema nicht ersetzen.",
     transcriptOnly ? "Dieser Auftrag ist ausschließlich transkriptbasiert. Wenn kein aktueller gesprochener Inhalt die Frage trägt, erfinde keine Frage und liefere einen Fehler statt auf die Folie auszuweichen." : "",
     "Erfinde keine Fakten. Rechne Zahlen selbst nach.",
+    "Leite aus einer Kennzahl allein keine universelle Stabilitäts-, Sicherheits- oder Gültigkeitsgrenze ab. Eine solche Grenze darf nur verwendet werden, wenn sie in der Grundlage samt Voraussetzungen ausdrücklich genannt ist.",
+    "Für Rechenfragen müssen Formel, alle benötigten Größen, Einheiten und Randbedingungen vorhanden sein. Fehlen sie, frage nach einer qualitativen Beziehung statt erfundene Zahlenwerte, Grenzwerte oder Materialdaten einzusetzen. Höhere Schwierigkeit bedeutet Transfer, nicht unbelegte Zusatzannahmen.",
     "Verwende korrektes Deutsch mit Umlauten und Unicode-Formelzeichen, kein LaTeX.",
     QUESTION_READABILITY_GUIDANCE,
     QUESTION_SELF_CONTAINED_GUIDANCE,
