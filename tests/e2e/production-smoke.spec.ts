@@ -3533,7 +3533,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
 
   await page.getByLabel("Frage Niveau 1.0 anzeigen").first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
-  await expect(page.getByText("Eine schwer belastete Welle läuft häufig langsam an.")).toBeVisible();
+  await expect(page.getByText("Eine stark belastete Welle läuft häufig langsam an. Welche Maßnahme schützt das Gleitlager beim Start am besten?", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
   await expect(page.getByRole("heading", { name: "KI-Assistent" })).toBeVisible();
