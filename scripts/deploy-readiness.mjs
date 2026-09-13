@@ -139,7 +139,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNBUDDY_EMBEDDING_PROVIDER: {
     provider: "embeddings",
-    purpose: "Set to openai-compatible for external embedding retrieval."
+    purpose: "Use disabled for PostgreSQL text retrieval without embedding APIs; external vectors are optional."
   },
   LEARNBUDDY_EMBEDDING_BASE_URL: {
     provider: "embeddings",
@@ -658,10 +658,13 @@ async function pullVercelEnv(environment) {
 }
 
 function requiredEnvFor(environment) {
+  const required = envValue("LEARNBUDDY_EMBEDDING_PROVIDER").toLowerCase() === "disabled"
+    ? REQUIRED_ENV.filter(name => !["LEARNBUDDY_EMBEDDING_BASE_URL", "LEARNBUDDY_EMBEDDING_API_KEY"].includes(name))
+    : REQUIRED_ENV;
   if (environment === "preview") {
-    return REQUIRED_ENV.filter((name) => !PREVIEW_RUNTIME_ENV.includes(name));
+    return required.filter((name) => !PREVIEW_RUNTIME_ENV.includes(name));
   }
-  return REQUIRED_ENV;
+  return required;
 }
 
 function checkEnvSet(source, names) {
@@ -1044,8 +1047,8 @@ function providerModeRules() {
     },
     {
       name: "LEARNBUDDY_EMBEDDING_PROVIDER",
-      allowed: ["openai-compatible", "http", "learnbuddy-local-hash-v1", "local-hash", "deterministic"],
-      reason: "Material retrieval in preview/production needs a configured embedding provider."
+      allowed: ["disabled", "openai-compatible", "http", "learnbuddy-local-hash-v1", "local-hash", "deterministic"],
+      reason: "Choose disabled for database text retrieval, or explicitly configure optional embedding retrieval."
     },
     {
       name: "LEARNBUDDY_OCR_PROVIDER",

@@ -166,8 +166,9 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
   }
 }
 
-export function getEmbeddingProvider(): EmbeddingProvider {
+export function getEmbeddingProvider(): EmbeddingProvider | null {
   const selected = process.env.LEARNBUDDY_EMBEDDING_PROVIDER?.trim().toLowerCase();
+  if (selected === "disabled") return null;
   if (selected === "openai-compatible" || selected === "http") {
     const endpoint = normalizeEmbeddingBaseUrl(process.env.LEARNBUDDY_EMBEDDING_BASE_URL ?? "");
     if (!endpoint) {

@@ -789,7 +789,9 @@ async function runPreflight(sql) {
   }
 
   const embeddingProvider = selectedEmbeddingProvider();
-  if (strict && ["", "learnbuddy-local-hash-v1", "local"].includes(embeddingProvider)) {
+  if (embeddingProvider === "disabled") {
+    passCheck(checks, "embedding_provider", "Embeddings sind deaktiviert; Materialien werden per Datenbank-Textsuche durchsucht.", { provider: "disabled", retrieval: "text" });
+  } else if (strict && ["", "learnbuddy-local-hash-v1", "local"].includes(embeddingProvider)) {
     failCheck(checks, "embedding_provider", "critical", "Production benötigt einen echten serverseitigen Embedding-Provider.", { provider: embeddingProvider });
   } else if (["openai-compatible", "http"].includes(embeddingProvider)) {
     const missing = [];

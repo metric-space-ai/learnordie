@@ -952,6 +952,10 @@ async function smokeLecturerAssistant() {
 async function smokeEmbedding() {
   if (!shouldRun("embedding")) return;
   const provider = selectedEmbeddingProvider();
+  if (provider === "disabled") {
+    pass("embedding", "Embeddings explicitly disabled; no embedding request made. Database text retrieval is tested separately.", { provider, externalRequestMade: false });
+    return;
+  }
   if (provider !== "openai-compatible" && provider !== "http") {
     const message = "Embedding provider is local; no external embedding request was made.";
     if (productionLike) fail("embedding", message, { provider });

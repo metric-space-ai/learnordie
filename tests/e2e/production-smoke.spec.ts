@@ -1269,6 +1269,21 @@ test("OpenAI-kompatible OCR-Aliase bestehen Preflight und pruefen Chat-Completio
   }
 });
 
+test("Explizit deaktivierte Embeddings brauchen keine API-Konfiguration", async () => {
+  const env = {
+    LEARNBUDDY_EMBEDDING_PROVIDER: "disabled",
+    LEARNBUDDY_EMBEDDING_BASE_URL: "",
+    LEARNBUDDY_EMBEDDING_API_KEY: ""
+  };
+  const preflight = await runAdminCommandAllowFailure(["preflight", "--profile", "production"], env);
+  const check = preflight.checks?.find(item => item.id === "embedding_provider");
+  expect(check?.status).toBe("pass");
+  expect(check?.details?.retrieval).toBe("text");
+  const smoke = await runProviderSmokeAllowFailure(["--profile", "production", "--only", "embedding"], env);
+  expect(smoke.ok).toBe(true);
+  expect(smoke.checks?.find(item => item.id === "embedding")?.details?.externalRequestMade).toBe(false);
+});
+
 test("Browser-STT-Capture erzeugt providerkompatible WAV-Segmente", async () => {
   const wav = encodePcm16Wav(new Float32Array([0, 1, -1, 0.5, -0.5]), 16_000);
   const bytes = new Uint8Array(await wav.arrayBuffer());
