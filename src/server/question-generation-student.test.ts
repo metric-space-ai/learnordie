@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { demoLecture } from "@/lib/demo-data";
-import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, parseStudentExamDraft } from "./question-generation";
+import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, liveQuestionSlideContext, parseStudentExamDraft } from "./question-generation";
 import type { AIProvider } from "./providers/ai";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
@@ -114,6 +114,11 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.ok(requests[0].user.includes(input().scriptContext));
   assert.ok(requests[0].user.includes(input().transcriptContext));
   assert.ok(requests[0].user.includes(input().latestTranscript));
+  assert.match(requests[0].system, /auch früheren Folien/);
+  assert.match(requests[0].user, /Studierendenfrage bestimmt das zu prüfende Thema/);
+  const earlierSlide = liveQuestionSlideContext(demoLecture, demoLecture.slides[0].id);
+  assert.ok(earlierSlide?.lines.length);
+  assert.ok(requests[0].user.includes(earlierSlide.lines[0]), "earlier slide content is available even when the current slide is different");
 });
 
 test("MiniMax draft generator rejects an OpenAI endpoint and does not make a provider call", async (t) => {

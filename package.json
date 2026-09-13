@@ -23,7 +23,7 @@
     "smoke:self-host": "node scripts/self-host-smoke.mjs",
     "smoke:worker": "node scripts/worker-smoke.mjs",
     "typecheck": "tsc --noEmit",
-    "test:release-contracts": "node --experimental-strip-types --import ./scripts/alias-register.mjs --test --test-concurrency=2 src/lib/live-operation-scope.test.ts src/lib/participation-url.test.ts src/lib/presenter-question-shortcut.test.ts tests/unit/transcript-recording-status.test.mjs scripts/lib/purge-session-transcripts.test.mjs scripts/lib/upgrade-original-slides.test.mjs",
+    "test:release-contracts": "node --experimental-strip-types --import ./scripts/alias-register.mjs --test --test-concurrency=2 src/lib/live-operation-scope.test.ts src/lib/participation-url.test.ts src/lib/presenter-question-shortcut.test.ts src/server/providers/minimax-media.test.ts src/server/question-generation-student.test.ts tests/unit/transcript-recording-status.test.mjs scripts/lib/purge-session-transcripts.test.mjs scripts/lib/upgrade-original-slides.test.mjs",
     "vendor:reveal-core": "node scripts/vendor-reveal-core.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
