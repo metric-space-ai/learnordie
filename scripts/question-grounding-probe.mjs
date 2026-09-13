@@ -28,7 +28,21 @@ provider.complete = async (input) => {
       sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
       distractors: Array.isArray(entry?.distractors) ? entry.distractors.slice(0,3).map(check=>({key:check?.key,kind:check?.kind,reason:String(check?.reason??"").slice(0,200)})) : undefined,
       sourceQuote: String(entry?.sourceQuote ?? "").slice(0, 600), reason: String(entry?.reason ?? "").slice(0, 400)
-    })) : null });
+    })) : null,
+      // This executable is restricted to public synthetic fixtures. Preserve
+      // the actual candidate so a reviewer's claimed defect can be checked,
+      // rather than treating that model's explanation as proof. Runtime
+      // handlers must never log student/lecture candidates this way.
+      syntheticCandidate: Array.isArray(parsed.variants) ? {
+        supported: parsed.supported, topic: String(parsed.topic ?? "").slice(0,100),
+        coreStatement: String(parsed.coreStatement ?? "").slice(0,500),
+        variants: parsed.variants.slice(0,4).map(variant=>({
+          level: variant.level, text: String(variant.text??"").slice(0,500),
+          explanation: String(variant.explanation??"").slice(0,700),
+          answers: Array.isArray(variant.answers) ? variant.answers.slice(0,4).map(answer=>({text:String(answer.text??"").slice(0,500),correct:answer.correct})) : null
+        }))
+      } : undefined
+    });
   } catch { reviewVerdicts.push({ malformedJson: true }); }
   return result;
 };
