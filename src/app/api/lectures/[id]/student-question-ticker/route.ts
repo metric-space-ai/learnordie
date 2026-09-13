@@ -34,7 +34,13 @@ function tickerItems(lecture: NonNullable<Awaited<ReturnType<ReturnType<typeof g
       pseudonym: question.pseudonym,
       status: question.status,
       createdAt: question.createdAt,
+      attemptAt: question.examDraftAttemptAt ?? null,
       examDraftStatus: question.examDraftStatus ?? "not_applicable",
+      generationStale: question.examDraftStatus === "generating" && (
+        !question.examDraftAttemptAt ||
+        !Number.isFinite(Date.parse(question.examDraftAttemptAt)) ||
+        Date.now() - Date.parse(question.examDraftAttemptAt) >= GENERATION_STALE_MS
+      ),
       examDraftError: question.examDraftError,
       draft: draftReady ? {
         id: review.id,

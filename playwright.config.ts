@@ -41,6 +41,7 @@ export default defineConfig({
       E2E_PORT: port,
       E2E_BASE_URL: baseURL,
       E2E_DATABASE_URL: process.env.E2E_DATABASE_URL ?? "postgres://michaelwelsch@127.0.0.1:55432/learnbuddy_e2e_smoke",
+      LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW: process.env.LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW ?? "3",
       E2E_AI_MOCK_PORT: process.env.E2E_AI_MOCK_PORT ?? "4070",
       E2E_AI_PROVIDER: process.env.E2E_AI_PROVIDER ?? "",
       E2E_STUDENT_DRAFT_DELAY_MS: process.env.E2E_STUDENT_DRAFT_DELAY_MS ?? "0",

@@ -16,8 +16,7 @@ const STUDENT_DRAFT_GENERATION_BUDGET_MS = 45_000;
 const DEFAULT_CHAT_QUESTION_LIMIT = 5;
 
 const chatQuestionSchema = z.object({
-  text: z.string().trim().min(4).max(600),
-  pseudonym: z.string().trim().max(80).optional()
+  text: z.string().trim().min(4).max(600)
 });
 
 function configuredChatQuestionLimit() {
@@ -94,7 +93,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const chatQuestion = await repository.submitStudentChatQuestion({
     lectureToken: token,
     text: parsed.data.text,
-    pseudonym: parsed.data.pseudonym ?? "Pseudonym",
+    pseudonym: enrollment.displayName?.trim() || profile.pseudonym,
     anonymousKey: profile.anonymousKey
   });
 

@@ -1,9 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import postgres from "postgres";
 
+import { seriesIdForLecture } from "../../src/lib/series";
 import type { Lecture, QuestionVariant } from "../../src/lib/types";
+import { StudentQuestionTickerItem, type TickerQuestion } from "../../src/components/StudentQuestionTicker";
 import { commandLiveSession } from "../../src/server/live-session-repository";
 import { getLectureRepository } from "../../src/server/repository";
+import { getStudentRepository } from "../../src/server/student-repository";
 
 const DEFAULT_DATABASE_URL = "postgres://michaelwelsch@127.0.0.1:55432/learnbuddy_e2e_smoke";
 
@@ -123,6 +129,37 @@ async function startPresentation(lecture: Lecture) {
   await commandLiveSession(lecture, { action: "slide", revision: 1, slideIndex: 0, showIntro: false });
 }
 
+test("ticker renders retry/reject controls only after generation is stale", () => {
+  const renderItem = (generationStale: boolean) => renderToStaticMarkup(createElement(StudentQuestionTickerItem, {
+    question: {
+      id: "ticker-stale-state",
+      text: "Wie verändert die Viskosität die Tragfähigkeit?",
+      pseudonym: "Student",
+      status: "accepted",
+      createdAt: new Date().toISOString(),
+      attemptAt: new Date(Date.now() - (generationStale ? 120_000 : 1_000)).toISOString(),
+      examDraftStatus: "generating",
+      generationStale,
+      draft: null
+    } satisfies TickerQuestion,
+    canPublish: true,
+    busyId: null,
+    onPublish: () => undefined,
+    onRetry: () => undefined,
+    onReject: () => undefined
+  }));
+
+  const staleMarkup = renderItem(true);
+  expect(staleMarkup).toContain("Die Entwurfserstellung hängt möglicherweise fest.");
+  expect(staleMarkup).toContain("Erstellung neu starten");
+  expect(staleMarkup).toContain("Entwurf ablehnen");
+
+  const activeMarkup = renderItem(false);
+  expect(activeMarkup).toContain("Entwurf wird vorbereitet");
+  expect(activeMarkup).not.toContain("Erstellung neu starten");
+  expect(activeMarkup).not.toContain("Entwurf ablehnen");
+});
+
 test("slow student draft generation acknowledges once, stays private, and cannot bypass profile rate limits", async ({ page, browser }) => {
   test.skip(
     process.env.E2E_AI_PROVIDER !== "learnordie-responses" || Number(process.env.E2E_STUDENT_DRAFT_DELAY_MS) < 15_000,
@@ -164,8 +201,12 @@ test("slow student draft generation acknowledges once, stays private, and cannot
     expect(first.chatQuestion.examDraftStatus).toBe("generating");
 
     const profileResponse = await student.request.get("/api/student/profile");
-    const { profile } = await profileResponse.json() as { profile: { id: string } };
+    const { profile } = await profileResponse.json() as { profile: { id: string; pseudonym: string } };
     expect(profile?.id).toBeTruthy();
+    expect(profile?.pseudonym).toBeTruthy();
+    const enrollment = await getStudentRepository().getActiveClaim(profile.id, seriesIdForLecture(lecture));
+    expect(enrollment).toBeTruthy();
+    const expectedPseudonym = enrollment?.displayName?.trim() || profile.pseudonym;
     const browserKey = await student.evaluate(() => localStorage.getItem("lb_student_key"));
     expect(browserKey).toBeTruthy();
 
@@ -187,11 +228,12 @@ test("slow student draft generation acknowledges once, stays private, and cannot
 
     const thirdResponse = await student.request.post(`/api/lecture/${lecture.publicToken}/chat-questions`, {
       headers: { "content-type": "application/json" },
-      data: { text: thirdText, pseudonym: "Race Student", anonymousKey: "forged_rotated_key_001" }
+      data: { text: thirdText, pseudonym: "Forged Lecturer Reveal", anonymousKey: "forged_rotated_key_001" }
     });
     expect(thirdResponse.status()).toBe(200);
-    const third = await thirdResponse.json() as { accepted: boolean; chatQuestion: { id: string } };
+    const third = await thirdResponse.json() as { accepted: boolean; chatQuestion: { id: string; pseudonym: string } };
     expect(third.accepted).toBe(true);
+    expect(third.chatQuestion.pseudonym).toBe(expectedPseudonym);
 
     const mockPort = process.env.E2E_AI_MOCK_PORT ?? "4070";
     const mockHost = process.env.E2E_HOST ?? "127.0.0.1";
@@ -206,8 +248,8 @@ test("slow student draft generation acknowledges once, stays private, and cannot
     const after = await statsAfterLimit.json() as { moderationRequests: number };
     expect(after.moderationRequests).toBe(before.moderationRequests);
 
-    const rows = await sql<{ id: string; question_text: string; anonymous_key: string | null }[]>`
-      select id::text as id, question_text, anonymous_key
+    const rows = await sql<{ id: string; question_text: string; anonymous_key: string | null; pseudonym: string }[]>`
+      select id::text as id, question_text, anonymous_key, pseudonym
       from student_chat_questions where lecture_id = ${lecture.id}
     `;
     const questions = [firstText, secondText, thirdText];
@@ -216,6 +258,7 @@ test("slow student draft generation acknowledges once, stays private, and cannot
       expect(matches).toHaveLength(1);
       expect(matches[0].anonymous_key).toBe(browserKey);
     }
+    expect(rows.find((row) => row.question_text === thirdText)?.pseudonym).toBe(expectedPseudonym);
     const attempts = await sql<{ count: number }[]>`
       select count(*)::int as count
       from student_chat_question_attempts
@@ -230,9 +273,117 @@ test("slow student draft generation acknowledges once, stays private, and cannot
       return [byId.get(first.chatQuestion.id)?.examDraftStatus, byId.get(second.chatQuestion.id)?.examDraftStatus, byId.get(third.chatQuestion.id)?.examDraftStatus];
     }, { timeout: 45_000, intervals: [250, 500, 1000] }).toEqual(["draft", "rejected", "draft"]);
 
+    const tickerResponse = await page.request.get(`/api/lectures/${lecture.id}/student-question-ticker`);
+    const tickerBody = await tickerResponse.json() as { questions: Array<{ id: string; pseudonym: string }> };
+    expect(tickerBody.questions.find((question) => question.id === third.chatQuestion.id)?.pseudonym).toBe(expectedPseudonym);
+
     await expect(student.getByText("Welche Schicht trägt die Last im hydrodynamischen Gleitlager?", { exact: true })).toHaveCount(0);
   } finally {
     await studentContext.close();
+    await sql.end();
+  }
+});
+
+test("ticker exposes stale generation actions, reclaims safely, and fences the old attempt", async ({ page }) => {
+  test.skip(process.env.E2E_AI_PROVIDER !== "learnordie-responses", "Run with the deterministic local Learnordie Responses mock.");
+  test.setTimeout(60_000);
+
+  const { lecture, csrf } = await lectureFixture(page);
+  const sql = database();
+  const repo = repository();
+  try {
+    const staleAttemptId = randomUUID();
+    const staleQuestionId = await seedQuestion(sql, lecture, {
+      text: "Wie verändert die Viskosität die Tragfähigkeit im Gleitlager?",
+      draftStatus: "generating",
+      attemptId: staleAttemptId,
+      attemptAgeMs: 120_000
+    });
+    const rejectAttemptId = randomUUID();
+    const rejectQuestionId = await seedQuestion(sql, lecture, {
+      text: "Welche Aufgabe übernimmt der Schmierfilm?",
+      draftStatus: "generating",
+      attemptId: rejectAttemptId,
+      attemptAgeMs: 120_000
+    });
+    const activeQuestionId = await seedQuestion(sql, lecture, {
+      text: "Wie wirkt sich die Lagerlast auf den Schmierfilm aus?",
+      draftStatus: "generating",
+      attemptId: randomUUID(),
+      attemptAgeMs: 1_000
+    });
+
+    const tickerUrl = `/api/lectures/${lecture.id}/student-question-ticker`;
+    const initialResponse = await page.request.get(tickerUrl);
+    expect(initialResponse.status()).toBe(200);
+    const initialBody = await initialResponse.json() as { questions: Array<{
+      id: string;
+      attemptAt: string | null;
+      examDraftStatus: string;
+      generationStale: boolean;
+    }> };
+    const staleItem = initialBody.questions.find((question) => question.id === staleQuestionId);
+    expect(staleItem).toMatchObject({ examDraftStatus: "generating", generationStale: true });
+    expect(Date.parse(staleItem!.attemptAt ?? "")).toBeLessThan(Date.now() - 90_000);
+    expect(initialBody.questions.find((question) => question.id === activeQuestionId)).toMatchObject({
+      examDraftStatus: "generating",
+      generationStale: false
+    });
+
+    const activeRetry = await page.request.post(tickerUrl, {
+      headers: { "x-learnbuddy-csrf": csrf, "content-type": "application/json" },
+      data: { action: "retry", questionId: activeQuestionId }
+    });
+    expect(activeRetry.status()).toBe(409);
+
+    const retryResponse = await page.request.post(tickerUrl, {
+      headers: { "x-learnbuddy-csrf": csrf, "content-type": "application/json" },
+      data: { action: "retry", questionId: staleQuestionId }
+    });
+    expect(retryResponse.status()).toBe(200);
+    const retryBody = await retryResponse.json() as { questions: Array<{
+      id: string;
+      examDraftStatus: string;
+      generationStale: boolean;
+      draft: unknown;
+    }> };
+    expect(retryBody.questions.find((question) => question.id === staleQuestionId)).toMatchObject({
+      examDraftStatus: "draft",
+      generationStale: false
+    });
+    expect(retryBody.questions.find((question) => question.id === staleQuestionId)?.draft).toBeTruthy();
+
+    const lateSave = await repo.saveStudentExamDraft({
+      lectureId: lecture.id,
+      chatQuestionId: staleQuestionId,
+      attemptId: staleAttemptId,
+      variants: draftVariants(lecture, "late-old-generation")
+    });
+    expect(lateSave).toBeNull();
+
+    const rejectResponse = await page.request.post(tickerUrl, {
+      headers: { "x-learnbuddy-csrf": csrf, "content-type": "application/json" },
+      data: { action: "reject", questionId: rejectQuestionId }
+    });
+    expect(rejectResponse.status()).toBe(200);
+    const rejectBody = await rejectResponse.json() as { questions: Array<{
+      id: string;
+      examDraftStatus: string;
+      generationStale: boolean;
+    }> };
+    expect(rejectBody.questions.find((question) => question.id === rejectQuestionId)).toMatchObject({
+      examDraftStatus: "rejected",
+      generationStale: false
+    });
+
+    const lateRejectedSave = await repo.saveStudentExamDraft({
+      lectureId: lecture.id,
+      chatQuestionId: rejectQuestionId,
+      attemptId: rejectAttemptId,
+      variants: draftVariants(lecture, "late-rejected-generation")
+    });
+    expect(lateRejectedSave).toBeNull();
+  } finally {
     await sql.end();
   }
 });

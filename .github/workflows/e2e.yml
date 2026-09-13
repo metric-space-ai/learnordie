@@ -100,6 +100,15 @@ jobs:
         timeout-minutes: 16
         run: npm run test:e2e
 
+      - name: Student draft race acceptance
+        timeout-minutes: 8
+        run: npx playwright test --config=playwright.config.ts --workers=1 tests/e2e/student-draft-postgres-races.spec.ts
+        env:
+          E2E_AI_PROVIDER: learnordie-responses
+          E2E_STUDENT_DRAFT_DELAY_MS: "18000"
+          E2E_STUDENT_DRAFT_DELAY_MARKER: E2E_SLOW_STUDENT_DRAFT
+          LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW: "3"
+
       - name: Retain browser evidence
         if: always()
         uses: actions/upload-artifact@v4
