@@ -33,6 +33,7 @@ const child = spawn(
     "src/server/providers/ai.test.ts",
     "src/server/providers/minimax-media.test.ts",
     "tests/unit/deploy-readiness-minimax.test.mjs",
+    "tests/unit/question-wording-plan.test.mjs",
     "packages/slide-engine/src/excalidraw/scene.test.ts",
     "packages/slide-engine/src/scenes/modell-theme.test.ts",
     "packages/slide-engine/src/scenes/oscillator-physics.test.ts",
