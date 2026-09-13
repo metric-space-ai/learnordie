@@ -28,7 +28,10 @@ try {
       (select count(*)::int from asset_chunks where embedding is not null) as embedded_chunks`;
     const modelDecks = await tx`select l.id, l.leaderboard_enabled,
       (select count(*)::int from slides s where s.lecture_id=l.id) as slides,
-      (select count(*)::int from question_variants v join questions q on q.id=v.question_id where q.lecture_id=l.id) as variants
+      (select count(*)::int from question_variants v join questions q on q.id=v.question_id where q.lecture_id=l.id) as variants,
+      (select coalesce(sum(length(a->'structuredData'->>'text')), 0)::int
+        from jsonb_array_elements(coalesce(l.slide_document_json->'assets', '[]'::jsonb)) a
+        where a->>'kind'='sourceDocument' and a->'structuredData'->>'format' in ('text/plain', 'text/markdown')) as attached_manuscript_chars
       from lectures l where l.title ilike '%Modellbegriff%' order by l.id`;
     return { counts, modelDecks };
   });
@@ -67,6 +70,8 @@ globalThis.fetch = async (...args) => {
 const started = Date.now();
 try {
   const { getAIProvider } = await import("@/server/providers/ai");
+  const { getSTTProvider } = await import("@/server/providers/stt");
+  report.stt = { configuredProvider: getSTTProvider().name, audioTested: false };
   const provider = getAIProvider();
   if (provider.info.model.toLowerCase() !== "minimax-m3") throw new Error("unexpected-model");
   phase = "four-question-levels";

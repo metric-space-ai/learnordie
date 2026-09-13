@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Lecture } from "@/lib/types";
-import { attachedScriptBlocks, packScriptContext } from "./lecture-script-context.ts";
+import { attachedScriptBlocks, packScriptContext } from "@/server/lecture-script-context";
 
 const lecture = (assets: unknown[]) => ({ slideDocument: { assets } }) as Pick<Lecture, "slideDocument">;
 test("attached manuscript participates even without extracted database chunks", () => {
