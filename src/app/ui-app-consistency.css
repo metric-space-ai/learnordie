@@ -174,7 +174,10 @@
   overflow-wrap: anywhere;
   font-size: 14px;
   font-weight: 600;
+  border-color: transparent;
+  background: transparent;
 }
+.learn-shell .learn-more-panel :is(.plain-button, a):hover { border-color: transparent; background: var(--app-surface-hover); color: var(--app-text); }
 .learn-shell .learn-more[open] > summary,
 .learn-shell .learn-more > summary:hover { border-color: var(--app-accent); background: var(--app-surface-muted); color: var(--app-accent-ink); }
 .learn-shell .learn-more-density {
@@ -212,6 +215,17 @@
   .student-app .student-id-form { width: 100%; }
   .student-app .student-event { padding: 10px; }
   .learn-shell .overlay-panel .chat-input { grid-template-columns: minmax(0, 1fr); }
+}
+/* Compact controls, not a full-width empty question bar. On tablet widths
+   navigation and question levels share one bottom line; phones retain room
+   for all four accessible targets without horizontal overflow. */
+@media (max-width: 900px) {
+  .learn-shell .hotspots { width: max-content; max-width: calc(100vw - 24px); left: 50%; right: auto; transform: translateX(-50%); padding-inline: 10px; }
+}
+@media (min-width: 541px) and (max-width: 900px) {
+  .learn-shell .hotspots { left: auto; right: 12px; bottom: 12px; transform: none; }
+  .learn-shell .slide-nav { left: 12px; right: auto; transform: none; }
+  .learn-shell .slide-engine-stage:has(> .native-canvas) { padding-bottom: 80px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .student-app .readiness-meter-fill { transition: none; }
