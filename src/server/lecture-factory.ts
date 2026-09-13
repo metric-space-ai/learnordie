@@ -215,6 +215,7 @@ export function createReviewItemFromChatQuestion(lecture: Lecture, chatQuestion:
   return {
     id: `review_${crypto.randomUUID()}`,
     lectureId: lecture.id,
+    sourceStudentQuestionId: chatQuestion.id,
     sourceTitle,
     status: "draft",
     variants: generateReviewVariants(lecture, virtualMaterial),

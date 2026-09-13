@@ -61,7 +61,7 @@ export function useLiveSession(token: string, leaderboard: boolean, lecturer?: {
     return () => { stopped = true; abort?.abort(); clearTimeout(timer); clearInterval(health); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("online", refresh); };
   }, [token, leaderboard, refreshKey, accept, refresh]);
 
-  const send = useCallback(async (command: Omit<Extract<LiveCommand, { action: "slide" }>, "revision"> | Omit<Extract<LiveCommand, { action: "fire" }>, "revision"> | { action: "start" | "close" | "end" }) => {
+  const send = useCallback(async (command: Omit<Extract<LiveCommand, { action: "slide" }>, "revision"> | Omit<Extract<LiveCommand, { action: "fire" }>, "revision"> | Omit<Extract<LiveCommand, { action: "publishDraft" }>, "revision"> | { action: "start" | "close" | "end" }) => {
     if (!lecturerId || !csrfToken || busyRef.current || !stateRef.current) return false;
     busyRef.current = true;
     setBusy(true);

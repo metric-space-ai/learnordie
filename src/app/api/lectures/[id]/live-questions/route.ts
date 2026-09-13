@@ -4,7 +4,8 @@ import { z } from "zod";
 import { questionsForSlide } from "@/lib/questions";
 import type { Lecture } from "@/lib/types";
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
-import { generateLiveQuestionFamily, type LiveQuestionSlideContext } from "@/server/question-generation";
+import { acceptedTranscriptContext, generateLiveQuestionFamily, liveQuestionSlideContext } from "@/server/question-generation";
+import { LiveSessionError, liveLecture, readLiveSession } from "@/server/live-session-repository";
 import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
@@ -18,31 +19,10 @@ const MIN_TRANSCRIPT_CHARS = 120;
 const liveQuestionSchema = z.object({
   slideId: z.string().min(1).max(120),
   transcript: z.string().max(8000).optional(),
-  allowSlideContext: z.boolean().optional()
+  sessionId: z.string().uuid().optional(),
+  allowSlideContext: z.boolean().optional(),
+  mode: z.enum(["transcript-only"]).optional()
 });
-
-function slideContext(lecture: Lecture, slideId: string): LiveQuestionSlideContext | null {
-  const node = lecture.slideDocument?.slides.find((slide) => slide.id === slideId);
-  if (node) {
-    const lines: string[] = [];
-    for (const element of node.canvas?.elements ?? []) {
-      if (!element.isDeleted && element.type === "text" && element.text) lines.push(element.text);
-    }
-    // Native editable text is authoritative; old block projections may be stale.
-    for (const block of node.canvas ? [] : node.blocks) {
-      if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") lines.push(block.text);
-      else if (block.type === "callout") lines.push(block.text);
-      else if (block.type === "bulletList" || block.type === "numberedList") lines.push(...block.items);
-      else if (block.type === "formula") lines.push(block.latex ?? block.mathMl ?? "");
-      else if (block.type === "definition") lines.push(`${block.term}: ${block.definition}`);
-      else if (block.type === "scene3d") lines.push(`Interaktive Demonstration: ${block.altText}`);
-    }
-    for (const note of node.speakerNotes?.slice(0, 3) ?? []) lines.push(`Vortragsnotiz: ${note.text}`);
-    return { title: node.title, lines: lines.filter(Boolean) };
-  }
-  const legacy = lecture.slides.find((slide) => slide.id === slideId);
-  return legacy ? { title: legacy.title, lines: [legacy.topic, ...legacy.copy] } : null;
-}
 
 function recentTranscript(lecture: Lecture) {
   return (lecture.transcriptSegments ?? [])
@@ -84,12 +64,55 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const lecture = (await repository.listLectures(session.email)).find((item) => item.id === id);
   if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
 
-  const slide = slideContext(lecture, parsed.data.slideId);
+  const slide = liveQuestionSlideContext(lecture, parsed.data.slideId);
   if (!slide) return NextResponse.json({ error: "Folie nicht gefunden." }, { status: 404 });
 
+  if (parsed.data.sessionId && parsed.data.mode !== "transcript-only") {
+    try {
+      const liveContext = await liveLecture(lecture.publicToken, session.email);
+      const live = await readLiveSession(liveContext, null, false);
+      if (live.sessionId !== parsed.data.sessionId) {
+        return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
+      }
+    } catch (error) {
+      console.warn("live question session unavailable", error instanceof Error ? error.message : error);
+      return NextResponse.json({ error: "Die aktuelle Live-Sitzung ist nicht verfügbar." }, { status: error instanceof LiveSessionError ? error.status : 503 });
+    }
+  }
+
   let transcript = (parsed.data.transcript?.trim() || recentTranscript(lecture)).trim();
-  const contextSource = transcript.length >= MIN_TRANSCRIPT_CHARS ? "transcript" : "slide";
+  let latestTranscript: string | undefined;
+  if (parsed.data.mode === "transcript-only") {
+    try {
+      const liveContext = await liveLecture(lecture.publicToken, session.email);
+      const live = await readLiveSession(liveContext, null, false);
+      if (parsed.data.sessionId && parsed.data.sessionId !== live.sessionId) {
+        return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
+      }
+      if (live.status !== "active" || live.sessionStartedAt === null) {
+        return NextResponse.json({ error: "Für diese Live-Sitzung ist noch kein aktueller Transkriptabschnitt verfügbar." }, { status: 422 });
+      }
+      const current = acceptedTranscriptContext(lecture, live.sessionStartedAt);
+      if (current.segmentCount === 0 || current.latestAt === null || Date.now() - current.latestAt > 120_000 || current.recentWindow.length < MIN_TRANSCRIPT_CHARS) {
+        return NextResponse.json({ error: "Das aktuelle Live-Transkript ist noch zu kurz für eine Frage." }, { status: 422 });
+      }
+      // Client transcript text is only a hint for its display path; grounding for
+      // L is exclusively the accepted, current-session server record.
+      transcript = current.accumulated;
+      latestTranscript = current.recentWindow;
+    } catch (error) {
+      console.warn("transcript-only live context unavailable", error instanceof Error ? error.message : error);
+      return NextResponse.json({ error: "Das aktuelle Live-Transkript ist nicht verfügbar. Bitte die nächste Passage abwarten." }, { status: 503 });
+    }
+  }
+
+  const contextSource = parsed.data.mode === "transcript-only"
+    ? "transcript"
+    : transcript.length >= MIN_TRANSCRIPT_CHARS ? "transcript" : "slide";
   if (contextSource === "slide" && parsed.data.allowSlideContext) transcript = [slide.title, ...slide.lines].join("\n");
+  if (parsed.data.mode === "transcript-only" && contextSource !== "transcript") {
+    return NextResponse.json({ error: "Für diese Frage ist ein aktuelles Live-Transkript erforderlich." }, { status: 422 });
+  }
   if (transcript.length < MIN_TRANSCRIPT_CHARS) {
     return NextResponse.json({ error: "Das Transkript ist noch zu kurz für eine Frage." }, { status: 422 });
   }
@@ -97,7 +120,16 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const existingQuestionTexts = questionsForSlide(lecture.questions, parsed.data.slideId).map((question) => question.text);
   let variants;
   try {
-    variants = await generateLiveQuestionFamily({ lecture, slide, transcript, existingQuestionTexts, contextSource });
+    variants = await generateLiveQuestionFamily({
+      lecture,
+      slide,
+      transcript,
+      latestTranscript,
+      scriptContext: await repository.getLectureScriptContext(id, session.email, transcript),
+      existingQuestionTexts,
+      contextSource,
+      transcriptOnly: parsed.data.mode === "transcript-only"
+    });
   } catch (error) {
     console.warn("live question generation failed", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: clientSafeError(error) }, { status: 502 });

@@ -12,6 +12,7 @@ const command = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start"), revision }),
   z.object({ action: z.literal("slide"), revision, slideIndex: z.number().int().min(0), showIntro: z.boolean() }),
   z.object({ action: z.literal("fire"), revision, familyIndex: z.number().int().min(0), durationSeconds: z.number().int().min(5).max(180), familyId: z.string().min(1).max(120).optional(), sessionId: z.string().uuid().optional() }),
+  z.object({ action: z.literal("publishDraft"), revision, questionId: z.string().min(1).max(120) }),
   z.object({ action: z.literal("close"), revision }),
   z.object({ action: z.literal("end"), revision })
 ]);
@@ -26,7 +27,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const parsed = command.safeParse(body.body);
   if (!parsed.success) return liveJson({ error: "Ungültiger Sitzungsbefehl." }, 400);
   try {
-    const lecture = (await getLectureRepository().listLectures(session.email)).find((item) => item.id === id);
+    const repository = getLectureRepository();
+    const lecture = (await repository.listLectures(session.email)).find((item) => item.id === id);
     if (!lecture) return liveJson({ error: "Vorlesung nicht gefunden." }, 404);
     // Also enforce ownership at the database boundary (public token is not teacher authority).
     const context = await liveLecture(lecture.publicToken, session.email);

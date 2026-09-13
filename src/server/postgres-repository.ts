@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 
 import { demoLecture } from "@/lib/demo-data";
 import { normalizeEvaluationConfig, normalizeEvaluationConfigForUpdate } from "@/lib/evaluation";
@@ -57,6 +57,7 @@ import type {
   StandaloneExportJob,
   StandaloneExportJobStatus,
   StudentChatQuestion,
+  StudentExamDraftStatus,
   TranscriptSegment
 } from "@/lib/types";
 import {
@@ -79,6 +80,7 @@ import {
   lectureAssets,
   lectureSeries,
   lectures,
+  liveSessions,
   lecturerAssistantMessages,
   materialProcessingRuns,
   participantSessions,
@@ -90,6 +92,9 @@ import {
   standaloneExportJobs,
   standaloneExports,
   studentChatQuestions,
+  studentChatQuestionAttempts,
+  studentExamDraftAttempts,
+  studentProfiles,
   transcriptSegments,
   users
 } from "./db/schema";
@@ -107,12 +112,15 @@ import {
 import { applyQualityDecision, recordReviewEdits } from "./question-review-metadata";
 import { createPresentationAssetDrafts, processMaterialContent } from "./material-pipeline";
 import { generateQuestionVariantsForMaterial } from "./question-generation";
+import { decideStudentExamDraftAttempt, studentExamDraftAttemptMayCommit, studentExamDraftMayBeRejected } from "./student-exam-draft-state";
 import { getJobProvider } from "./providers/jobs";
 import { getStorageProvider } from "./providers/storage";
 import { configuredWorkerMaxAttempts } from "./worker-policy";
 import type {
   AddMaterialInput,
   AppendQuestionFamilyInput,
+  BeginStudentExamDraftAttemptInput,
+  BeginStudentExamDraftAttemptResult,
   ApplyLecturerAssistantEvaluationFocusInput,
   ApplyLecturerAssistantLearnDensityInput,
   ApplyLecturerAssistantSlidePointInput,
@@ -772,6 +780,35 @@ export class PostgresLectureRepository implements LectureRepository {
     return lecture ?? null;
   }
 
+  async getLectureScriptContext(lectureId: string, ownerEmail?: string, focusText = "") {
+    await this.ensureSeeded();
+    if (!await this.getLectureById(lectureId, ownerEmail)) return "";
+    const rows = await this.db.select({ sourceRef: assetChunks.sourceRef, content: assetChunks.content })
+      .from(assetChunks)
+      .where(eq(assetChunks.lectureId, lectureId))
+      .orderBy(asc(assetChunks.createdAt))
+      .limit(256);
+    const totalChars = rows.reduce((total, row) => total + row.sourceRef.length + row.content.length, 0);
+    if (totalChars <= 14_000) return rows.map((row) => `${row.sourceRef}: ${row.content}`).join("\n");
+
+    const terms = [...new Set((focusText.toLocaleLowerCase("de-DE").match(/[\p{L}\p{N}]{4,}/gu) ?? []))];
+    const ranked = rows.map((row, index) => {
+      const text = row.content.toLocaleLowerCase("de-DE");
+      const score = terms.reduce((total, term) => total + (text.includes(term) ? 1 : 0), 0);
+      return { ...row, index, score, packedLength: row.sourceRef.length + row.content.length + 2 };
+    }).sort((left, right) => right.score - left.score || left.index - right.index);
+    const selected: typeof ranked = [];
+    let selectedLength = 0;
+    for (const row of ranked) {
+      if (selectedLength + row.packedLength > 14_000) continue;
+      selected.push(row);
+      selectedLength += row.packedLength;
+    }
+    return selected.sort((left, right) => left.index - right.index)
+      .map((row) => `${row.sourceRef}: ${row.content}`)
+      .join("\n");
+  }
+
   async createLecture(input: CreateLectureInput, ownerEmail?: string) {
     await this.ensureSeeded();
     const title = input.title.trim();
@@ -1279,25 +1316,218 @@ export class PostgresLectureRepository implements LectureRepository {
         moderationProvider: moderation.provider,
         moderationModel: moderation.model,
         moderationConfidence: moderation.confidence,
-        moderationSignals: moderation.signals
+        moderationSignals: moderation.signals,
+        examDraftStatus: moderation.status === "accepted" ? "pending" : "not_applicable"
       })
       .returning();
 
-    const chatQuestion = this.chatQuestionFromRow(created);
-    if (chatQuestion.status === "accepted") {
-      const reviewItem = createReviewItemFromChatQuestion(lecture, chatQuestion);
-      await this.db.insert(questionReviewItems).values({
-        lectureId: lecture.id,
-        sourceTitle: reviewItem.sourceTitle,
-        status: "draft",
-        variantsJson: reviewItem.variants
-      });
-      if (lecture.status === "draft" || lecture.status === "material_processing") {
-        await this.db.update(lectures).set({ status: "question_review" }).where(eq(lectures.id, lecture.id));
-      }
-    }
+    return this.chatQuestionFromRow(created);
+  }
 
-    return chatQuestion;
+  async beginStudentExamDraftAttempt(input: BeginStudentExamDraftAttemptInput, ownerEmail?: string): Promise<BeginStudentExamDraftAttemptResult> {
+    await this.ensureSeeded();
+    if (!await this.getLectureById(input.lectureId, ownerEmail)) return { status: "not_found" };
+    return this.db.transaction(async (tx) => {
+      // Parent-first with NO KEY UPDATE: serialize the lecture-wide budget while
+      // remaining compatible with KEY SHARE locks taken by foreign-key checks.
+      await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, input.lectureId)).for("no key update");
+      const [question] = await tx.select().from(studentChatQuestions).where(and(
+        eq(studentChatQuestions.id, input.chatQuestionId),
+        eq(studentChatQuestions.lectureId, input.lectureId)
+      )).for("update").limit(1);
+      if (!question) return { status: "not_found" };
+      const decision = decideStudentExamDraftAttempt({
+        questionStatus: coerceChatQuestionStatus(question.status),
+        draftStatus: question.examDraftStatus,
+        attemptAt: question.examDraftAttemptAt?.getTime() ?? null,
+        attemptId: question.examDraftAttemptId
+      }, {
+        now: input.now.getTime(),
+        cooldownMs: input.cooldownMs,
+        staleGenerationMs: input.staleGenerationMs,
+        initial: input.initial ?? false
+      });
+      if (decision !== "started") return { status: decision };
+
+      await tx.delete(studentExamDraftAttempts).where(and(
+        eq(studentExamDraftAttempts.lectureId, input.lectureId),
+        lt(studentExamDraftAttempts.createdAt, new Date(input.now.getTime() - 24 * 60 * 60 * 1000))
+      ));
+      const [attemptCount] = await tx.select({ count: count() }).from(studentExamDraftAttempts).where(and(
+        eq(studentExamDraftAttempts.lectureId, input.lectureId),
+        gte(studentExamDraftAttempts.createdAt, input.since)
+      ));
+      if (Number(attemptCount?.count ?? 0) >= input.maxAttempts) return { status: "rate_limited" };
+
+      const attemptId = crypto.randomUUID();
+      await tx.insert(studentExamDraftAttempts).values({
+        id: attemptId,
+        lectureId: input.lectureId,
+        chatQuestionId: input.chatQuestionId,
+        createdAt: input.now
+      });
+      const [claimed] = await tx.update(studentChatQuestions).set({
+        examDraftStatus: "generating",
+        examDraftError: null,
+        examDraftAttemptAt: input.now,
+        examDraftAttemptId: attemptId
+      }).where(and(
+        eq(studentChatQuestions.id, input.chatQuestionId),
+        eq(studentChatQuestions.lectureId, input.lectureId),
+        eq(studentChatQuestions.examDraftStatus, question.examDraftStatus),
+        question.examDraftAttemptId ? eq(studentChatQuestions.examDraftAttemptId, question.examDraftAttemptId) : isNull(studentChatQuestions.examDraftAttemptId)
+      )).returning({ id: studentChatQuestions.id });
+      if (!claimed) {
+        await tx.delete(studentExamDraftAttempts).where(eq(studentExamDraftAttempts.id, attemptId));
+        return { status: "generating" };
+      }
+      return { status: "started", attemptId };
+    });
+  }
+
+  async updateStudentExamDraftStatus(input: { lectureId: string; chatQuestionId: string; status: StudentExamDraftStatus; error?: string; attemptId?: string }, ownerEmail?: string) {
+    await this.ensureSeeded();
+    if (!await this.getLectureById(input.lectureId, ownerEmail)) return null;
+    await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, input.lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
+      const [question] = await tx.select().from(studentChatQuestions).where(and(
+        eq(studentChatQuestions.id, input.chatQuestionId),
+        eq(studentChatQuestions.lectureId, input.lectureId)
+      )).for("update").limit(1);
+      if (!question) return;
+      if (input.status === "rejected") {
+        if (!studentExamDraftMayBeRejected({
+          questionStatus: coerceChatQuestionStatus(question.status),
+          draftStatus: question.examDraftStatus,
+          attemptId: question.examDraftAttemptId,
+          roundId: question.examDraftRoundId
+        })) return;
+        await tx.update(studentChatQuestions).set({ examDraftStatus: "rejected", examDraftError: null, examDraftAttemptId: null })
+          .where(and(eq(studentChatQuestions.id, input.chatQuestionId), eq(studentChatQuestions.lectureId, input.lectureId)));
+        await tx.update(questionReviewItems).set({ status: "rejected", reviewedAt: new Date() }).where(and(
+          eq(questionReviewItems.lectureId, input.lectureId),
+          eq(questionReviewItems.sourceStudentQuestionId, input.chatQuestionId)
+        ));
+        return;
+      }
+      if (input.status !== "failed" && input.status !== "unsupported") return;
+      const expectedState = input.attemptId
+        ? and(eq(studentChatQuestions.examDraftStatus, "generating"), eq(studentChatQuestions.examDraftAttemptId, input.attemptId))
+        : and(eq(studentChatQuestions.examDraftStatus, "pending"), isNull(studentChatQuestions.examDraftAttemptId));
+      await tx.update(studentChatQuestions).set({
+        examDraftStatus: input.status,
+        examDraftError: input.error ?? null,
+        examDraftAttemptId: null
+      }).where(and(
+        eq(studentChatQuestions.id, input.chatQuestionId),
+        eq(studentChatQuestions.lectureId, input.lectureId),
+        eq(studentChatQuestions.status, "accepted"),
+        expectedState
+      ));
+    });
+    return this.getLectureById(input.lectureId, ownerEmail);
+  }
+
+  async saveStudentExamDraft(input: { lectureId: string; chatQuestionId: string; attemptId: string; variants: QuestionVariant[] }, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(input.lectureId, ownerEmail);
+    if (!lecture) return null;
+    const saved = await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, input.lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return false;
+      const [question] = await tx.select().from(studentChatQuestions).where(and(
+        eq(studentChatQuestions.id, input.chatQuestionId),
+        eq(studentChatQuestions.lectureId, input.lectureId)
+      )).for("update").limit(1);
+      if (!question || !studentExamDraftAttemptMayCommit({
+        questionStatus: coerceChatQuestionStatus(question.status),
+        draftStatus: question.examDraftStatus,
+        attemptId: question.examDraftAttemptId
+      }, input.attemptId)) return false;
+
+      const chatQuestion = this.chatQuestionFromRow(question);
+      const reviewTemplate = createReviewItemFromChatQuestion(lecture, chatQuestion);
+      const [existing] = await tx.select().from(questionReviewItems).where(and(
+        eq(questionReviewItems.lectureId, input.lectureId),
+        eq(questionReviewItems.sourceStudentQuestionId, input.chatQuestionId)
+      )).for("update").limit(1);
+      if (existing?.status === "rejected") return false;
+
+      if (existing) {
+        await tx.update(questionReviewItems).set({
+          sourceStudentQuestionId: input.chatQuestionId,
+          sourceTitle: reviewTemplate.sourceTitle,
+          status: "draft",
+          variantsJson: clone(input.variants),
+          reviewedAt: null
+        }).where(and(eq(questionReviewItems.id, existing.id), eq(questionReviewItems.lectureId, input.lectureId)));
+      } else {
+        await tx.insert(questionReviewItems).values({
+          lectureId: input.lectureId,
+          sourceStudentQuestionId: input.chatQuestionId,
+          sourceTitle: reviewTemplate.sourceTitle,
+          status: "draft",
+          variantsJson: clone(input.variants)
+        });
+      }
+      await tx.update(studentChatQuestions).set({ examDraftStatus: "draft", examDraftError: null, examDraftRoundId: null, examDraftAttemptId: null })
+        .where(and(eq(studentChatQuestions.id, input.chatQuestionId), eq(studentChatQuestions.lectureId, input.lectureId)));
+      return true;
+    });
+    if (!saved) return null;
+    return this.getLectureById(input.lectureId, ownerEmail);
+  }
+
+  async archivePublishedStudentExamDraft(lectureId: string, chatQuestionId: string, ownerEmail?: string) {
+    await this.ensureSeeded();
+    if (!await this.getLectureById(lectureId, ownerEmail)) return null;
+    const archived = await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return false;
+      const [question] = await tx.select().from(studentChatQuestions).where(and(
+        eq(studentChatQuestions.id, chatQuestionId),
+        eq(studentChatQuestions.lectureId, lectureId)
+      )).for("update").limit(1);
+      if (!question || question.examDraftStatus !== "published") return false;
+      const [review] = await tx.select().from(questionReviewItems).where(and(
+        eq(questionReviewItems.lectureId, lectureId),
+        eq(questionReviewItems.sourceStudentQuestionId, chatQuestionId)
+      )).for("update").limit(1);
+      if (!review) return false;
+
+      const source = `student_question:${chatQuestionId}`;
+      const [existingFamily] = await tx.select({ id: questions.id }).from(questions).where(and(
+        eq(questions.lectureId, lectureId),
+        eq(questions.source, source)
+      )).limit(1);
+      if (!existingFamily) {
+        const variants = coerceVariants(review.variantsJson);
+        if (!hasCompleteQuestionFamilies(variants.map((variant) => ({ level: variant.level }))) || variants.length !== 4) return false;
+        await this.insertQuestionFamiliesInTransaction(
+          tx,
+          lectureId,
+          variants.map((variant) => ({ ...variant, familyId: undefined, familySource: source })),
+          source
+        );
+      }
+      return true;
+    });
+    if (!archived) return null;
+    return this.getLectureById(lectureId, ownerEmail);
+  }
+
+  async countRecentStudentExamDraftAttempts(input: { lectureId: string; since: Date }, ownerEmail?: string) {
+    await this.ensureSeeded();
+    if (!await this.getLectureById(input.lectureId, ownerEmail)) return null;
+    const [row] = await this.db.select({ count: count() }).from(studentExamDraftAttempts).where(and(
+      eq(studentExamDraftAttempts.lectureId, input.lectureId),
+      gte(studentExamDraftAttempts.createdAt, input.since)
+    ));
+    return Number(row?.count ?? 0);
   }
 
   async countRecentStudentChatQuestions(input: { lectureToken: string; anonymousKey: string; since: Date }) {
@@ -1322,16 +1552,56 @@ export class PostgresLectureRepository implements LectureRepository {
     return result?.value ?? 0;
   }
 
+  async reserveStudentChatQuestionAttempt(input: { lectureToken: string; studentProfileId: string; now: Date; since: Date; maxAttempts: number }) {
+    await this.ensureSeeded();
+    const [lecture] = await this.db.select({ id: lectures.id })
+      .from(lectures)
+      .where(eq(lectures.publicToken, input.lectureToken))
+      .limit(1);
+    if (!lecture) return null;
+
+    return this.db.transaction(async (tx) => {
+      const [profile] = await tx.select({ id: studentProfiles.id })
+        .from(studentProfiles)
+        .where(eq(studentProfiles.id, input.studentProfileId))
+        .for("update")
+        .limit(1);
+      if (!profile) return null;
+
+      await tx.delete(studentChatQuestionAttempts).where(and(
+        eq(studentChatQuestionAttempts.studentProfileId, input.studentProfileId),
+        lt(studentChatQuestionAttempts.createdAt, new Date(input.now.getTime() - 24 * 60 * 60 * 1000))
+      ));
+      const [attemptCount] = await tx.select({ count: count() }).from(studentChatQuestionAttempts).where(and(
+        eq(studentChatQuestionAttempts.lectureId, lecture.id),
+        eq(studentChatQuestionAttempts.studentProfileId, input.studentProfileId),
+        gte(studentChatQuestionAttempts.createdAt, input.since)
+      ));
+      if (Number(attemptCount?.count ?? 0) >= input.maxAttempts) return "rate_limited" as const;
+
+      await tx.insert(studentChatQuestionAttempts).values({
+        lectureId: lecture.id,
+        studentProfileId: input.studentProfileId,
+        createdAt: input.now
+      });
+      return "reserved" as const;
+    });
+  }
+
   async moderateStudentChatQuestion(input: ModerateChatQuestionInput, ownerEmail?: string) {
     await this.ensureSeeded();
     const lecture = await this.getLectureById(input.lectureId, ownerEmail);
     if (!lecture) return null;
 
     await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, input.lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
       const [existing] = await tx
         .select()
         .from(studentChatQuestions)
         .where(and(eq(studentChatQuestions.id, input.chatQuestionId), eq(studentChatQuestions.lectureId, input.lectureId)))
+        .for("update")
         .limit(1);
 
       if (!existing) return;
@@ -1349,7 +1619,12 @@ export class PostgresLectureRepository implements LectureRepository {
           moderationProvider: "referent",
           moderationModel: "manual-review",
           moderationConfidence: 100,
-          moderationSignals: [input.status === "accepted" ? "manuell übernommen" : "manuell ignoriert"]
+          moderationSignals: [input.status === "accepted" ? "manuell übernommen" : "manuell ignoriert"],
+          examDraftStatus: input.status === "ignored"
+            ? "not_applicable"
+            : existing.examDraftStatus === "not_applicable" ? "pending" : existing.examDraftStatus,
+          examDraftError: null,
+          examDraftAttemptId: input.status === "ignored" || existing.examDraftStatus === "not_applicable" ? null : existing.examDraftAttemptId
         })
         .where(and(eq(studentChatQuestions.id, input.chatQuestionId), eq(studentChatQuestions.lectureId, input.lectureId)))
         .returning();
@@ -1361,12 +1636,13 @@ export class PostgresLectureRepository implements LectureRepository {
       const [existingReview] = await tx
         .select({ id: questionReviewItems.id, status: questionReviewItems.status })
         .from(questionReviewItems)
-        .where(and(eq(questionReviewItems.lectureId, input.lectureId), eq(questionReviewItems.sourceTitle, reviewItem.sourceTitle)))
+        .where(and(eq(questionReviewItems.lectureId, input.lectureId), eq(questionReviewItems.sourceStudentQuestionId, input.chatQuestionId)))
         .limit(1);
 
       if (input.status === "accepted" && !existingReview) {
         await tx.insert(questionReviewItems).values({
           lectureId: input.lectureId,
+          sourceStudentQuestionId: input.chatQuestionId,
           sourceTitle: reviewItem.sourceTitle,
           status: "draft",
           variantsJson: clone(reviewItem.variants)
@@ -1400,9 +1676,14 @@ export class PostgresLectureRepository implements LectureRepository {
 
     const cleanText = input.text.replace(/\s+/g, " ").trim();
     const relevance = evaluateStudentChatQuestion(lecture, cleanText);
-    const [created] = await this.db
-      .insert(transcriptSegments)
-      .values({
+    const created = await this.db.transaction(async (tx) => {
+      if (input.sessionId) {
+        await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lecture.id)).for("no key update");
+        const [current] = await tx.select({ sessionId: liveSessions.sessionId }).from(liveSessions)
+          .where(eq(liveSessions.lectureId, lecture.id)).for("update").limit(1);
+        if (!current || current.sessionId !== input.sessionId) return null;
+      }
+      const [row] = await tx.insert(transcriptSegments).values({
         lectureId: lecture.id,
         text: cleanText,
         provider: input.provider?.trim() || "voxtral-realtime",
@@ -1411,24 +1692,23 @@ export class PostgresLectureRepository implements LectureRepository {
         sourceTopic: relevance.sourceTopic,
         startedAt: input.startedAt ? toTimestamp(input.startedAt) : undefined,
         endedAt: input.endedAt ? toTimestamp(input.endedAt) : undefined
-      })
-      .returning();
-
-    const segment = this.transcriptSegmentFromRow(created);
-    if (segment.status === "accepted") {
-      const reviewItem = createReviewItemFromTranscriptSegment(lecture, segment);
-      await this.db.insert(questionReviewItems).values({
-        lectureId: lecture.id,
-        sourceTitle: reviewItem.sourceTitle,
-        status: "draft",
-        variantsJson: reviewItem.variants
-      });
-      if (lecture.status === "draft" || lecture.status === "material_processing") {
-        await this.db.update(lectures).set({ status: "question_review" }).where(eq(lectures.id, lecture.id));
+      }).returning();
+      const segment = this.transcriptSegmentFromRow(row);
+      if (segment.status === "accepted") {
+        const reviewItem = createReviewItemFromTranscriptSegment(lecture, segment);
+        await tx.insert(questionReviewItems).values({
+          lectureId: lecture.id,
+          sourceTitle: reviewItem.sourceTitle,
+          status: "draft",
+          variantsJson: reviewItem.variants
+        });
+        if (lecture.status === "draft" || lecture.status === "material_processing") {
+          await tx.update(lectures).set({ status: "question_review" }).where(eq(lectures.id, lecture.id));
+        }
       }
-    }
-
-    return segment;
+      return row;
+    });
+    return created ? this.transcriptSegmentFromRow(created) : null;
   }
 
   async submitLecturerAssistantMessage(input: SubmitLecturerAssistantMessageInput, ownerEmail?: string) {
@@ -1908,13 +2188,34 @@ export class PostgresLectureRepository implements LectureRepository {
     const lecture = await this.getLectureById(lectureId, ownerEmail);
     if (!lecture) return null;
     await this.db.transaction(async (tx) => {
-      const [review] = await tx
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
+      const [candidate] = await tx
         .select()
         .from(questionReviewItems)
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)))
         .limit(1);
 
-      if (!review) return;
+      if (!candidate) return;
+      if (candidate.sourceStudentQuestionId) {
+        const [sourceQuestion] = await tx.select().from(studentChatQuestions).where(and(
+          eq(studentChatQuestions.id, candidate.sourceStudentQuestionId),
+          eq(studentChatQuestions.lectureId, lectureId)
+        )).for("update").limit(1);
+        if (sourceQuestion?.examDraftStatus === "published") return;
+        if (decision === "rejected" && sourceQuestion && !studentExamDraftMayBeRejected({
+          questionStatus: coerceChatQuestionStatus(sourceQuestion.status),
+          draftStatus: sourceQuestion.examDraftStatus,
+          attemptId: sourceQuestion.examDraftAttemptId,
+          roundId: sourceQuestion.examDraftRoundId
+        })) return;
+      }
+      const [review] = await tx.select().from(questionReviewItems).where(and(
+        eq(questionReviewItems.id, reviewId),
+        eq(questionReviewItems.lectureId, lectureId)
+      )).for("update").limit(1);
+      if (!review || review.sourceStudentQuestionId !== candidate.sourceStudentQuestionId) return;
 
       const decidedVariants = applyQualityDecision({
         variants: coerceVariants(review.variantsJson),
@@ -1931,8 +2232,16 @@ export class PostgresLectureRepository implements LectureRepository {
         })
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
+      if (decision === "rejected" && review.sourceStudentQuestionId) {
+        await tx.update(studentChatQuestions).set({ examDraftStatus: "rejected", examDraftError: null, examDraftAttemptId: null })
+          .where(and(eq(studentChatQuestions.id, review.sourceStudentQuestionId), eq(studentChatQuestions.lectureId, lectureId)));
+      }
+
       if (decision === "approved") {
-        await this.upsertQuestionFamilyInTransaction(tx, lectureId, decidedVariants, review.sourceTitle);
+        const source = review.sourceStudentQuestionId
+          ? `student_question:${review.sourceStudentQuestionId}`
+          : review.sourceTitle;
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, decidedVariants, source);
         await tx.update(lectures).set({ status: "ready_for_live" }).where(eq(lectures.id, lectureId));
         return;
       }
@@ -1952,10 +2261,14 @@ export class PostgresLectureRepository implements LectureRepository {
     const lecture = await this.getLectureById(lectureId, ownerEmail);
     if (!lecture) return null;
     await this.db.transaction(async (tx) => {
+      const [lockedLecture] = await tx.select({ id: lectures.id }).from(lectures)
+        .where(eq(lectures.id, lectureId)).for("no key update").limit(1);
+      if (!lockedLecture) return;
       const [review] = await tx
         .select()
         .from(questionReviewItems)
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)))
+        .for("update")
         .limit(1);
 
       if (!review) return;
@@ -1972,7 +2285,10 @@ export class PostgresLectureRepository implements LectureRepository {
         .where(and(eq(questionReviewItems.id, reviewId), eq(questionReviewItems.lectureId, lectureId)));
 
       if (review.status === "approved") {
-        await this.upsertQuestionFamilyInTransaction(tx, lectureId, nextVariants, review.sourceTitle);
+        const source = review.sourceStudentQuestionId
+          ? `student_question:${review.sourceStudentQuestionId}`
+          : review.sourceTitle;
+        await this.upsertQuestionFamilyInTransaction(tx, lectureId, nextVariants, source);
       }
     });
 
@@ -2589,6 +2905,11 @@ export class PostgresLectureRepository implements LectureRepository {
       moderationSignals: Array.isArray(row.moderationSignals)
         ? row.moderationSignals.filter((item): item is string => typeof item === "string")
         : undefined,
+      examDraftStatus: row.examDraftStatus,
+      examDraftError: row.examDraftError ?? undefined,
+      examDraftRoundId: row.examDraftRoundId ?? undefined,
+      examDraftAttemptAt: row.examDraftAttemptAt?.toISOString(),
+      examDraftAttemptId: row.examDraftAttemptId ?? undefined,
       createdAt: row.createdAt.toISOString()
     };
   }
@@ -2767,6 +3088,7 @@ export class PostgresLectureRepository implements LectureRepository {
       id: row.id,
       lectureId: row.lectureId,
       sourceMaterialId: row.sourceMaterialId ?? undefined,
+      sourceStudentQuestionId: row.sourceStudentQuestionId ?? undefined,
       sourceTitle: row.sourceTitle,
       status: coerceReviewStatus(row.status),
       variants: coerceVariants(row.variantsJson),

@@ -4,14 +4,79 @@ import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import type { LiveAnswerReceipt, LiveCommand, LiveSessionView } from "@/lib/live-session";
 import type { Lecture, QuestionLevel, QuestionVariant } from "@/lib/types";
 import { getDb } from "./db/client";
-import { analyticsEvents, lectureSeries, lectures, liveAnswers, liveSessions, participantSessions, studentEnrollments, studentProfiles, users } from "./db/schema";
+import { analyticsEvents, lectureSeries, lectures, liveAnswers, liveSessions, participantSessions, questionReviewItems, questionVariants, questions, slides, studentChatQuestions, studentEnrollments, studentProfiles, users } from "./db/schema";
 import { rankingDisplayName } from "./student-claims";
+import { isIdempotentlyPublishedStudentDraft } from "./student-exam-draft-state";
 
 export type StoredLiveRound = { id: string; expiresAt: number; questions: QuestionVariant[] };
 export class LiveSessionError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
 }
 type Transaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+function validatedDraftQuestions(value: unknown): QuestionVariant[] {
+  const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
+  const keys = ["A", "B", "C", "D"];
+  if (!Array.isArray(value) || value.length !== 4) throw new LiveSessionError(409, "Der Entwurf enthält nicht genau vier Schwierigkeitsstufen.");
+  const variants = value as Array<Record<string, unknown>>;
+  if (variants.some((variant) => !variant || typeof variant !== "object" || Array.isArray(variant))) {
+    throw new LiveSessionError(409, "Der Entwurf enthält ungültige Fragen.");
+  }
+  if (new Set(variants.map((variant) => variant.level)).size !== 4 || levels.some((level) => !variants.some((variant) => variant.level === level))) {
+    throw new LiveSessionError(409, "Der Entwurf enthält nicht alle vier Schwierigkeitsstufen.");
+  }
+  for (const variant of variants) {
+    if (typeof variant.text !== "string" || !variant.text.trim() || variant.text.length > 240 || typeof variant.explanation !== "string" || !variant.explanation.trim() || variant.explanation.length > 480 || !Array.isArray(variant.answers) || variant.answers.length !== 4) {
+      throw new LiveSessionError(409, "Der Entwurf enthält ungültige Fragen oder Antworten.");
+    }
+    const answers = variant.answers as Array<Record<string, unknown>>;
+    if (answers.some((answer) => !answer || typeof answer !== "object" || Array.isArray(answer) || typeof answer.text !== "string" || !answer.text.trim() || answer.text.length > 400 || typeof answer.correct !== "boolean" || !keys.includes(String(answer.key)))) {
+      throw new LiveSessionError(409, "Der Entwurf enthält ungültige Antworten.");
+    }
+    if (new Set(answers.map((answer) => answer.key)).size !== 4 || answers.filter((answer) => answer.correct === true).length !== 1) {
+      throw new LiveSessionError(409, "Jede Frage muss vier Antworten und genau eine richtige Antwort enthalten.");
+    }
+    if (new Set(answers.map((answer) => String(answer.text).toLocaleLowerCase("de-DE").replace(/\s+/g, " ").trim())).size !== 4) {
+      throw new LiveSessionError(409, "Die Antwortmöglichkeiten müssen unterschiedlich sein.");
+    }
+  }
+  if (new Set(variants.map((variant) => String(variant.text).toLocaleLowerCase("de-DE").replace(/\s+/g, " ").trim())).size !== 4) {
+    throw new LiveSessionError(409, "Die vier Fragen müssen unterschiedlich sein.");
+  }
+  return variants as unknown as QuestionVariant[];
+}
+
+async function archivePublishedStudentQuestionFamily(tx: Transaction, lectureId: string, questionId: string, variants: QuestionVariant[]) {
+  const source = `student_question:${questionId}`;
+  const [existing] = await tx.select({ id: questions.id }).from(questions).where(and(
+    eq(questions.lectureId, lectureId),
+    eq(questions.source, source)
+  )).limit(1);
+  if (existing) return;
+
+  let slideId: string | null = null;
+  const candidateSlideId = variants[0]?.slideId;
+  if (candidateSlideId) {
+    const [slide] = await tx.select({ id: slides.id }).from(slides).where(and(
+      eq(slides.id, candidateSlideId),
+      eq(slides.lectureId, lectureId)
+    )).limit(1);
+    slideId = slide?.id ?? null;
+  }
+
+  const [family] = await tx.insert(questions).values({ lectureId, slideId, source }).returning({ id: questions.id });
+  await tx.insert(questionVariants).values(variants.map((variant) => ({
+    questionId: family.id,
+    level: variant.level,
+    points: variant.points,
+    text: variant.text,
+    answersJson: variant.answers,
+    correctAnswerKey: variant.answers.find((answer) => answer.correct)?.key ?? "A",
+    explanation: variant.explanation,
+    promptVersion: variant.promptVersion ?? "unknown"
+  })));
+}
+
 async function databaseNow(db: Transaction | ReturnType<typeof getDb>) {
   const [row] = await db.execute<{ now: string }>(sql`select extract(epoch from clock_timestamp()) * 1000 as now`);
   return Number(row.now);
@@ -35,13 +100,27 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
     // NO KEY UPDATE serializes first creation without blocking the KEY SHARE
     // FK checks of an answer transaction already holding the session row.
     await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lecture.id)).for("no key update");
+    if (command.action === "publishDraft") {
+      const [studentQuestion] = await tx.select().from(studentChatQuestions)
+        .where(and(eq(studentChatQuestions.id, command.questionId), eq(studentChatQuestions.lectureId, lecture.id)))
+        .for("update").limit(1);
+      if (!studentQuestion) throw new LiveSessionError(404, "Entwurf nicht gefunden.");
+      if (isIdempotentlyPublishedStudentDraft({
+        questionStatus: studentQuestion.status === "accepted" ? "accepted" : "ignored",
+        draftStatus: studentQuestion.examDraftStatus ?? "not_applicable",
+        attemptId: studentQuestion.examDraftAttemptId,
+        roundId: studentQuestion.examDraftRoundId
+      })) return;
+      if (studentQuestion.status !== "accepted") throw new LiveSessionError(409, "Diese Studierendenfrage wurde nicht als fachliche Frage übernommen.");
+      if (studentQuestion.examDraftStatus !== "draft") throw new LiveSessionError(409, "Der Entwurf ist nicht zur Veröffentlichung bereit.");
+    }
     const [current] = await tx.select().from(liveSessions).where(eq(liveSessions.lectureId, lecture.id)).for("update");
     if ((current?.revision ?? 0) !== command.revision) throw new LiveSessionError(409, "Sitzung wurde geändert. Bitte erneut versuchen.");
     const now = await databaseNow(tx);
     if (command.action === "start") {
       // Reloading the presenter must resume, never silently restart a running class.
       if (current?.status === "active") return;
-      const values = { sessionId: randomUUID(), revision: (current?.revision ?? 0) + 1, status: "active" as const, slideIndex: 0, showIntro: true, round: null, updatedAt: new Date(now) };
+      const values = { sessionId: randomUUID(), revision: (current?.revision ?? 0) + 1, status: "active" as const, slideIndex: 0, showIntro: true, round: null, startedAt: new Date(now), updatedAt: new Date(now) };
       await tx.insert(liveSessions).values({ lectureId: lecture.id, ...values })
         .onConflictDoUpdate({ target: liveSessions.lectureId, set: values });
       return;
@@ -67,6 +146,24 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
         throw new LiveSessionError(400, "Die Frage benötigt alle vier Schwierigkeitsstufen.");
       }
       update.round = { id: randomUUID(), expiresAt: now + command.durationSeconds * 1000, questions };
+    } else if (command.action === "publishDraft") {
+      if (current.showIntro) throw new LiveSessionError(409, "Bitte zuerst die Präsentation starten.");
+      if (current.round && current.round.expiresAt > now) throw new LiveSessionError(409, "Eine Fragerunde läuft bereits. Ihre Antwortzeit bleibt unverändert.");
+      const [draft] = await tx.select().from(questionReviewItems).where(and(
+        eq(questionReviewItems.lectureId, lecture.id),
+        eq(questionReviewItems.sourceStudentQuestionId, command.questionId)
+      )).for("update").limit(1);
+      if (!draft || (draft.status !== "draft" && draft.status !== "approved")) {
+        throw new LiveSessionError(409, "Der Entwurf wurde abgelehnt oder ist nicht mehr verfügbar.");
+      }
+      const questions = validatedDraftQuestions(draft.variantsJson);
+      await archivePublishedStudentQuestionFamily(tx, lecture.id, command.questionId, questions);
+      const roundId = randomUUID();
+      update.round = { id: roundId, expiresAt: now + 60_000, questions };
+      await tx.update(studentChatQuestions).set({ examDraftStatus: "published", examDraftError: null, examDraftRoundId: roundId, examDraftAttemptId: null })
+        .where(and(eq(studentChatQuestions.id, command.questionId), eq(studentChatQuestions.lectureId, lecture.id)));
+      await tx.update(questionReviewItems).set({ status: "approved", reviewedAt: new Date(now) })
+        .where(and(eq(questionReviewItems.id, draft.id), eq(questionReviewItems.lectureId, lecture.id)));
     } else {
       update.round = null;
       if (command.action === "end") update.status = "ended";
@@ -116,7 +213,7 @@ export async function readLiveSession(lecture: Awaited<ReturnType<typeof liveLec
     .where(and(eq(liveAnswers.roundId, activeRound.id), eq(liveAnswers.studentProfileId, profile.id))).limit(1) : [];
   const view: LiveSessionView = {
     sessionId: session?.sessionId ?? null, revision: session?.revision ?? 0, status: session?.status ?? "waiting",
-    slideIndex: session?.slideIndex ?? 0, showIntro: session?.showIntro ?? true, serverNow: now,
+    slideIndex: session?.slideIndex ?? 0, showIntro: session?.showIntro ?? true, serverNow: now, sessionStartedAt: session?.startedAt.getTime() ?? null,
     round: activeRound ? { id: activeRound.id, expiresAt: activeRound.expiresAt, questions: activeRound.questions.map((q) => ({
       level: q.level, text: q.text, points: q.points, answers: q.answers.map(({ key, text }) => ({ key, text }))
     })) } : null,

@@ -214,6 +214,7 @@ export type MaterialProcessingRun = {
 };
 
 export type StudentChatQuestionStatus = "accepted" | "ignored";
+export type StudentExamDraftStatus = "pending" | "generating" | "draft" | "failed" | "unsupported" | "rejected" | "published" | "not_applicable";
 
 export type StudentChatQuestion = {
   id: string;
@@ -228,6 +229,11 @@ export type StudentChatQuestion = {
   moderationModel?: string;
   moderationConfidence?: number;
   moderationSignals?: string[];
+  examDraftStatus?: StudentExamDraftStatus;
+  examDraftError?: string;
+  examDraftRoundId?: string;
+  examDraftAttemptAt?: string;
+  examDraftAttemptId?: string;
   createdAt: string;
 };
 
@@ -390,6 +396,7 @@ export type QuestionReviewItem = {
   id: string;
   lectureId: string;
   sourceMaterialId?: string;
+  sourceStudentQuestionId?: string;
   sourceTitle: string;
   status: QuestionReviewStatus;
   variants: QuestionVariant[];
