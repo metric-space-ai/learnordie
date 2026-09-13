@@ -265,7 +265,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     if (disposedRef.current || !sessionScopeRef.current.isCurrent(operation)) throw new DOMException("Cancelled", "AbortError");
     if (draft.text.trim()) setTranscriptDrafts((current) => [draft, ...current].slice(0, MAX_TRANSCRIPT_DRAFTS));
     setTranscriptMessage("");
-    setSttStatus(mediaStreamRef.current ? "transcribing" : "idle");
+    setSttStatus(mediaStreamRef.current ? (draft.text.trim() ? "transcribing" : "listening") : "idle");
     return draft;
   }, [csrfToken, lecture.id, lecture.slides, lecture.title]);
 

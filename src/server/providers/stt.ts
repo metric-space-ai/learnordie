@@ -303,9 +303,11 @@ class MiniMaxASRSTTProvider implements STTProvider {
         throw new Error(`MiniMax ASR request failed (HTTP ${response.status}): ${message}`);
       }
 
-      const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+      // A valid empty recognition result is a pause, not a broken provider.
+      // Keep malformed responses fatal; never invent text for silent audio.
+      if (typeof payload?.text !== "string") throw new Error("MiniMax ASR response contained no transcript text.");
+      const text = payload.text.trim();
       const duration = Number(payload?.duration);
-      if (!text) throw new Error("MiniMax ASR response contained no transcript text.");
       if (!Number.isFinite(duration) || duration < 0 || duration > MINIMAX_ASR_MAX_SECONDS) {
         throw new Error("MiniMax ASR response contained an invalid audio duration.");
       }

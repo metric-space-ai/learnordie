@@ -147,6 +147,18 @@ test("MiniMax media adapters send bounded M3 vision and asr-1.0 requests without
   assert.equal(audioFile.type, "audio/wav");
   assert.deepEqual(new Uint8Array(await audioFile.arrayBuffer()), new Uint8Array([0x52, 0x49, 0x46, 0x46]));
 
+  globalThis.fetch = async () => Response.json({ text: "  ", duration: 6.5 });
+  const silence = await stt.transcribeAudio({ audio, mimeType: "audio/wav", lectureTitle: "Test lecture" });
+  assert.equal(silence.text, "", "a speech pause must not terminate continuous transcription");
+  globalThis.fetch = async () => Response.json({ text: "Die nächste Passage.", duration: 6.5 });
+  assert.equal((await stt.transcribeAudio({ audio, mimeType: "audio/wav", lectureTitle: "Test lecture" })).text,
+    "Die nächste Passage.", "speech resumes after a silent passage without changing providers");
+  for (const malformed of [{ duration: 6.5 }, { text: null, duration: 6.5 }, { text: "", duration: -1 }]) {
+    globalThis.fetch = async () => Response.json(malformed);
+    await assert.rejects(stt.transcribeAudio({ audio, mimeType: "audio/wav", lectureTitle: "Test lecture" }),
+      /MiniMax ASR response contained/);
+  }
+
   let sttCalls = 0;
   globalThis.fetch = async () => {
     sttCalls += 1;
