@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LiveOperationScope } from "@/lib/live-operation-scope";
+import { acceptsLiveTranscript, LiveOperationScope } from "@/lib/live-operation-scope";
+
+test("transcript acceptance requires the same still-active session", () => {
+  assert.equal(acceptsLiveTranscript({ sessionId: "first", status: "active" }, "first"), true);
+  assert.equal(acceptsLiveTranscript({ sessionId: "first", status: "ended" }, "first"), false);
+  assert.equal(acceptsLiveTranscript({ sessionId: "second", status: "active" }, "first"), false);
+  assert.equal(acceptsLiveTranscript({ sessionId: "", status: "active" }, ""), false);
+  assert.equal(acceptsLiveTranscript(undefined, "first"), false);
+});
 
 test("polling and slide changes in the same session preserve in-flight work", () => {
   const scope = new LiveOperationScope();

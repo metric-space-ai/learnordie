@@ -78,7 +78,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     try {
       const liveContext = await liveLecture(lecture.publicToken, session.email);
       const live = await readLiveSession(liveContext, null, false);
-      if (live.sessionId !== meta.data.sessionId) {
+      if (live.sessionId !== meta.data.sessionId || live.status !== "active") {
         return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
       }
     } catch (error) {

@@ -205,6 +205,33 @@ test("ticker renders retry/reject controls only after generation is stale", () =
   expect(renderedTreeText(publishedMarkup)).toContain("Veröffentlicht");
 });
 
+test("ended live session rejects late transcript writes at both API and repository boundaries", async ({ page }) => {
+  const { lecture, csrf } = await lectureFixture(page);
+  const sql = database();
+  try {
+    await startPresentation(lecture);
+    const [active] = await sql`select session_id, revision from live_sessions where lecture_id=${lecture.id}`;
+    const input = {
+      lectureId: lecture.id, sessionId: active.session_id,
+      text: "Der Schmierfilm trennt die Oberflächen und trägt die Last.",
+      provider: "minimax-asr-1.0", startedAt: new Date().toISOString(), endedAt: new Date().toISOString()
+    };
+    const repo = repository();
+    expect(await repo.submitTranscriptSegment(input)).not.toBeNull();
+    const count = async () => (await sql`select
+      (select count(*)::int from transcript_segments where lecture_id=${lecture.id}) as segments,
+      (select count(*)::int from question_review_items where lecture_id=${lecture.id}) as drafts`)[0];
+    const before = await count();
+    await commandLiveSession(lecture, { action: "end", revision: active.revision });
+    expect(await repo.submitTranscriptSegment(input)).toBeNull();
+    const response = await page.request.post(`/api/lectures/${lecture.id}/transcript-segments`, {
+      headers: { "x-learnbuddy-csrf": csrf }, data: input
+    });
+    expect(response.status()).toBe(409);
+    expect(await count()).toEqual(before);
+  } finally { await sql.end(); }
+});
+
 test("slow student draft generation acknowledges once, stays private, and cannot bypass profile rate limits", async ({ page, browser }) => {
   test.skip(
     process.env.E2E_AI_PROVIDER !== "learnordie-responses" || Number(process.env.E2E_STUDENT_DRAFT_DELAY_MS) < 15_000,

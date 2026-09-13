@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { acceptsLiveTranscript } from "@/lib/live-operation-scope";
 
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
 import { readJsonBody } from "@/server/request-json";
@@ -55,7 +56,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     try {
       const liveContext = await liveLecture(lecture.publicToken, session.email);
       const live = await readLiveSession(liveContext, null, false);
-      if (live.sessionId !== parsed.data.sessionId) {
+      if (!acceptsLiveTranscript(live, parsed.data.sessionId)) {
         return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
       }
     } catch (error) {

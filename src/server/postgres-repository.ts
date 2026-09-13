@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { attachedScriptBlocks, packScriptContext } from "./lecture-script-context";
+import { acceptsLiveTranscript } from "@/lib/live-operation-scope";
 
 import { and, asc, count, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 
@@ -1666,9 +1667,9 @@ export class PostgresLectureRepository implements LectureRepository {
     const created = await this.db.transaction(async (tx) => {
       if (input.sessionId) {
         await tx.select({ id: lectures.id }).from(lectures).where(eq(lectures.id, lecture.id)).for("no key update");
-        const [current] = await tx.select({ sessionId: liveSessions.sessionId }).from(liveSessions)
+        const [current] = await tx.select({ sessionId: liveSessions.sessionId, status: liveSessions.status }).from(liveSessions)
           .where(eq(liveSessions.lectureId, lecture.id)).for("update").limit(1);
-        if (!current || current.sessionId !== input.sessionId) return null;
+        if (!acceptsLiveTranscript(current, input.sessionId)) return null;
       }
       const [row] = await tx.insert(transcriptSegments).values({
         lectureId: lecture.id,
