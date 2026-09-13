@@ -6,7 +6,7 @@ import type { SlideAssetRef } from "@learnordie/slide-engine/schema";
 import { loadCanvasRuntime } from "@/lib/excalidraw-runtime";
 import { hydrateCanvasAssets } from "@/lib/canvas-assets";
 import { renderCanvasEmbeddable } from "./CanvasEmbed";
-import { canvasFingerprint, canvasFitMinimum, isCanvasGestureActive } from "@/lib/canvas-sync";
+import { canvasFingerprint, canvasFitMinimum, canvasZoomAtCentre, isCanvasGestureActive } from "@/lib/canvas-sync";
 import { useAppTheme } from "@/components/theme/ThemeProvider";
 
 export type CanvasApi = {
@@ -43,6 +43,17 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [assetWarning, setAssetWarning] = useState("");
+  const fitRef = useRef<() => void>(() => {});
+  const manualViewport = useRef(false);
+
+  const zoom = (factor: number) => {
+    const api = apiRef.current;
+    if (!api) return;
+    const appState = canvasZoomAtCentre(api.getAppState(), factor);
+    if (!appState) return;
+    manualViewport.current = true;
+    api.updateScene({ appState, captureUpdate: "NEVER" });
+  };
 
   useLayoutEffect(() => {
     themeRef.current = theme;
@@ -78,6 +89,7 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
         });
       });
     };
+    fitRef.current = () => { manualViewport.current = false; fit(); };
     void loadCanvasRuntime().then(async (runtime) => {
       const hydrated = await hydrateCanvasAssets(initial.current, assetsRef.current, abort.signal);
       if (cancelled || !host.current) return;
@@ -136,7 +148,9 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
       };
       handle = runtime.mountExcalidraw(host.current, propsRef.current);
       mountRef.current = handle as typeof mountRef.current;
-      resize = new ResizeObserver(fit);
+      // Do not discard a reader's zoom because a quiz panel or browser chrome
+      // resized the viewport. A new slide remounts this component and fits again.
+      resize = new ResizeObserver(() => { if (!manualViewport.current) fit(); });
       resize.observe(host.current);
     }).catch((error: unknown) => { if (!cancelled) setFailure(error instanceof Error ? error.message : "Die Zeichenfläche konnte nicht geladen werden."); });
     return () => {
@@ -147,6 +161,7 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
       callbacks.current.onReady?.(null);
       apiRef.current = null;
       mountRef.current = null;
+      fitRef.current = () => {};
       handle?.unmount();
     };
   }, [attempt, readOnly]);
@@ -163,6 +178,14 @@ export function ExcalidrawCanvas({ scene, assets = [], readOnly = false, title, 
 
   return <div className={`native-canvas ${readOnly ? "native-canvas-view" : "native-canvas-edit"}`} data-canvas-engine="excalidraw" data-canvas-ready={ready} data-slide-id={slideId} aria-label={readOnly ? `Folie: ${title}` : "Excalidraw-Folieneditor"}>
     <div className="native-canvas-host" ref={host} />
+    {readOnly && ready && <div className="native-canvas-reader-zoom" role="group" aria-label="Folienzoom"
+      onKeyDown={(event) => { if ([" ", "Enter", "ArrowLeft", "ArrowRight"].includes(event.key)) event.stopPropagation(); }}>
+      <button type="button" aria-label="Folie vergrößern" title="Folie vergrößern" onClick={() => zoom(1.5)}>+</button>
+      <button type="button" aria-label="Folie verkleinern" title="Folie verkleinern" onClick={() => zoom(1 / 1.5)}>−</button>
+      <button type="button" aria-label="Ganze Folie einpassen" title="Ganze Folie einpassen" onClick={() => fitRef.current()}>
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></svg>
+      </button>
+    </div>}
     {readOnly && <section className="native-canvas-transcript" aria-label="Folieninhalt als Text">
       {scene.elements.filter((element) => element.type === "text" && !element.isDeleted && element.opacity !== 0).map((element) =>
         <p key={element.id}>{element.originalText ?? element.text}</p>
