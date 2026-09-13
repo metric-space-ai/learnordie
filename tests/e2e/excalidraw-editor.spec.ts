@@ -547,6 +547,10 @@ test("three.js embeds are real WebGL, independently interactive and survive save
   for (const dark of [false, true, false]) {
     const toggle = page.getByRole("button", { name: "Dunkles Design", exact: true });
     if ((await toggle.getAttribute("aria-pressed")) !== String(dark)) await toggle.click();
+    await expect(scene).toHaveAttribute("data-scene-theme", dark ? "dark" : "light");
+    await expect(scene).toHaveAttribute("data-scene-mode", "live");
+    await expect(scene).toHaveCSS("background-color", dark ? "rgb(18, 18, 18)" : "rgb(255, 255, 255)");
+    await expect(scene).toHaveCSS("background-image", "none");
     await expect(slider).toHaveCSS("accent-color", dark ? "rgb(168, 165, 255)" : "rgb(105, 101, 219)");
     await expect(scene.locator(".lb-scene3d-controls")).toHaveCSS("background-color", dark ? "rgb(35, 35, 41)" : "rgb(255, 255, 255)");
   }

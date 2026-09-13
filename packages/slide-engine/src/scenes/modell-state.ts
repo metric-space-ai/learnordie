@@ -1,4 +1,5 @@
 import type { ModellSceneKey, ModellSceneState } from "./modell-types";
+import { modellTheme } from "./modell-theme";
 
 // Didaktische Zustandslogik aus Modellbegriff_ThreeJS_clean.html, getrennt von der Darstellung.
 
@@ -112,18 +113,20 @@ export function modellFitEquation(state: ModellSceneState) {
   return `ŷ = ${formatModellNumber(a)}${b < 0 ? " − " : " + "}${formatModellNumber(Math.abs(b))}x${c < 0 ? " − " : " + "}${formatModellNumber(Math.abs(c))}x²`;
 }
 
-function svgText(x: number, y: number, text: string, size = 14, color = "#cce1e8") {
+function svgText(x: number, y: number, text: string, size = 14, color = "currentColor") {
   return `<text x="${x}" y="${y}" fill="${color}" font-family="Arial,sans-serif" font-size="${size}" text-anchor="middle">${text}</text>`;
 }
 
 // 2D-Ersatzansicht der Vorlage (ohne WebGL, Druck, Standalone-Export, Miniaturen).
-export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string) {
+export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string, dark = false) {
+  const theme = modellTheme(dark);
+  accent = theme.accent;
   let inner = "";
   if (key === "learning") {
     const px = (x: number) => 70 + (x + 1) * 220;
     const py = (y: number) => 265 - y * 105;
-    inner = `<path d="M65 45V265H520" fill="none" stroke="#466778"/>`;
-    for (const [x, y] of state.data) inner += `<circle cx="${px(x)}" cy="${py(y)}" r="4" fill="#8fcfc2"/>`;
+    inner = `<path d="M65 45V265H520" fill="none" stroke="${theme.line}"/>`;
+    for (const [x, y] of state.data) inner += `<circle cx="${px(x)}" cy="${py(y)}" r="4" fill="${theme.ink}"/>`;
     let path = "";
     for (let j = 0; j <= 100; j++) {
       const x = -1 + j / 50;
@@ -133,23 +136,23 @@ export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, 
   } else if (key === "language") {
     ["Kontext", "Repräsentation", "Attention / FFN", "Fortsetzung"].forEach((text, i) => {
       const x = 20 + i * 145;
-      inner += `<rect x="${x}" y="105" width="125" height="95" rx="12" fill="#162e3c" stroke="${accent}"/>${svgText(x + 62, 158, text, 12)}`;
+      inner += `<rect x="${x}" y="105" width="125" height="95" rx="8" fill="${theme.fill}" stroke="${theme.ink}"/>${svgText(x + 62, 158, text, 12)}`;
       if (i < 3) inner += `<path d="M${x + 128} 152h13" stroke="${accent}" stroke-width="2"/>`;
     });
     inner += svgText(300, 248, "Schematisch. Kein LLM im Browser.", 13);
   } else if (key === "runtime") {
     const angle = (state.outputAngle * Math.PI) / 180;
-    inner = `<circle cx="85" cy="150" r="35" fill="#183c50" stroke="${accent}"/><rect x="230" y="100" width="115" height="100" rx="12" fill="#183c50" stroke="${accent}"/><circle cx="485" cy="150" r="63" fill="#183c50" stroke="${accent}"/><path d="M125 150H228M350 150H418" stroke="${accent}" stroke-width="2"/>`;
-    inner += `<path d="M485 150L${485 + 47 * Math.sin(angle)} ${150 - 47 * Math.cos(angle)}" stroke="#e5c48c" stroke-width="4"/>${svgText(85, 157, "x", 23)}${svgText(287, 157, "f", 28)}${svgText(485, 255, `y = ${formatModellNumber(state.outputAngle, 1)}°`, 17)}`;
+    inner = `<circle cx="85" cy="150" r="35" fill="${theme.fill}" stroke="${theme.ink}"/><rect x="230" y="100" width="115" height="100" rx="8" fill="${theme.fill}" stroke="${theme.ink}"/><circle cx="485" cy="150" r="63" fill="${theme.fill}" stroke="${theme.ink}"/><path d="M125 150H228M350 150H418" stroke="${accent}" stroke-width="2"/>`;
+    inner += `<path d="M485 150L${485 + 47 * Math.sin(angle)} ${150 - 47 * Math.cos(angle)}" stroke="${accent}" stroke-width="4"/>${svgText(85, 157, "x", 23)}${svgText(287, 157, "f", 28)}${svgText(485, 255, `y = ${formatModellNumber(state.outputAngle, 1)}°`, 17)}`;
   } else if (key === "morph" || key === "transfer") {
     const words = key === "morph" ? modellConcepts : modellTransferSteps;
     words.forEach((word, i) => {
       const x = 57 + i * 120;
-      inner += `<circle cx="${x}" cy="145" r="32" fill="#183443" stroke="${accent}" stroke-width="2"/>${svgText(x, 151, String(i + 1), 18, accent)}${svgText(x, 211, word, 12)}`;
-      if (i < 4) inner += `<path d="M${x + 36} 145h46" stroke="#597788"/>`;
+      inner += `<circle cx="${x}" cy="145" r="32" fill="${theme.fill}" stroke="${theme.ink}" stroke-width="2"/>${svgText(x, 151, String(i + 1), 18, accent)}${svgText(x, 211, word, 12)}`;
+      if (i < 4) inner += `<path d="M${x + 36} 145h46" stroke="${theme.line}"/>`;
     });
   } else {
-    inner = `<path d="M125 65H260M193 65V83l-15 12 30 12-30 12 30 12-30 12 30 12-15 12v24" stroke="${accent}" fill="none" stroke-width="3"/><rect x="163" y="202" width="60" height="48" rx="5" fill="#aec3c9"/><path d="M100 276H285" stroke="#486577" stroke-width="4"/>`;
+    inner = `<path d="M125 65H260M193 65V83l-15 12 30 12-30 12 30 12-30 12 30 12-15 12v24" stroke="${accent}" fill="none" stroke-width="3"/><rect x="163" y="202" width="60" height="48" rx="5" fill="${theme.fill}" stroke="${theme.ink}"/><path d="M100 276H285" stroke="${theme.ink}" stroke-width="3"/>`;
     const formula =
       key === "limits"
         ? state.description === "force"
@@ -162,9 +165,9 @@ export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, 
     inner += svgText(430, 197, key === "miniature" ? "Vereinfachtes Abbild" : "Idealisierte Beziehung", 14);
   }
   const safeLabel = label.replace(/[<>&"]/g, "");
-  return `<svg viewBox="0 0 600 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="2D-Ersatzansicht: ${safeLabel}"><rect width="600" height="340" fill="#0c1922"/>${inner}</svg>`;
+  return `<svg viewBox="0 0 600 340" xmlns="http://www.w3.org/2000/svg" style="color:${theme.ink}" role="img" aria-label="2D-Ersatzansicht: ${safeLabel}"><rect width="600" height="340" fill="${theme.paper}"/>${inner}</svg>`;
 }
 
-export function modellFallbackDataUri(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(modellFallbackSvg(key, state, accent, label))}`;
+export function modellFallbackDataUri(key: ModellSceneKey, state: ModellSceneState, accent: string, label: string, dark = false) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(modellFallbackSvg(key, state, accent, label, dark))}`;
 }

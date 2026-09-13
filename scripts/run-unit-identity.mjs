@@ -32,6 +32,7 @@ const child = spawn(
     "src/server/providers/minimax-media.test.ts",
     "tests/unit/deploy-readiness-minimax.test.mjs",
     "packages/slide-engine/src/excalidraw/scene.test.ts",
+    "packages/slide-engine/src/scenes/modell-theme.test.ts",
     "tests/unit/excalidraw-runtime.test.mjs",
     "tests/unit/standalone-native-export.test.ts"
   ],

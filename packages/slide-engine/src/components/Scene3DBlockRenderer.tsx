@@ -12,13 +12,13 @@ import {
   modellLanguageContexts,
   modellLoss,
   modellPredict,
-  modellSceneAccents,
   modellTransferSteps,
   modellTransferText,
   resetModellLearning,
   trainModellStep
 } from "../scenes/modell-state";
 import type { ModellSceneKey, ModellSceneState } from "../scenes/modell-types";
+import { modellTheme } from "../scenes/modell-theme";
 import { scene3dSceneKey } from "../scenes/scene-ids";
 import type { Scene3DBlock } from "./types";
 
@@ -30,7 +30,9 @@ type SceneMode = "fallback" | "live";
 
 export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
   const sceneKey = scene3dSceneKey(block.sceneId);
-  const accent = block.accent ?? modellSceneAccents[sceneKey];
+  const [dark, setDark] = useState(false);
+  const palette = modellTheme(dark);
+  const accent = palette.accent;
   const rootRef = useRef<HTMLElement | null>(null);
   const portRef = useRef<HTMLDivElement | null>(null);
   const labelsRef = useRef<HTMLDivElement | null>(null);
@@ -43,6 +45,19 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<SceneMode>("fallback");
   const interactive = inView && wide && !failed;
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      const explicit = document.documentElement.dataset.theme;
+      setDark(explicit ? explicit === "dark" : media.matches);
+    };
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    media.addEventListener("change", sync);
+    sync();
+    return () => { observer.disconnect(); media.removeEventListener("change", sync); };
+  }, []);
 
   useEffect(() => {
     const element = rootRef.current;
@@ -94,6 +109,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           port,
           labels,
           state,
+          theme: modellTheme(dark),
           ariaLabel: block.altText,
           onFail: () => setFailed(true)
         });
@@ -140,7 +156,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
       hostRef.current = null;
       setMode("fallback");
     };
-  }, [block.altText, interactive, sceneKey, state]);
+  }, [block.altText, dark, interactive, sceneKey, state]);
 
   const update = (mutate: (next: ModellSceneState) => void) => {
     mutate(state);
@@ -155,6 +171,13 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
   };
 
   const rootStyle = {
+    "--lb-scene-ground": palette.paper,
+    "--lb-scene-panel": palette.panel,
+    "--lb-scene-ink": palette.ink,
+    "--lb-scene-muted": palette.muted,
+    "--lb-scene-line": palette.line,
+    "--lb-scene-fill": palette.fill,
+    "--lb-scene-secondary": palette.secondary,
     "--lb-scene-accent": accent,
     "--lb-scene-rgb": hexToRgb(accent)
   } as CSSProperties;
@@ -166,6 +189,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
       data-block-type={block.type}
       data-scene-id={block.sceneId}
       data-scene-mode={failed ? "no-webgl" : mode}
+      data-scene-theme={dark ? "dark" : "light"}
       ref={rootRef}
       style={rootStyle}
     >
@@ -175,7 +199,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           <img
             alt={block.altText}
             className="lb-scene3d-fallback"
-            src={modellFallbackDataUri(sceneKey, state, accent, block.altText)}
+            src={modellFallbackDataUri(sceneKey, state, accent, block.altText, dark)}
           />
         )}
         <div className="lb-scene3d-port" hidden={mode !== "live"} ref={portRef}>
@@ -286,7 +310,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
             <span className="lb-scene3d-math">{state.description === "energy" ? "E = ½mv² + ½kx²" : "F = −k · x"}</span>
           </div>
           <p className="lb-scene3d-explain">{state.description === "energy" ? "Die Energie wechselt ihre Form; die Summe bleibt konstant." : "Die Rückstellkraft wirkt der Auslenkung entgegen."}</p>
-          {state.description === "energy" && <div className="lb-scene3d-row" aria-label="Energielegende"><span><span style={{ color: "#d5adf2" }} aria-hidden="true">●</span> Bewegungsenergie</span><span><span style={{ color: "#e5c48c" }} aria-hidden="true">●</span> Federenergie</span></div>}
+          {state.description === "energy" && <div className="lb-scene3d-row" aria-label="Energielegende"><span><span style={{ color: "var(--lb-scene-secondary)" }} aria-hidden="true">●</span> Bewegungsenergie</span><span><span style={{ color: "var(--lb-scene-accent)" }} aria-hidden="true">●</span> Federenergie</span></div>}
         </>
       );
     case "runtime":
@@ -325,7 +349,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
     case "learning":
       return (
         <>
-          <div className="lb-scene3d-row" aria-label="Diagrammlegende"><span><span style={{ color: "#8fcfc2" }} aria-hidden="true">●</span> Beispieldaten</span><span><span style={{ color: "#d5adf2" }} aria-hidden="true">━</span> Modell</span><span><span style={{ color: "#e5c48c" }} aria-hidden="true">●</span> Auswertung</span></div>
+          <div className="lb-scene3d-row" aria-label="Diagrammlegende"><span><span style={{ color: "var(--lb-scene-ink)" }} aria-hidden="true">●</span> Beispieldaten</span><span><span style={{ color: "var(--lb-scene-secondary)" }} aria-hidden="true">━</span> Modell</span><span><span style={{ color: "var(--lb-scene-accent)" }} aria-hidden="true">●</span> Auswertung</span></div>
           <div className="lb-scene3d-row">
             <button
               className="lb-scene3d-button"

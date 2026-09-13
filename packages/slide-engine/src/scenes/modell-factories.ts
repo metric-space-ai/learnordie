@@ -3,23 +3,24 @@
 /*
  * Szenenfabriken der Vorlesung "Der Modellbegriff im Wandel".
  *
- * Unveraenderte Portierung aus Modellbegriff_ThreeJS_clean.html (Three.js r140).
- * Der Code bleibt bewusst wortgleich, damit Geometrie, Farben und Animationen
- * exakt der freigegebenen Vorlage entsprechen. Aenderungen gehoeren in die Vorlage
- * und werden danach neu uebernommen. Typen und Lebenszyklus kapselt
+ * Geometrie und didaktische Animationen aus Modellbegriff_ThreeJS_clean.html.
+ * Die Darstellung verwendet die native Excalidraw-Papier-/Tintenpalette:
+ * matte Flächen und klare Konturen statt Metall, Leuchten und Blau/Gold.
+ * Typen und Lebenszyklus kapselt
  * ./modell-host.ts; dieses Modul greift auf keine globalen Objekte ausser
  * document.createElement (Glow-Textur) zu.
  */
 import type * as ThreeNamespace from "three";
 
 import type { ModellSceneFactories } from "./modell-types";
+import { modellTheme, type ModellTheme } from "./modell-theme";
 
-export function createModellSceneFactories(T: typeof ThreeNamespace): ModellSceneFactories {
-const C = {cream:0xe5c48c, teal:0x8fcfc2, blue:0x8eb9e9, violet:0xd5adf2, white:0xeaf4f1, dark:0x142b38, line:0x345363};
+export function createModellSceneFactories(T: typeof ThreeNamespace, theme: ModellTheme = modellTheme()): ModellSceneFactories {
+const C = {cream:theme.accent, teal:theme.ink, blue:theme.accent, violet:theme.secondary, white:theme.ink, dark:theme.fill, line:theme.line};
 const V = (x=0,y=0,z=0)=>new T.Vector3(x,y,z);
-function material(c,opts={}){return new T.MeshStandardMaterial({color:c,roughness:.36,metalness:.35,...opts});}
+function material(c,opts={}){return new T.MeshStandardMaterial({...opts,color:typeof c==='number'?theme.fill:c,roughness:1,metalness:0,emissive:0,emissiveIntensity:0,flatShading:true});}
 function mesh(g,m,p,x=0,y=0,z=0){const o=new T.Mesh(g,m);o.position.set(x,y,z);p.add(o);return o;}
-function box(p,w,h,d,c,x=0,y=0,z=0,opts={}){return mesh(new T.BoxGeometry(w,h,d),material(c,opts),p,x,y,z);}
+function box(p,w,h,d,c,x=0,y=0,z=0,opts={}){const g=new T.BoxGeometry(w,h,d);const o=mesh(g,material(c,opts),p,x,y,z);edges(o,g,theme.ink,.65);return o;}
 function ball(p,r,c,x=0,y=0,z=0,glow=false){return mesh(new T.SphereGeometry(r,20,14),(glow?new T.MeshBasicMaterial({color:c,toneMapped:false}):material(c)),p,x,y,z);}
 function line(p,points,c=C.line,opacity=1){const g=new T.BufferGeometry().setFromPoints(points.map(v=>Array.isArray(v)?V(...v):v));const o=new T.Line(g,new T.LineBasicMaterial({color:c,transparent:opacity<1,opacity,toneMapped:false}));p.add(o);return o;}
 function path(p,points,c=C.teal,r=.018){const curve=new T.CatmullRomCurve3(points.map(v=>Array.isArray(v)?V(...v):v));const o=mesh(new T.TubeGeometry(curve,80,r,7,false),material(c,{emissive:c,emissiveIntensity:.28}),p);return {curve,mesh:o};}
@@ -39,7 +40,7 @@ function oscillator(p,lab){
  return {g,detail,sp,body,massPoint,abstract,b,update(x,abstraction=0){body.position.y=-.4+x;massPoint.position.y=-.4+x;b.position.y=-.4+x;sp.scale.y=1.52-(-.4+x+.32);opacityTree(detail,1-abstraction);opacityTree(abstract,.15+.85*abstraction);}};
 }
 function chip(p,x=0,y=0,z=0){const g=group(p,x,y,z);box(g,1.7,1.45,.2,0x1d4052,0,0,0,{metalness:.5});box(g,1.26,1.04,.16,0x142a3a,0,0,.19);edges(g,new T.BoxGeometry(1.73,1.48,.24),C.blue,.7);for(let i=0;i<7;i++){const v=(i-3)*.2;for(const sign of [-1,1]){box(g,.22,.055,.07,0x86a8b0,sign*.98,v,.03);box(g,.055,.22,.07,0x86a8b0,v,sign*.85,.03);}}return g;}
-function glowTexture(){const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d');const g=ctx.createRadialGradient(32,32,1,32,32,31);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.22,'rgba(255,255,255,.95)');g.addColorStop(.5,'rgba(255,255,255,.22)');g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,64,64);return new T.CanvasTexture(c);}
+function glowTexture(){const c=document.createElement('canvas');c.width=c.height=32;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(16,16,11,0,Math.PI*2);ctx.fill();return new T.CanvasTexture(c);}
 function hero(root,lab,state,transfer=false){
  const n=1700, pos=new Float32Array(n*3),col=new Float32Array(n*3),targets=[];const palette=[C.cream,C.teal,C.blue,C.violet,C.violet];
  for(let k=0;k<5;k++){const a=new Float32Array(n*3);for(let i=0;i<n;i++){let u=((i*613)%n)/n,v=((i*1097)%n)/n, x,y,z;
@@ -50,7 +51,7 @@ function hero(root,lab,state,transfer=false){
   else{x=((i%5)-2)*1.03;y=(((Math.floor(i/5)%11)/10)-.5)*3;z=((Math.floor(i/55)%7)/6-.5)*2.2;}
   a.set([x,y,z],3*i);
  }targets.push(a);}
- pos.set(targets[0]);const geo=new T.BufferGeometry();geo.setAttribute('position',new T.BufferAttribute(pos,3));geo.setAttribute('color',new T.BufferAttribute(col,3));const mat=new T.PointsMaterial({size:4.8,sizeAttenuation:false,toneMapped:false,map:glowTexture(),transparent:true,depthWrite:false,vertexColors:true,blending:T.AdditiveBlending});const cloud=new T.Points(geo,mat);root.add(cloud);grid(root,7,5,-2.05);
+ pos.set(targets[0]);const geo=new T.BufferGeometry();geo.setAttribute('position',new T.BufferAttribute(pos,3));geo.setAttribute('color',new T.BufferAttribute(col,3));const mat=new T.PointsMaterial({size:3.6,sizeAttenuation:false,toneMapped:false,map:glowTexture(),transparent:true,depthWrite:false,vertexColors:true,blending:T.NormalBlending});const cloud=new T.Points(geo,mat);root.add(cloud);grid(root,7,5,-2.05);
  const ring=mesh(new T.TorusGeometry(2.35,.008,6,120),new T.MeshBasicMaterial({color:C.line,transparent:true,opacity:.5}),root,0,-2.02,0);ring.rotation.x=Math.PI/2;
  const label=group(root,0,-2.32,0);lab(label,'ABBILD → BEZIEHUNG → FUNKTION','dim');let displayed=0;
  return {width:6.6,height:5.8,camera:[4.8,2.8,10],top:78,update(t,dt){if(dt===0)displayed=state.morph;else displayed+=(state.morph-displayed)*Math.min(1,dt*7);const k=Math.min(3,Math.floor(displayed)),f=displayed-k;const cc=new T.Color(palette[k]).lerp(new T.Color(palette[k+1]),f);for(let i=0;i<n;i++){for(let j=0;j<3;j++)pos[i*3+j]=targets[k][i*3+j]*(1-f)+targets[k+1][i*3+j]*f;const b=.57+.43*((i*17%71)/71);col.set([cc.r*b,cc.g*b,cc.b*b],3*i);}geo.attributes.position.needsUpdate=true;geo.attributes.color.needsUpdate=true;cloud.rotation.y=Math.sin(t*.16)*.09;}};

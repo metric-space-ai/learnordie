@@ -1,6 +1,7 @@
 import type * as ThreeNamespace from "three";
 
 import { createModellSceneFactories } from "./modell-factories";
+import type { ModellTheme } from "./modell-theme";
 import type { ModellSceneInstance, ModellSceneKey, ModellSceneState } from "./modell-types";
 
 type Three = typeof ThreeNamespace;
@@ -13,6 +14,7 @@ export type ModellSceneHostOptions = {
   state: ModellSceneState;
   ariaLabel: string;
   onFail: () => void;
+  theme?: ModellTheme;
 };
 
 // Portierung von window.ModelScenes aus der Vorlage: dieselben Lichter, dieselbe
@@ -48,14 +50,13 @@ export class ModellSceneHost {
     this.projected = new T.Vector3();
     // r140: sRGB-Farbeingaben in den linearen Arbeitsfarbraum ueberfuehren (fehlt in @types/three 0.140).
     (T as unknown as { ColorManagement: { legacyMode: boolean } }).ColorManagement.legacyMode = false;
-    this.factories = createModellSceneFactories(T);
+    this.factories = createModellSceneFactories(T, options.theme);
 
     try {
       const renderer = new T.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power", preserveDrawingBuffer: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
       renderer.outputEncoding = T.sRGBEncoding;
-      renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.95;
+      renderer.toneMapping = T.NoToneMapping;
       renderer.setClearColor(0x000000, 0);
       renderer.domElement.setAttribute("aria-label", options.ariaLabel);
       renderer.domElement.setAttribute("role", "img");
@@ -75,11 +76,11 @@ export class ModellSceneHost {
     const T = this.T;
     this.disposeScene();
     const scene = new T.Scene();
-    scene.add(new T.AmbientLight(0xb8dce8, 0.62));
-    const key1 = new T.DirectionalLight(0xf1e4c8, 1.6);
+    scene.add(new T.AmbientLight(0xffffff, 0.9));
+    const key1 = new T.DirectionalLight(0xffffff, 0.55);
     key1.position.set(4, 7, 8);
     scene.add(key1);
-    const fill = new T.DirectionalLight(0x609cbe, 0.9);
+    const fill = new T.DirectionalLight(0xffffff, 0.25);
     fill.position.set(-5, 1, -2);
     scene.add(fill);
     const root = new T.Group();
