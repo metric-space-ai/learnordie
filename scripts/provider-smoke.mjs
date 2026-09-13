@@ -6,6 +6,10 @@ import { deflateSync } from "node:zlib";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const EMBEDDING_DIMENSIONS = 1536;
+const MINIMAX_API_BASE_URL = "https://api.minimax.io";
+const MINIMAX_M3_MODEL = "MiniMax-M3";
+const MINIMAX_ASR_MODEL = "asr-1.0";
+const MINIMAX_ASR_LANGUAGES = new Set(["zh", "yue", "en", "ja", "ko", "th", "vi", "id", "ms", "fil", "ar", "tr", "fr", "de", "es", "it", "pt", "pl", "ru", "uk"]);
 const ALL_CHECKS = ["ai", "lecturer_assistant", "chat_moderation", "question_generator", "embedding", "ocr", "storage", "mail", "stt"];
 const HTTP_OCR_PROVIDERS = new Set(["http", "external", "vision", "ocr"]);
 const OPENAI_COMPATIBLE_OCR_PROVIDERS = new Set(["openai-compatible", "openai-vision", "vision-chat"]);
@@ -1001,9 +1005,80 @@ async function smokeEmbedding() {
   }
 }
 
+async function smokeMiniMaxOCR() {
+  const configuredModel = envValue("LEARNBUDDY_OCR_MODEL");
+  if (configuredModel && configuredModel.toLowerCase() !== MINIMAX_M3_MODEL.toLowerCase()) {
+    throw new Error(`MiniMax vision OCR uses only ${MINIMAX_M3_MODEL}.`);
+  }
+  const endpoint = useMock
+    ? normalizeOpenAICompatibleOcrEndpoint(envValue("LEARNBUDDY_OCR_BASE_URL"))
+    : `${MINIMAX_API_BASE_URL}/v1/chat/completions`;
+  if (!endpoint) throw new Error("MiniMax M3 OCR endpoint is missing.");
+  const apiKey = useMock
+    ? "provider-smoke-mock-token"
+    : envValue("LEARNORDIE_MINIMAX_API_KEY") || envValue("MINIMAX_API_KEY");
+  if (!apiKey) throw new Error("LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY is missing.");
+  const requestBody = {
+    model: MINIMAX_M3_MODEL,
+    thinking: { type: "disabled" },
+    reasoning_split: true,
+    temperature: 0,
+    max_completion_tokens: 2048,
+    messages: [
+      {
+        role: "system",
+        content: `Extrahiere sichtbaren Text aus Vorlesungsfolien. Antworte nur mit dem erkannten Text in ${envValue("LEARNBUDDY_OCR_LANGUAGE") || "de"}.`
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Extrahiere den gut lesbaren Text aus dieser Vorlesungsfolie." },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/png;base64,${createOCRSmokePng().toString("base64")}`,
+              detail: "high"
+            }
+          }
+        ]
+      }
+    ]
+  };
+  const { response, payload } = await fetchJson(endpoint, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+    body: JSON.stringify(requestBody)
+  }, providerTimeoutMs("LEARNBUDDY_OCR"));
+  if (!response.ok) throw new Error(`MiniMax M3 OCR returned HTTP ${response.status}.`);
+  const content = payload?.choices?.[0]?.message?.content;
+  const text = typeof content === "string"
+    ? content.trim()
+    : Array.isArray(content)
+      ? content.map((item) => (typeof item?.text === "string" ? item.text : "")).filter(Boolean).join("\n").trim()
+      : "";
+  if (!text || !/Gleitlagerung|Schmierfilm|Stribeck/i.test(text)) {
+    throw new Error("MiniMax M3 OCR returned no usable scan text.");
+  }
+  pass("ocr", "MiniMax M3 vision OCR returned usable scan text.", {
+    provider: "minimax",
+    model: MINIMAX_M3_MODEL,
+    requestFormat: "minimax-m3-chat-completions",
+    endpointHost: endpointHost(endpoint),
+    characters: text.length
+  });
+}
+
 async function smokeOCR() {
   if (!shouldRun("ocr")) return;
   const provider = selectedOCRProvider();
+  if (provider === "minimax") {
+    try {
+      await smokeMiniMaxOCR();
+    } catch (error) {
+      fail("ocr", error);
+    }
+    return;
+  }
   const openAICompatible = OPENAI_COMPATIBLE_OCR_PROVIDERS.has(provider);
   if (!HTTP_OCR_PROVIDERS.has(provider) && !openAICompatible) {
     const message = "OCR provider is not configured for external scan extraction.";
@@ -1215,9 +1290,87 @@ async function smokeMail() {
   }
 }
 
+function minimaxSmokeAudioFile(samplePath) {
+  const extension = samplePath ? samplePath.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase() : "wav";
+  const formats = {
+    wav: { type: "audio/wav", extension: "wav" },
+    aiff: { type: "audio/aiff", extension: "aiff" },
+    aif: { type: "audio/aiff", extension: "aiff" },
+    flac: { type: "audio/flac", extension: "flac" },
+    m4a: { type: "audio/mp4", extension: "m4a" },
+    mp4: { type: "audio/mp4", extension: "m4a" },
+    mp3: { type: "audio/mpeg", extension: "mp3" },
+    aac: { type: "audio/aac", extension: "aac" },
+    opus: { type: "audio/opus", extension: "opus" },
+    ogg: { type: "audio/ogg", extension: "ogg" }
+  };
+  const format = formats[extension];
+  if (!format) throw new Error("MiniMax ASR smoke file must be WAV, AIFF, FLAC, M4A, MP3, AAC, Opus or Ogg.");
+  return {
+    ...format,
+    name: samplePath ? samplePath.split(/[\\/]/).pop() : `provider-smoke.${format.extension}`
+  };
+}
+
+async function smokeMiniMaxSTT() {
+  const configuredModel = envValue("LEARNBUDDY_STT_MODEL");
+  if (configuredModel && configuredModel.toLowerCase() !== MINIMAX_ASR_MODEL) {
+    throw new Error(`MiniMax ASR uses only ${MINIMAX_ASR_MODEL}.`);
+  }
+  const samplePath = envValue("LEARNBUDDY_STT_SMOKE_FILE");
+  if (!samplePath && !useMock) {
+    throw new Error("LEARNBUDDY_STT_SMOKE_FILE must point to a supported audio file for MiniMax ASR.");
+  }
+  const audio = samplePath ? await readFile(samplePath) : Buffer.from("mock-audio", "utf8");
+  if (audio.byteLength < 1 || audio.byteLength > 50 * 1024 * 1024) {
+    throw new Error("MiniMax ASR smoke audio must be between 1 byte and 50 MiB.");
+  }
+  const language = (envValue("LEARNBUDDY_STT_LANGUAGE") || "de").split("-")[0].toLowerCase();
+  if (!MINIMAX_ASR_LANGUAGES.has(language)) throw new Error(`MiniMax ASR does not support language ${language}.`);
+  const apiKey = useMock
+    ? "provider-smoke-mock-token"
+    : envValue("LEARNORDIE_MINIMAX_API_KEY") || envValue("MINIMAX_API_KEY");
+  if (!apiKey) throw new Error("LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY is missing.");
+  const file = minimaxSmokeAudioFile(samplePath);
+  const baseUrl = envValue("LEARNBUDDY_STT_BASE_URL").replace(/\/+$/, "");
+  const endpoint = useMock ? `${baseUrl}/v1/speech_to_text` : `${MINIMAX_API_BASE_URL}/v1/speech_to_text`;
+  if (!endpoint) throw new Error("MiniMax ASR endpoint is missing.");
+  const formData = new FormData();
+  formData.set("model", MINIMAX_ASR_MODEL);
+  formData.set("response_format", "json");
+  formData.set("file", new Blob([audio], { type: file.type }), file.name);
+  const { response, payload } = await fetchJson(endpoint, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}`, language },
+    body: formData
+  }, providerTimeoutMs("LEARNBUDDY_STT"));
+  if (!response.ok) throw new Error(`MiniMax ASR returned HTTP ${response.status}.`);
+  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+  const duration = Number(payload?.duration);
+  if (!text) throw new Error("MiniMax ASR returned no transcript text.");
+  if (!Number.isFinite(duration) || duration < 0 || duration > 500) {
+    throw new Error("MiniMax ASR returned an invalid audio duration.");
+  }
+  pass("stt", "MiniMax ASR returned transcript text.", {
+    provider: "minimax-asr-1.0",
+    model: MINIMAX_ASR_MODEL,
+    endpointHost: endpointHost(endpoint),
+    audioBytes: audio.byteLength,
+    durationSeconds: duration
+  });
+}
+
 async function smokeSTT() {
   if (!shouldRun("stt")) return;
   const provider = selectedSTTProvider();
+  if (provider === "minimax") {
+    try {
+      await smokeMiniMaxSTT();
+    } catch (error) {
+      fail("stt", error);
+    }
+    return;
+  }
   const providerBacked = ["mistral", "mistral-voxtral", "voxtral", "external", "openai-compatible", "http", "self-hosted", "self-hosted-vllm", "vllm", "vllm-realtime", "self-hosted-vllm-realtime", "openai-realtime"].includes(provider);
   const openAICompatibleStt = ["openai-compatible", "http", "self-hosted", "self-hosted-vllm", "vllm"].includes(provider);
   const realtimeStt = ["vllm-realtime", "self-hosted-vllm-realtime", "openai-realtime"].includes(provider);
@@ -1568,13 +1721,16 @@ async function startMockServer() {
         const imageUrl = imageItem.image_url?.url;
         const imageMatch = typeof imageUrl === "string" ? imageUrl.match(/^data:image\/png;base64,([a-z0-9+/=]+)$/i) : null;
         const imageBytes = imageMatch ? Buffer.from(imageMatch[1], "base64") : Buffer.alloc(0);
+        const validMiniMaxM3Request = payload.model !== MINIMAX_M3_MODEL
+          || (payload.thinking?.type === "disabled" && payload.reasoning_split === true && imageItem.image_url?.detail === "high");
         const validRequest = request.headers.authorization === "Bearer provider-smoke-mock-token"
           && typeof payload.model === "string"
           && payload.temperature === 0
+          && validMiniMaxM3Request
           && imageBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
         if (!validRequest) {
           response.writeHead(400, { "content-type": "application/json" });
-          response.end(JSON.stringify({ error: { message: "Invalid OpenAI-compatible OCR smoke request." } }));
+          response.end(JSON.stringify({ error: { message: "Invalid vision OCR smoke request." } }));
           return;
         }
         response.writeHead(200, { "content-type": "application/json" });
@@ -1677,6 +1833,12 @@ async function startMockServer() {
       }
     }
 
+    if (request.method === "POST" && url.pathname === "/v1/speech_to_text") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ text: "Mock MiniMax ASR transcript for Gleitlagerung.", duration: 1.25 }));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/v1/audio/transcriptions") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
@@ -1746,7 +1908,7 @@ async function startMockServer() {
   process.env.LEARNBUDDY_STT_BASE_URL = baseUrl;
   process.env.MISTRAL_API_KEY = "provider-smoke-mock-token";
   process.env.LEARNBUDDY_STT_API_KEY = "provider-smoke-mock-token";
-  process.env.LEARNBUDDY_STT_MODEL = "mock-voxtral";
+  process.env.LEARNBUDDY_STT_MODEL = envValue("LEARNBUDDY_STT_MODEL") || "mock-voxtral";
 }
 
 async function main() {

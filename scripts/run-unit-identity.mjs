@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
-  console.log("Usage: node scripts/run-unit-identity.mjs\nRuns the identity, editor, model and export regression tests with at most two workers.");
+  console.log("Usage: node scripts/run-unit-identity.mjs\nRuns identity, editor, model, provider and export regression tests with at most two workers.");
   process.exit(0);
 }
 
@@ -29,6 +29,7 @@ const child = spawn(
     "src/server/request-json.test.ts",
     "src/server/request-origin.test.ts",
     "src/server/providers/ai.test.ts",
+    "src/server/providers/minimax-media.test.ts",
     "packages/slide-engine/src/excalidraw/scene.test.ts",
     "tests/unit/excalidraw-runtime.test.mjs",
     "tests/unit/standalone-native-export.test.ts"

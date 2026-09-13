@@ -151,7 +151,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNBUDDY_OCR_PROVIDER: {
     provider: "ocr",
-    purpose: "Set to http for provider-backed OCR/vision extraction of scanned materials."
+    purpose: "Set to minimax for MiniMax-M3 vision OCR, or http for a dedicated OCR service."
   },
   LEARNBUDDY_OCR_BASE_URL: {
     provider: "ocr",
@@ -163,7 +163,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNBUDDY_STT_PROVIDER: {
     provider: "stt",
-    purpose: "Set to mistral-voxtral, openai-compatible, self-hosted-vllm or self-hosted-vllm-realtime for external STT."
+    purpose: "Set to minimax for MiniMax asr-1.0, or explicitly select another supported STT adapter."
   },
   MISTRAL_API_KEY: {
     provider: "stt",
@@ -171,11 +171,11 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNORDIE_MINIMAX_API_KEY: {
     provider: "ai",
-    purpose: "Server-side MiniMax M3 upstream key for the llm.learnordie.app Responses proxy."
+    purpose: "Server-side MiniMax key for the M3 Responses proxy, M3 vision OCR and asr-1.0 transcription."
   },
   MINIMAX_API_KEY: {
     provider: "ai",
-    purpose: "Server-side MiniMax M3 upstream key for the llm.learnordie.app Responses proxy."
+    purpose: "Server-side MiniMax key for the M3 Responses proxy, M3 vision OCR and asr-1.0 transcription."
   },
   LEARNBUDDY_STT_API_KEY: {
     provider: "stt",
@@ -658,9 +658,14 @@ async function pullVercelEnv(environment) {
 }
 
 function requiredEnvFor(environment) {
-  const required = envValue("LEARNBUDDY_EMBEDDING_PROVIDER").toLowerCase() === "disabled"
-    ? REQUIRED_ENV.filter(name => !["LEARNBUDDY_EMBEDDING_BASE_URL", "LEARNBUDDY_EMBEDDING_API_KEY"].includes(name))
-    : REQUIRED_ENV;
+  const optionalForSelectedProviders = [];
+  if (envValue("LEARNBUDDY_EMBEDDING_PROVIDER").toLowerCase() === "disabled") {
+    optionalForSelectedProviders.push("LEARNBUDDY_EMBEDDING_BASE_URL", "LEARNBUDDY_EMBEDDING_API_KEY");
+  }
+  if (envValue("LEARNBUDDY_OCR_PROVIDER").toLowerCase() === "minimax") {
+    optionalForSelectedProviders.push("LEARNBUDDY_OCR_BASE_URL", "LEARNBUDDY_OCR_API_KEY");
+  }
+  const required = REQUIRED_ENV.filter(name => !optionalForSelectedProviders.includes(name));
   if (environment === "preview") {
     return required.filter((name) => !PREVIEW_RUNTIME_ENV.includes(name));
   }
@@ -1052,12 +1057,13 @@ function providerModeRules() {
     },
     {
       name: "LEARNBUDDY_OCR_PROVIDER",
-      allowed: ["http", "external", "vision", "ocr", "openai-compatible", "openai-vision", "vision-chat"],
+      allowed: ["minimax", "http", "external", "vision", "ocr", "openai-compatible", "openai-vision", "vision-chat"],
       reason: "Scanned material handling needs an external OCR/vision provider."
     },
     {
       name: "LEARNBUDDY_STT_PROVIDER",
       allowed: [
+        "minimax",
         "mistral",
         "mistral-voxtral",
         "voxtral",
