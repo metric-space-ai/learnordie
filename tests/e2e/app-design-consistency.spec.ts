@@ -155,8 +155,13 @@ for (const variant of variants) {
       const submit = page.getByRole("button", { name: "Anmelden", exact: true });
       await expect(submit).toBeDisabled();
       await code.fill("000000");
+      // The preceding send button can occupy this same position after the
+      // form changes. Move off it before asserting the non-hover token.
+      await page.mouse.move(0, 0);
       await expect(submit).toHaveCSS("background-color", "rgb(105, 101, 219)");
       await expect(submit).toHaveCSS("color", "rgb(255, 255, 255)");
+      await submit.hover();
+      await expect(submit).toHaveCSS("background-color", "rgb(87, 83, 198)");
       await submit.click();
       await expect(card.getByRole("alert")).toContainText("Code falsch oder abgelaufen");
       await fitsViewport(page, card.getByRole("alert"));
