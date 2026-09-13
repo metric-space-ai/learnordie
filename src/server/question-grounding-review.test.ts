@@ -47,6 +47,34 @@ test("review fails closed for provider failure, malformed approval and elapsed d
   assert.equal(calls, 1);
 });
 
+test("citation formatting gets one bounded repair, but a factual refusal is never repaired into approval", async () => {
+  const shortened = valid(); shortened.reviews[0].sourceQuote = "Die Eigenfrequenz ... bei gleichbleibender Masse.";
+  const requests: Array<{user:string;system:string;timeoutMs:number}> = [];
+  const provider = { complete: async (input: {user:string;system:string;timeoutMs:number}) => {
+    requests.push(input); return {answer:JSON.stringify(requests.length === 1 ? shortened : valid())};
+  } } as unknown as AIProvider;
+  await reviewQuestionGrounding(provider, [], sources, Date.now()+25_000);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(JSON.parse(requests[0].user).sources, JSON.parse(requests[1].user).sources);
+  assert.deepEqual(JSON.parse(requests[0].user).candidates, JSON.parse(requests[1].user).candidates);
+  assert.match(requests[1].system, /keine Auslassungszeichen/);
+  assert.ok(requests.every(request => request.timeoutMs <= 12_000));
+  let calls = 0;
+  const refused = valid(); refused.reviews[0].approved = false;
+  const rejecting = { complete: async () => { calls++; return {answer:JSON.stringify(refused)}; } } as unknown as AIProvider;
+  await assert.rejects(reviewQuestionGrounding(rejecting, [], sources, Date.now()+25_000), /Fachprüfung 4.0/);
+  assert.equal(calls, 1);
+  calls = 0;
+  const mixed = valid(); mixed.reviews[0].sourceQuote = "Broken ... quote"; mixed.reviews[3].approved = false;
+  const mixedProvider = { complete: async () => { calls++; return {answer:JSON.stringify(mixed)}; } } as unknown as AIProvider;
+  await assert.rejects(reviewQuestionGrounding(mixedProvider, [], sources, Date.now()+25_000), /Fachprüfung 1.0/);
+  assert.equal(calls, 1);
+  calls = 0;
+  const invalid = { complete: async () => { calls++; return {answer:JSON.stringify(shortened)}; } } as unknown as AIProvider;
+  await assert.rejects(reviewQuestionGrounding(invalid, [], sources, Date.now()+25_000), /Beleg fehlt/);
+  assert.equal(calls, 2);
+});
+
 test("long sources never displace the latest passage and over-budget sources fail without a call", async () => {
   let submitted: { sources: string[] } | undefined;
   const provider = { complete: async (input: {user:string}) => { submitted = JSON.parse(input.user); return {answer:JSON.stringify(valid())}; } } as unknown as AIProvider;
