@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 
-const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const insist = (condition, message) => { if (!condition) throw new Error(message); };
+const canonical = value => value instanceof Date ? value.toISOString() : Array.isArray(value) ? value.map(canonical) : value && typeof value === "object"
+  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+const digest = value => createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+export class LectureScriptMaintenanceError extends Error {}
+const insist = (condition, message) => { if (!condition) throw new LectureScriptMaintenanceError(message); };
 
 export function appendLectureScript(document, asset) {
   insist(document?.schemaVersion === "learnordie.slide.v1" && Array.isArray(document.slides) && document.slides.length > 0, "Existing native slide document required");

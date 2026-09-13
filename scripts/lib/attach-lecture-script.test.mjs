@@ -44,7 +44,10 @@ test("failed backup prevents the update; successful attachment writes only slide
         assert.equal(backedUp, true);
         assert.match(query, /^UPDATE lectures SET slide_document_json=\? WHERE id=\? RETURNING \*$/);
         wrote = true;
-        return [{ ...lecture, slide_document_json: values[0] }];
+        // PostgreSQL JSONB canonicalizes object key order at every nesting level.
+        const jsonb = value => Array.isArray(value) ? value.map(jsonb) : value && typeof value === "object"
+          ? Object.fromEntries(Object.keys(value).sort().map(key => [key, jsonb(value[key])])) : value;
+        return [{ ...lecture, slide_document_json: jsonb(values[0]) }];
       }
       assert.ok(query.startsWith("SET LOCAL"));
       return [];

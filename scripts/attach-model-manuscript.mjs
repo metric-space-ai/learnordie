@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { createOriginalModelDocument } from "@/lib/model-original-template";
-import { attachLectureScript } from "./lib/attach-lecture-script.mjs";
+import { attachLectureScript, LectureScriptMaintenanceError } from "./lib/attach-lecture-script.mjs";
 import { savePrivateScriptBackup } from "./lib/private-wording-backup.mjs";
 
 const args = process.argv.slice(2);
@@ -28,9 +28,12 @@ if (args.includes("--help")) {
     const result = await attachLectureScript(sql, { lectureId: values["--lecture-id"], publicToken: values["--public-token"], ownerEmail: values["--owner-email"], asset, apply: values.apply ?? false,
       backup: async backup => { backupReceipt = await savePrivateScriptBackup(values["--backup-blob"], { ...backup, scriptSha256 }); } });
     console.log(JSON.stringify({ ...result, scriptSha256, backupReceipt }));
-  } catch {
+  } catch (error) {
     // Database/provider errors can contain private content or credentials.
-    console.error("Manuscript maintenance failed; inspect the scoped target, session state, source hash and private backup configuration.");
+    const message = error instanceof LectureScriptMaintenanceError ? error.message
+      : error?.message === "Private backup failed; manuscript was not changed" ? error.message
+      : "Inspect target/configuration; private database and provider diagnostics withheld.";
+    console.error(JSON.stringify({ status: "failed", message }));
     process.exitCode = 1;
   } finally { await sql?.end({ timeout: 3 }); }
 }
