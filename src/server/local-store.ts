@@ -507,7 +507,7 @@ export class LocalLectureStore {
       ...clone(input.variants).map((variant) => ({ ...variant, slideId: input.slideId, familyId, familySource: input.source }))
     ];
     await writeStore(store);
-    return lecture;
+    return { ...lecture, appendedFamilyId: familyId };
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {

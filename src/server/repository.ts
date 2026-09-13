@@ -175,7 +175,7 @@ export interface LectureRepository {
   updateLecture(id: string, input: UpdateLectureInput, ownerEmail?: string): Promise<Lecture | null>;
   addMaterial(lectureId: string, input: AddMaterialInput, ownerEmail?: string): Promise<LectureMaterial | null>;
   processMaterials(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
-  appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string): Promise<Lecture | null>;
+  appendQuestionFamily(lectureId: string, input: AppendQuestionFamilyInput, ownerEmail?: string): Promise<(Lecture & { appendedFamilyId: string }) | null>;
   enqueueMaterialProcessingRun?(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
   countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput): Promise<number | null>;
   submitStudentChatQuestion(input: SubmitChatQuestionInput): Promise<StudentChatQuestion | null>;

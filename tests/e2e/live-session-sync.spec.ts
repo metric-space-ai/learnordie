@@ -228,6 +228,8 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
       const response = await route.fetch();
       expect(response.status()).toBe(200);
       family = (await response.json()).family;
+      expect(family).toHaveLength(4);
+      expect(new Set(family.map((question) => question.familyId)).size).toBe(1);
       await held;
       await route.fulfill({ response });
     });
@@ -297,6 +299,24 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
     releaseGeneration();
     await Promise.all(contexts.map((context) => context.close()));
   }
+});
+
+test("Concurrent generation returns exactly the family created by each request", async ({ page }) => {
+  const { lecture, csrf } = await fixture(page);
+  const responses = await Promise.all([0, 1].map((index) => page.request.post(`/api/lectures/${lecture.id}/live-questions`, {
+    headers: { "x-learnbuddy-csrf": csrf },
+    data: { slideId: lecture.slides[index].id, allowSlideContext: true }
+  })));
+  const families: Lecture["questions"][] = [];
+  for (const [index, response] of responses.entries()) {
+    expect(response.status()).toBe(200);
+    const { family } = await response.json();
+    expect(family).toHaveLength(4);
+    expect(new Set(family.map((question: Lecture["questions"][number]) => question.familyId)).size).toBe(1);
+    expect(family.every((question: Lecture["questions"][number]) => question.slideId === lecture.slides[index].id)).toBe(true);
+    families.push(family);
+  }
+  expect(families[0][0].familyId).not.toBe(families[1][0].familyId);
 });
 
 test("Private presenter route rejects another lecturer; DB lock cannot extend answer deadline", async ({ browser }) => {

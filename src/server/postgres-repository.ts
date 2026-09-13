@@ -955,15 +955,16 @@ export class PostgresLectureRepository implements LectureRepository {
     if (!hasCompleteQuestionFamilies(input.variants.map((variant) => ({ level: variant.level })))) {
       throw new Error("Question family must contain exactly one variant per level.");
     }
-    await this.db.transaction(async (tx) => {
-      await this.insertQuestionFamiliesInTransaction(
+    const familyIds = await this.db.transaction(async (tx) => {
+      return this.insertQuestionFamiliesInTransaction(
         tx,
         lectureId,
         input.variants.map((variant) => ({ ...variant, slideId: input.slideId, familyId: undefined, familySource: input.source })),
         input.source
       );
     });
-    return this.getLectureById(lectureId, ownerEmail);
+    const updated = await this.getLectureById(lectureId, ownerEmail);
+    return updated ? { ...updated, appendedFamilyId: familyIds[0] } : null;
   }
 
   async processMaterials(lectureId: string, ownerEmail?: string) {
@@ -2293,11 +2294,13 @@ export class PostgresLectureRepository implements LectureRepository {
       groups.set(key, group);
     }
 
+    const familyIds: string[] = [];
     for (const { slideId, familySource, variants: groupVariants } of groups.values()) {
       const [question] = await tx
         .insert(questions)
         .values({ lectureId, source: familySource ?? source, slideId })
         .returning({ id: questions.id });
+      familyIds.push(question.id);
       await tx.insert(questionVariants).values(
         groupVariants.map((variant) => ({
           questionId: question.id,
@@ -2311,6 +2314,7 @@ export class PostgresLectureRepository implements LectureRepository {
         }))
       );
     }
+    return familyIds;
   }
 
   private async hydrateLectures(rows: LectureJoinRow[]) {
