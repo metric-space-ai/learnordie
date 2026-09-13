@@ -96,7 +96,7 @@ export function SlideEngineCanvas({
         data-slide-engine="v1"
         data-slide-id={showJoinIntro ? "lecture-join" : currentSlide.id}
       >
-        {lectureUrl && <a ref={participationButton} className="slide-lecture-link" href={lectureUrl} aria-label={`Teilnahme-Link und QR-Code: ${lectureUrl}`} aria-haspopup="dialog" aria-expanded={qrOpen} onClick={(event) => { event.preventDefault(); setQrOpen(true); }}>{lectureUrl}</a>}
+        {lectureUrl && <a ref={participationButton} className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`} title="Teilnahme-Link und QR-Code anzeigen" aria-haspopup="dialog" aria-expanded={qrOpen} onClick={(event) => { event.preventDefault(); setQrOpen(true); }}>{lectureUrl}</a>}
         {showJoinIntro && lectureUrl ? (
           <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} action={joinAction} />
         ) : <ExcalidrawCanvas key={currentSlide.id} slideId={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} readOnly />}
@@ -105,7 +105,7 @@ export function SlideEngineCanvas({
         onCancel={(event) => { event.preventDefault(); closeQr(); }}
         onClose={() => setQrOpen(false)} onKeyDown={(event) => event.stopPropagation()}>
         <button className="qr-url-toggle" type="button" onClick={closeQr} aria-label="QR-Code schließen">{lectureUrl} · ×</button>
-        <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Vorlesung"} action={<button type="button" className="lecture-qr-close" onClick={closeQr}>Zurück zur Folie</button>} />
+        {qrOpen && <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Vorlesung"} action={<button type="button" className="lecture-qr-close" onClick={closeQr}>Zurück zur Folie</button>} />}
       </dialog>}
       {showNavigation && <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
         <button type="button" disabled={navigationDisabled} onClick={onPrevious} aria-label="Vorherige Folie">‹</button>

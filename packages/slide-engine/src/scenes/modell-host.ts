@@ -168,6 +168,13 @@ export class ModellSceneHost {
 
   private addLabel(anchor: ThreeNamespace.Object3D, text: string, cls: string) {
     const el = document.createElement("div");
+    // Narrative captions duplicate the slide. Retain axis names, quantities and
+    // diagram-node labels, but let the motion itself carry these explanations.
+    if (new Set([
+      "ABBILD → BEZIEHUNG → FUNKTION", "AUSWÄHLEN · VEREINFACHEN · WEGLASSEN",
+      "EINE VOLLSTÄNDIGE PERIODE", "KRAFTBILANZ", "21 BEISPIELE · 3 LERNBARE PARAMETER",
+      "WIEDERHOLTE VERARBEITUNG · × N", "PRÜFEN UND RÜCKKOPPELN"
+    ]).has(text)) return el;
     el.className = `lb-scene3d-label ${cls}`.trim();
     el.textContent = text;
     el.style.display = "none";

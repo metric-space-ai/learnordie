@@ -9,6 +9,7 @@
   opacity: .85;
 }
 .slide-lecture-link:hover { text-decoration: underline; opacity: 1; }
+.learn-shell .slide-lecture-link { max-width: calc(100% - 208px); }
 .slide-lecture-link:focus-visible, .qr-url-toggle:focus-visible { outline: 2px dashed var(--app-accent); outline-offset: 2px; }
 .lecture-qr-overlay {
   position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
@@ -36,8 +37,8 @@
   overflow: hidden !important; clip-path: inset(50%); white-space: nowrap;
   padding: 0 !important; margin: -1px !important; border: 0 !important;
 }
-.learnordie-canvas-scene .lb-scene3d-controls { font-size: 28px; }
-.learnordie-canvas-scene .lb-scene3d-tool { font-size: 26px; }
+.learnordie-canvas-scene .lb-scene3d-controls { font-size: 34px; }
+.learnordie-canvas-scene .lb-scene3d-tool { font-size: 30px; }
 @media (max-width: 700px) {
   .lecture-join-slide { padding: 64px 20px 28px; gap: 12px; }
   .lecture-join-qr { max-width: min(40vh, 340px); }

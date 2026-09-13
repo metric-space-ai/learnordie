@@ -339,7 +339,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target && (target.isContentEditable || target.closest("input, textarea, select, button, a, summary"))) return;
+      if (event.defaultPrevented) return;
+      if (target && (target.isContentEditable || target.closest("input, textarea, select, button, summary, [role=dialog], dialog") || (target.closest("a") && !target.closest(".slide-lecture-link")))) return;
       if ((event.key === "f" || event.key === "F") && !event.metaKey && !event.ctrlKey && !event.altKey) {
         toggleFullscreen();
         return;

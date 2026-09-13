@@ -34,6 +34,36 @@ function database() {
   return postgres(url, { max: 2, prepare: false });
 }
 
+test("Configured participation code opens the active classroom and QR overlay preserves the slide", async ({ page, browser }) => {
+  const { lecture, csrf } = await fixture(page);
+  const code = `SYNC-${Date.now()}`;
+  const saved = await page.request.patch(`/api/lecturer/series/${lecture.seriesId}/join-code`, {
+    headers: { "x-learnbuddy-csrf": csrf }, data: { code }
+  });
+  expect(saved.status()).toBe(200);
+  await page.goto(`/lecturer/live/${lecture.publicToken}`);
+  await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
+  const participation = page.locator(".slide-lecture-link");
+  const joinUrl = new URL(`/join/${code}`, page.url()).href;
+  await expect(participation).toHaveAttribute("href", joinUrl);
+  await participation.click();
+  const dialog = page.getByRole("dialog", { name: "Teilnahme-Link und QR-Code", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".lecture-join-url")).toHaveAttribute("href", joinUrl);
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  const guestContext = await browser.newContext();
+  try {
+    const guest = await guestContext.newPage();
+    await guest.goto(joinUrl);
+    await expect(guest).toHaveURL(new RegExp(`/l/${lecture.publicToken}$`));
+    await expect(guest.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[0].id);
+    await expect(guest.locator(".slide-lecture-link")).toHaveAttribute("href", joinUrl);
+    await page.keyboard.press("ArrowRight");
+    await expect(guest.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[1].id);
+  } finally { await guestContext.close(); }
+});
+
 test("Live classroom: presenter, three students, late join, receipts, scoreboard, expiry, reconnect and end", async ({ browser }) => {
   test.setTimeout(120_000);
   const contexts: BrowserContext[] = [];

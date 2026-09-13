@@ -1164,6 +1164,7 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/motion-design-contract.mjs", "Usage: npm run motion:contract"],
     ["scripts/provider-smoke.mjs", "Usage: npm run provider:smoke -- [options]"],
     ["scripts/production-release-probe.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/production-release-probe.mjs --run"],
+    ["scripts/production-schema.mjs", "Usage: node scripts/production-schema.mjs"],
     ["scripts/release-gate.mjs", "Usage: npm run release:gate -- [options]"],
     ["scripts/script-syntax-check.mjs", "Usage: npm run scripts:check"],
     ["scripts/slide-engine-qa-contract.mjs", "Usage: node scripts/slide-engine-qa-contract.mjs"],
