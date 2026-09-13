@@ -535,6 +535,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       <details className="presentation-controls" ref={controlsRef}>
       <summary aria-label="Präsentationssteuerung" title="Präsentationssteuerung öffnen">⋯</summary>
       <div className="presentation-control-panel" aria-label="Live-Werkzeuge">
+      {roundMessage && <p className="form-error">{roundMessage}</p>}
       {(!live.connected || live.error || live.state?.status !== "active") && <aside className="presentation-connection-notice" role="status">
         {live.error || (!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Live-Sitzung beendet." : "Live-Sitzung wird vorbereitet …")}
         {live.connected && live.state?.status !== "active" && live.state?.status !== "ended" && <button type="button" disabled={live.busy} onClick={() => void live.send({ action: "start" })}>Neue Live-Sitzung starten</button>}
@@ -591,8 +592,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         <button
           className="icon-action"
           type="button"
-          title="Quiz (Leertaste)"
-          aria-label="Quiz (Leertaste)"
+          title="Vorbereitete Frage starten oder schließen"
+          aria-label="Vorbereitete Frage"
           disabled={showJoinIntro || live.busy || !live.connected || live.state?.status !== "active" || families.length === 0}
           aria-pressed={questionOpen}
           onClick={() => {

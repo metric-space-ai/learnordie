@@ -76,7 +76,7 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     await teacher.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
     for (const page of [first, second]) await expect(page.locator(".slide-nav .slide-count")).toHaveText("Beitreten");
     await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
-    await teacher.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
+    await teacher.getByRole("button", { name: "Vorbereitete Frage", exact: true }).click();
     for (const page of [first, second]) await expect(page.getByLabel("Quizfrage", { exact: true })).toBeVisible();
     await expect(teacher.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
     await expect(teacher.getByRole("timer", { name: "Fragerunde läuft" })).toBeVisible();
@@ -140,7 +140,7 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
 
     // Keep the scoreboard open during the next round: it must update without reopening.
     await teacher.getByLabel("Fragezeit", { exact: true }).selectOption("15");
-    await teacher.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
+    await teacher.getByRole("button", { name: "Vorbereitete Frage", exact: true }).click();
     await expect(second.getByLabel("Quizfrage", { exact: true })).toBeVisible();
     await second.locator(".answers .answer").filter({ has: second.locator(".letter", { hasText: correctKey }) }).click();
     await expect(teacher.locator(".leader-row strong").first()).toHaveText(String(chosen.points * 2));
@@ -212,6 +212,10 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
     await teacher.keyboard.press("Space");
     await expect(teacher.locator(".presenter-round-toast")).toContainText("vorübergehend nicht erreichbar");
     expect((await state()).round).toBeNull();
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
+    await expect(teacher.locator(".presentation-control-panel .form-error")).toContainText("vorübergehend nicht erreichbar");
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
+    await teacher.locator("body").click({ position: { x: 8, y: 100 } });
     await teacher.unroute(generationPath);
 
     // Hold the actual route response, not fake question state, to exercise
@@ -317,7 +321,7 @@ test("Private presenter route rejects another lecturer; DB lock cannot extend an
     await owner.getByLabel("Fragezeit", { exact: true }).selectOption("5");
     const roundStarted = owner.waitForResponse((response) => new URL(response.url()).pathname === `/api/lectures/${lecture.id}/live-session`
       && response.request().method() === "POST" && response.request().postDataJSON()?.action === "fire");
-    await owner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
+    await owner.getByRole("button", { name: "Vorbereitete Frage", exact: true }).click();
     const roundResponse = await roundStarted;
     expect(roundResponse.status()).toBe(200);
     const state = await roundResponse.json() as LiveSessionView;

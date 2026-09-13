@@ -56,7 +56,9 @@ function recentTranscript(lecture: Lecture) {
 function clientSafeError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("timed out")) return "Die KI hat nicht rechtzeitig geantwortet. Die nächste Passage versucht es erneut.";
-  if (message.includes("not configured")) return "Der Fragengenerator ist nicht konfiguriert.";
+  if (message.includes("not configured") || /API_KEY.*is required/.test(message)) {
+    return "Der Fragengenerator ist nicht konfiguriert. Bitte die KI-Zugangsdaten der Bereitstellung prüfen. Vorbereitete Fragen bleiben verfügbar.";
+  }
   if (message.includes("duplicate")) return "Die KI hat eine bereits vorhandene Frage erzeugt; sie wurde verworfen.";
   return "Aus dieser Passage konnte keine gültige Frage erzeugt werden.";
 }

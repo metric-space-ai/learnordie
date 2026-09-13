@@ -306,13 +306,13 @@ test("one presenter synchronizes three independent guests, timed questions and s
     await expect(students[2].getByRole("region", { name: "Folieninhalt als Text" })).toContainText("Sommerfeldzahl");
     await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
     await page.getByLabel("Fragezeit", { exact: true }).selectOption("30");
-    await page.getByLabel("Quiz (Leertaste)", { exact: true }).click();
+    await page.getByLabel("Vorbereitete Frage", { exact: true }).click();
     for (const student of students) {
       await expect(student.getByLabel("Quizfrage", { exact: true })).toBeVisible();
       await student.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
       await expect(student.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
     }
-    await page.getByLabel("Quiz (Leertaste)", { exact: true }).click();
+    await page.getByLabel("Vorbereitete Frage", { exact: true }).click();
     for (const [i, student] of students.entries()) {
       await expect(student.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
       await student.getByLabel("Eigenes Pseudonym", { exact: true }).fill(`Guest ${lecture.id.slice(0, 6)} ${i + 1}`);
@@ -321,7 +321,7 @@ test("one presenter synchronizes three independent guests, timed questions and s
     }
     // A fresh, unanswered round must disappear on all clients without a close command.
     await page.getByLabel("Fragezeit", { exact: true }).selectOption("5");
-    await page.getByLabel("Quiz (Leertaste)", { exact: true }).click();
+    await page.getByLabel("Vorbereitete Frage", { exact: true }).click();
     await Promise.all(students.map((student) => expect(student.getByLabel("Quizfrage", { exact: true })).toBeVisible()));
     await Promise.all(students.map((student) => expect(student.getByLabel("Quizfrage", { exact: true })).toHaveCount(0, { timeout: 7_000 })));
     for (const [i, student] of students.entries()) {

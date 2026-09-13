@@ -7,6 +7,8 @@
   line-height: 1.5;
   color: var(--app-text);
 }
+.home-app .home-join-form { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:is(.home-app, .join-screen, .student-app) :is(h1, h2) { hyphens: none; text-wrap: balance; }
 
 /* Grid/flex children must shrink before long names, codes or emails overflow. */
 :is(.home-app, .join-screen, .student-app) :is(

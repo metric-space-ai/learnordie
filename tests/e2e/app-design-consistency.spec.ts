@@ -59,6 +59,7 @@ async function controlContract(page: Page, control: Locator) {
 }
 
 async function keyboardFocus(control: Locator) {
+  await expect(control).toBeVisible();
   await control.focus();
   // Tab away and back selects keyboard focus, including on WebKit-style inputs.
   await control.press("Tab");
@@ -76,6 +77,8 @@ for (const variant of variants) {
       const assertClean = diagnostics(page);
       await page.goto("/");
       await panelContract(page, page.locator(".home-join-island"));
+      await expect(page.locator(".home-join-form")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(page.locator(".home-join-form")).toHaveCSS("border-radius", "0px");
       const code = page.getByLabel("Vorlesungscode", { exact: true });
       await controlContract(page, code);
       await keyboardFocus(code);
@@ -116,9 +119,10 @@ for (const variant of variants) {
       await controlContract(page, page.getByRole("button", { name: "Testkonto öffnen" }));
       await testInfo.attach("entry-login", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
       await page.goto("/lecturer/login?error=invalid-token");
-      await expect(page.getByRole("alert")).toContainText("Dieser Link ist abgelaufen");
-      await fitsViewport(page, page.getByRole("alert"));
-      await expect(page.getByRole("alert")).toHaveCSS("border-radius", "8px");
+      const loginError = page.locator(".login-card").getByRole("alert");
+      await expect(loginError).toContainText("Dieser Link ist abgelaufen");
+      await fitsViewport(page, loginError);
+      await expect(loginError).toHaveCSS("border-radius", "8px");
       await page.getByRole("link", { name: "Zur Startseite" }).click();
       await expect(page.locator(".home-app")).toBeVisible();
       assertClean();
@@ -180,20 +184,28 @@ for (const variant of variants) {
       await expect(page.locator("main.learn-shell")).toBeVisible();
       const menu = page.locator(".learn-more");
       const summary = menu.locator("summary");
-      await keyboardFocus(summary);
-      await page.keyboard.press("Enter");
-      await expect(menu).toHaveAttribute("open", "");
-      await panelContract(page, page.locator(".learn-more-panel"));
-      const download = menu.getByRole("link", { name: "Lern-HTML herunterladen" });
+      // Desktop exposes these controls directly; only narrow layouts use Mehr.
+      const compact = variant.viewport.width <= 900;
+      if (compact) {
+        await keyboardFocus(summary);
+        await page.keyboard.press("Enter");
+        await expect(menu).toHaveAttribute("open", "");
+        await panelContract(page, page.locator(".learn-more-panel"));
+      } else {
+        await expect(menu).toBeHidden();
+      }
+      const download = compact ? menu.getByRole("link", { name: "Lern-HTML herunterladen" }) : page.getByRole("link", { name: "Herunterladen", exact: true });
       await controlContract(page, download);
+      await keyboardFocus(download);
       await expect(download).toHaveAttribute("href", `/api/lecture/${token}/export`);
-      const density = menu.getByRole("slider", { name: "Fragedichte" });
+      const densityRoot = compact ? menu.locator(".learn-more-density") : page.locator(".learn-bar");
+      const density = densityRoot.getByRole("slider");
       await density.focus();
       await density.press("Home");
       await density.press("ArrowRight");
-      await expect(menu.locator(".learn-more-density strong")).toHaveText(await density.inputValue());
+      await expect(densityRoot.locator("strong")).toHaveText(await density.inputValue());
       await fitsViewport(page, density);
-      await menu.getByRole("button", { name: "Rangliste", exact: true }).click();
+      await (compact ? menu : page.locator(".action-stack")).getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
       const leaderboard = page.getByRole("complementary", { name: "Rangliste", exact: true });
       await panelContract(page, leaderboard);
       const closeLeaderboard = leaderboard.getByRole("button", { name: "Rangliste schließen" });
@@ -201,8 +213,8 @@ for (const variant of variants) {
       await closeLeaderboard.click();
       await expect(leaderboard).toHaveCount(0);
       // Opening an overlay may close the disclosure; normalize using its state.
-      if (!(await menu.evaluate((element) => (element as HTMLDetailsElement).open))) await summary.click();
-      await menu.getByRole("button", { name: "Evaluation", exact: true }).click();
+      if (compact && !(await menu.evaluate((element) => (element as HTMLDetailsElement).open))) await summary.click();
+      await (compact ? menu.getByRole("button", { name: "Evaluation", exact: true }) : page.getByRole("button", { name: "Feedback", exact: true })).click();
       const evaluation = page.getByRole("complementary", { name: "Evaluation", exact: true });
       await panelContract(page, evaluation);
       const comment = evaluation.getByLabel("Evaluationskommentar");
@@ -217,7 +229,7 @@ for (const variant of variants) {
       await testInfo.attach("learn-evaluation", { body: await page.screenshot(), contentType: "image/png" });
       await close.click();
       await expect(evaluation).toHaveCount(0);
-      if (await menu.evaluate((element) => (element as HTMLDetailsElement).open)) await summary.click();
+      if (compact && await menu.evaluate((element) => (element as HTMLDetailsElement).open)) await summary.click();
       await page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
       await expect(page.locator(".question-drawer")).toBeVisible();
       await page.locator(".question-ai-link").click();
