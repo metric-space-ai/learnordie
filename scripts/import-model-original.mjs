@@ -6,6 +6,11 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
+if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  console.log("Usage: node scripts/import-model-original.mjs <original-source-directory>\nExtracts the eight authored slides and companion without executing source JavaScript.\nRequires Greppy and apply_patch; refuses to overwrite generated files.");
+  process.exit(0);
+}
+
 const directory = process.argv[2];
 if (!directory) throw new Error("Supply the directory containing the two original source files.");
 const htmlName = "Modellbegriff_ThreeJS_clean.html";

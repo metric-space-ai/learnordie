@@ -4,6 +4,11 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  console.log("Usage: node scripts/identity-gates.mjs\nRuns identity contracts against IDENTITY_GATES_BASE (default http://127.0.0.1:8080).\nRequires an isolated local fixture store; creates test profiles and changes fixture data.");
+  process.exit(0);
+}
+
 function seriesIdFromTitle(title) {
   const slug = title
     .toLowerCase()

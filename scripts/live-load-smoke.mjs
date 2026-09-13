@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index++) {
-  const [key, inline] = process.argv[index].replace(/^--/, "").split("=", 2);
+  const [key, inline] = process.argv[index].replace(/^--?/, "").split("=", 2);
   args.set(key, inline ?? (process.argv[index + 1]?.startsWith("--") || !process.argv[index + 1] ? "1" : process.argv[++index]));
 }
 if (args.has("help") || args.has("h")) {

@@ -3,6 +3,11 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  console.log("Usage: node scripts/run-unit-identity.mjs\nRuns the identity, editor, model and export regression tests with at most two workers.");
+  process.exit(0);
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const child = spawn(
   process.execPath,

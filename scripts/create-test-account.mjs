@@ -3,7 +3,7 @@ import { randomBytes, scryptSync } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-if (process.argv.includes("--help")) {
+if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
   console.log("Usage: node scripts/create-test-account.mjs <absolute-output-directory> [qa-live@learnordie.test] [hours: 1-168]");
   process.exit(0);
 }
