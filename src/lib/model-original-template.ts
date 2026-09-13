@@ -296,7 +296,7 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
     companion: originalModelProvenance.companion.file,
     slideCount: MODEL_ORIGINAL_SLIDE_COUNT,
     fieldsPerSlide: originalModelProvenance.fieldsPerSlide
-  };
+  } as const;
   const finalize = (document: SlideDocument, status: OriginalModelUpgradePlan["status"]): OriginalModelUpgradePlan => ({
     status,
     document,
