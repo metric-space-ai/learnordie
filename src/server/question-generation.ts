@@ -4,6 +4,7 @@ import type { MaterialChunk } from "./material-pipeline";
 import { generateReviewVariants, levelPoints, withVariantMetadata } from "./lecture-factory";
 import { getAIProvider } from "./providers/ai";
 import type { AIProvider } from "./providers/ai";
+import { reviewQuestionGrounding } from "./question-grounding-review";
 
 const LEVELS: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 const ANSWER_KEYS: AnswerOption["key"][] = ["A", "B", "C", "D"];
@@ -480,26 +481,30 @@ export async function generateLiveQuestionFamily(input: {
   if (provider.info.provider === "learnbuddy-demo") {
     throw new Error("Question generator is not configured: LEARNBUDDY_AI_PROVIDER is required for live questions.");
   }
-  if (input.transcriptOnly && !isConfiguredMiniMaxM3(provider)) {
-    throw new Error("Transcript-only live questions require the configured MiniMax M3 provider.");
+  if (!isConfiguredMiniMaxM3(provider)) {
+    throw new Error("Live questions require the configured MiniMax M3 provider.");
   }
 
   // Ein zweiter Versuch, falls die KI eine schon gestellte Frage wiederholt.
   const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
+  const deadlineAt = Date.now() + 50_000;
+  const reviewSources = [input.scriptContext, ...input.slide.lines, input.transcript, input.latestTranscript].filter(Boolean).join("\n");
   let variants: QuestionVariant[] = [];
   let validationError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     let result;
     try {
+      const remainingMs = Math.min(25_000, deadlineAt - Date.now() - 2_000);
+      if (remainingMs <= 0) throw new Error("Question generator request timed out.");
       result = await provider.complete({
         system: liveQuestionSystemPrompt(input.contextSource, input.transcriptOnly),
         user: attempt === 0
           ? liveQuestionUserPrompt(input)
-          : `${liveQuestionUserPrompt(input)}\nOUTPUT VALIDATION RETRY: Die vorige Ausgabe war ungültig (${validationError instanceof Error ? validationError.message : "invalid output"}). Liefere exakt vier verschiedene Stufen und je vier verschiedene Antworttexte; nichts abschneiden und keine Felder ergänzen.`,
+          : `${liveQuestionUserPrompt(input)}\nOUTPUT VALIDATION RETRY: Die vorige Ausgabe war ungültig (${validationError instanceof Error ? validationError.message : "invalid output"}). Behebe den genannten fachlichen oder strukturellen Fehler. Liefere exakt vier verschiedene Stufen und je vier verschiedene Antworttexte; nichts abschneiden und keine Felder ergänzen.`,
         maxOutputTokens: 2600,
         temperature: attempt === 0 ? 0.3 : 0.6,
         responseFormat: "json_object",
-        timeoutMs: 25_000
+        timeoutMs: remainingMs
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -512,6 +517,7 @@ export async function generateLiveQuestionFamily(input: {
       if (variants.some((variant) => existing.has(questionFingerprint(variant.text)))) {
         throw new Error("Question generator returned a duplicate of an existing question.");
       }
+      await reviewQuestionGrounding(provider, variants, reviewSources, deadlineAt);
       break;
     } catch (error) {
       validationError = error;
@@ -740,12 +746,13 @@ export async function generateStudentExamDraft(input: {
   const prompt = studentExamDraftUserPrompt({
     ...input
   });
+  const deadlineAt = input.deadlineAt ?? Date.now() + 50_000;
+  const reviewSources = [input.scriptContext, ...input.slide.lines, input.transcriptContext,
+    ...input.lecture.slides.flatMap((slide) => liveQuestionSlideContext(input.lecture, slide.id)?.lines ?? [])].filter(Boolean).join("\n");
   let lastValidationError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     let result;
-    const remainingMs = input.deadlineAt === undefined
-      ? 25_000
-      : Math.min(25_000, input.deadlineAt - Date.now() - 2_000);
+    const remainingMs = Math.min(25_000, deadlineAt - Date.now() - 2_000);
     if (remainingMs <= 0) throw new Error("Student exam draft generation timed out.");
     try {
       result = await provider.complete({
@@ -769,6 +776,7 @@ export async function generateStudentExamDraft(input: {
         sourceQuestionId: input.sourceQuestionId
       });
       if (!draft.supported) return { ...draft, provider: provider.info.provider, model: provider.info.model };
+      await reviewQuestionGrounding(provider, draft.variants, reviewSources, deadlineAt);
       return {
         ...draft,
         provider: provider.info.provider,

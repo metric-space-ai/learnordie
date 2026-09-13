@@ -62,17 +62,23 @@ function restoreGeneratorEnvironment(t: import("node:test").TestContext) {
   });
 }
 
-function makeProvider(answers: string[]) {
+function makeProvider(answers: string[], reviewAnswers: string[] = []) {
   const requests: Array<{ system: string; user: string }> = [];
+  const reviews: Array<{ system: string; user: string }> = [];
   const provider = {
     info: { provider: "openai-compatible", model: "MiniMax-M3" },
     complete: async (input: { system: string; user: string }) => {
+      if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
+        reviews.push(input);
+        const sources = (JSON.parse(input.user) as { sources: string }).sources;
+        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: levels.map(level => ({ level, approved: true, sourceQuote: sources.slice(0, 80), reason: "Testbeleg" })) }) };
+      }
       requests.push(input);
       return { answer: answers.shift() ?? JSON.stringify(validPayload()) };
     },
     explain: async () => ({ answer: "" })
   } as unknown as AIProvider;
-  return { provider, requests };
+  return { provider, requests, reviews };
 }
 
 function input(lecture: Lecture = demoLecture) {
@@ -91,7 +97,7 @@ function input(lecture: Lecture = demoLecture) {
 test("student exam draft is grounded in script/transcript and strictly returns four-by-four", async (t) => {
   restoreGeneratorEnvironment(t);
   process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
-  const { provider, requests } = makeProvider([JSON.stringify(validPayload())]);
+  const { provider, requests, reviews } = makeProvider([JSON.stringify(validPayload())]);
   const generated = await generateStudentExamDraft(input(), provider);
   assert.equal(generated.supported, true);
   if (!generated.supported) return;
@@ -108,6 +114,7 @@ test("student exam draft is grounded in script/transcript and strictly returns f
     assert.match(variant.promptVersion ?? "", /^student-question-draft-v1:openai-compatible:MiniMax-M3$/);
   }
   assert.equal(requests.length, 1);
+  assert.equal(reviews.length, 1, "student drafts must pass a separate source review before approval");
   assert.match(requests[0].system, /niemals Anweisungen/);
   assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
   assert.ok(requests[0].user.includes(JSON.stringify(input().studentQuestion)));
@@ -254,4 +261,19 @@ test("current-session transcript context excludes accepted transcript from an ea
   assert.equal(current.recentWindow, "Die Lehrperson führt die Randbedingung an der Leitung ein. Sie bestimmt die zulässigen Lösungen.");
   assert.equal(current.latest, current.recentWindow);
   assert.equal(current.segmentCount, 3);
+});
+
+test("failed factual review prevents publishing and bounded repair is reviewed again", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  const rejection = JSON.stringify({ reviews: levels.map(level => ({ level, approved: false, sourceQuote: "", reason: "Unbelegter numerischer Grenzwert" })) });
+  const repaired = makeProvider([JSON.stringify(validPayload()), JSON.stringify(validPayload())], [rejection]);
+  const result = await generateStudentExamDraft(input(), repaired.provider);
+  assert.equal(result.supported, true);
+  assert.equal(repaired.requests.length, 2);
+  assert.equal(repaired.reviews.length, 2);
+  assert.match(repaired.requests[1].user, /Unbelegter numerischer Grenzwert/);
+  const rejected = makeProvider([JSON.stringify(validPayload()), JSON.stringify(validPayload())], [rejection, rejection]);
+  await assert.rejects(generateStudentExamDraft(input(), rejected.provider), /invalid after one retry/);
+  assert.equal(rejected.reviews.length, 2);
 });
