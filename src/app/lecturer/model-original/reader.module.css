@@ -3,10 +3,14 @@
   margin: 0 auto;
   padding: 28px 24px 88px;
   color: var(--ink);
-  font: 17px/1.75 system-ui, sans-serif;
+  font: 17px/1.75 var(--app-font), system-ui, sans-serif;
   overflow-wrap: anywhere;
 }
-.reader nav { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 36px; font-size: 13px; }
+.reader nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; margin-bottom: 36px; font-size: 13px; }
+/* The reader owns its in-flow toggle. A floating global button must not cover
+   table-of-contents links or formulas, especially in a narrow viewport. */
+:global(body):has(.reader) > :global(.app-theme-control) { display: none; }
+.reader nav :global(.app-theme-toggle) { position: static; flex-shrink: 0; }
 .reader a { text-decoration: underline; text-underline-offset: .2em; }
 .reader :is(h1, h2, h3, h4) { line-height: 1.3; scroll-margin-top: 24px; }
 .reader h1 { font-size: clamp(24px, 4vw, 34px); }

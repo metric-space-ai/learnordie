@@ -427,6 +427,9 @@ test("original reader renders the complete handout with native formulas, tables 
   await testInfo.attach("original-handout-formulas", { body: await page.screenshot(), contentType: "image/png" });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  const themeToggle = page.getByRole("button", { name: "Dunkles Design", exact: true });
+  await expect(themeToggle).toHaveCount(1);
+  await expect(themeToggle).toHaveCSS("position", "static");
   await testInfo.attach("original-handout-mobile", { body: await page.screenshot(), contentType: "image/png" });
   clean();
 });

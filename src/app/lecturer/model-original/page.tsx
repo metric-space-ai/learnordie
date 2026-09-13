@@ -7,6 +7,7 @@ import rehypeKatex from "rehype-katex";
 import { getLecturerSession } from "@/server/auth";
 import { originalModelCompanion, originalModelSlides, originalModelSourcesHtml } from "@/lib/model-original-source";
 import { originalModelText } from "@/lib/model-original-template";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import styles from "./reader.module.css";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function ModelOriginalReaderPage() {
       <a href="/lecturer">← Zum Studio</a>
       <a href="/api/lectures/model-demo/source" download>Markdown-Original herunterladen</a>
       <a href="#handout">Zum Begleitskript</a>
+      <ThemeToggle />
     </nav>
     <h1>Originalnotizen und Vorlesungsunterlage</h1>
     <p className={styles.intro}>Der vollständige Originalvortrag mit acht Folien und Begleitskript. Eigene Folienbearbeitungen verändern diese Quelle nicht.</p>
