@@ -177,6 +177,13 @@
 }
 
 .learn-shell .slide-engine-stage .slide-lecture-link { max-width: calc(100% - 76px); }
+/* Reserve a narrow annotation margin; spots must not cover text or an embed. */
+.learn-shell .slide-engine-stage:has(> .learn-question-spots) > :is(.native-canvas, .native-canvas-mobile) {
+  width: calc(100% - 56px);
+  max-width: calc(100% - 56px);
+  margin-right: 56px;
+  justify-self: start;
+}
 .learn-shell.slide-screen .learn-question-spots {
   position: absolute; inset: 0; z-index: 20;
   display: block; width: auto; height: auto; max-height: none; max-width: none;

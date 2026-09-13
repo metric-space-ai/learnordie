@@ -53,13 +53,13 @@ type ChatStreamEvent =
   | { type: "error"; error: string };
 
 const hotspotOrigins = [
-  { x: "44%", y: "47%" },
-  { x: "83%", y: "52%" },
-  { x: "24%", y: "62%" },
-  { x: "52%", y: "66%" },
-  { x: "75%", y: "39%" },
-  { x: "34%", y: "78%" },
-  { x: "92%", y: "69%" }
+  { x: "calc(100% - 28px)", y: "22%" },
+  { x: "calc(100% - 28px)", y: "31%" },
+  { x: "calc(100% - 28px)", y: "40%" },
+  { x: "calc(100% - 28px)", y: "49%" },
+  { x: "calc(100% - 28px)", y: "58%" },
+  { x: "calc(100% - 28px)", y: "67%" },
+  { x: "calc(100% - 28px)", y: "76%" }
 ];
 
 function formatChatBudget(remaining: number, limit: number) {
