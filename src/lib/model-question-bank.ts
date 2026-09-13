@@ -28,7 +28,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
     objective: "Den Modellbegriff als Erweiterung verstehen; Entstehung und Verwendung unterscheiden.",
     variants: {
       "4.0": {
-        text: "Wie beschreibt die Vorlesung den Wandel des Modellbegriffs?",
+        text: "Wie verändert sich der Modellbegriff, wenn zu Abbildern und Gleichungen gelernte Modelle hinzukommen?",
         choices: [
           "Neue Bedeutungen ergänzen die bisherigen Modellformen.",
           "Gelernte Modelle lösen mathematische Modellformen ab.",
@@ -38,7 +38,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
         explanation: "Der Begriff wird erweitert. Abbilder und Gleichungen bleiben nutzbar, auch wenn gelernte Modelle hinzukommen."
       },
       "3.0": {
-        text: "Warum unterscheidet die Vorlesung zwischen „gelernt“ und „ausführbar“?",
+        text: "Warum sind „gelernt“ und „ausführbar“ unterschiedliche Eigenschaften eines Modells?",
         choices: [
           "Lernen betrifft die Entstehung, Ausführung die Verwendung.",
           "Lernen betrifft die Verwendung, Ausführung die Entstehung.",
@@ -58,7 +58,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
         explanation: "Das Programm verwendet eine vorgegebene Beziehung. Eine neue Eingabe wertet diese aus, statt Parameter zu lernen."
       },
       "1.0": {
-        text: "Ein Team nutzt ein Bauteilmodell, eine Bewegungsgleichung und ein LLM im selben Projekt. Welche Folgerung passt zum Begriffsgang?",
+        text: "Ein Team nutzt ein Bauteilmodell, eine Bewegungsgleichung und ein LLM im selben Projekt. Warum kann diese Kombination sinnvoll sein?",
         choices: [
           "Die Modelle können je nach Aufgabe verschiedene Rollen erfüllen.",
           "Das LLM macht die beiden älteren Modellformen fachlich überflüssig.",
@@ -75,7 +75,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
     objective: "Vereinfachungen danach beurteilen, welche Beziehungen für die jeweilige Aufgabe erhalten bleiben.",
     variants: {
       "4.0": {
-        text: "Was meint „Gedankenminiatur“ in der Vorlesung?",
+        text: "Was bedeutet es, ein Modell als „Gedankenminiatur“ zu verstehen?",
         choices: [
           "Einen vereinfachten gedanklichen Stellvertreter.",
           "Eine maßstabsgetreue Kopie sämtlicher Bauteile.",
@@ -236,14 +236,14 @@ const FAMILIES: readonly AuthoredFamily[] = [
         explanation: "Eine Zahl wirkt erst durch ihre technische Einbindung, etwa als Sollwinkel. Eine gelernte Funktion ist dafür keine Voraussetzung."
       },
       "2.0": {
-        text: "In der laufenden Stellwinkel-Demo gilt y = 60° · x. Welcher Sollwinkel wird bei x = 0,5 ausgegeben?",
+        text: "Eine Motorsteuerung berechnet den Sollwinkel mit y = 60° · x. Welcher Winkel ergibt sich bei x = 0,5?",
         choices: [
           "Ein Sollwinkel von 30°.",
           "Ein Sollwinkel von 60°.",
           "Ein Sollwinkel von 0,5°.",
           "Ein Sollwinkel von 120°."
         ],
-        explanation: "60° · 0,5 ergibt 30°. Die Demo wertet eine festgelegte Funktion aus; sie lernt dabei keine Parameter."
+        explanation: "60° · 0,5 ergibt 30°. Die Steuerung wertet eine festgelegte Funktion aus; sie lernt dabei keine Parameter."
       },
       "1.0": {
         text: "Ein Modell liefert Winkel in Grad. Eine neue Motorsteuerung erwartet Radiant. Welche Anpassung macht die Ausgabe passend?",
@@ -263,7 +263,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
     objective: "Parameteranpassung von Auswertung unterscheiden und die Aussagekraft des Trainingsfehlers begrenzen.",
     variants: {
       "4.0": {
-        text: "Was verändert das Lernverfahren in der Polynom-Demo?",
+        text: "Das Modell ŷ = a₀ + a₁x + a₂x² wird bei festem Polynomgrad an Beispieldaten angepasst. Was verändert das Lernverfahren?",
         choices: [
           "Die drei Parameter des vorgegebenen Polynoms.",
           "Den Grad des Polynoms bei jedem Lernschritt.",
@@ -273,7 +273,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
         explanation: "Die Struktur a₀ + a₁x + a₂x² bleibt fest. Gelernt werden die drei Parameter a₀, a₁ und a₂."
       },
       "3.0": {
-        text: "Warum ist das Verschieben des Eingabereglers nach dem Training kein weiterer Lernschritt?",
+        text: "Ein trainiertes Modell berechnet eine Ausgabe für eine neue Eingabe; seine Parameter bleiben fest. Warum ist das kein weiterer Lernschritt?",
         choices: [
           "Die Funktion wird mit unveränderten Parametern ausgewertet.",
           "Die Funktion wählt dabei selbst einen neuen Polynomgrad.",
@@ -310,7 +310,7 @@ const FAMILIES: readonly AuthoredFamily[] = [
     objective: "Sprachliche Fortsetzung aus Kontext von Parametertraining und fachlichem Nachweis unterscheiden.",
     variants: {
       "4.0": {
-        text: "Was bestimmt das betrachtete LLM aus dem bisherigen sprachlichen Kontext?",
+        text: "Was berechnet ein autoregressives LLM bei der Textgenerierung aus dem bisherigen Kontext?",
         choices: [
           "Wahrscheinlichkeiten für mögliche nächste Tokens.",
           "Die fest gespeicherte Antwort auf denselben Wortlaut.",
@@ -429,10 +429,10 @@ export function createModelQuestionBank(slideIds: readonly string[]): QuestionVa
       }),
       explanation: question.explanation,
       learningObjective: family.objective,
-      promptVersion: "model-question-bank-reviewed-v1",
+      promptVersion: "model-question-bank-standalone-v2",
       sourceRef: `Neu verfasste Übungsfrage · Grundlage: Originalfolie ${familyIndex + 1} „${family.slide}“, Notizen und Begleitskript Kap. ${familyIndex + 1}`,
       reviewStatus: "reviewed",
-      reviewerComment: "Redaktionell auf Quellenbezug, Eindeutigkeit und Lesbarkeit geprüft; keine aus der Vorlage importierte Frage."
+      reviewerComment: "Alle 32 Varianten redaktionell auf fachliche Eindeutigkeit, kurze eigenständige Fragestellung und vollständige aufgabenspezifische Angaben geprüft; keine aus der Vorlage importierte Frage. Fachwissen aus der Vorlesung darf vorausgesetzt werden; Nachschlagen im Skript nicht. Keine unabhängige Dozentenfreigabe."
     };
   }));
 }

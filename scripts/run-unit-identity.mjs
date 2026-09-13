@@ -23,6 +23,8 @@ const child = spawn(
     "src/server/model-demo.test.ts",
     "src/lib/model-original-template.test.ts",
     "src/lib/model-question-bank.test.ts",
+    "tests/model-question-bank-standalone.test.ts",
+    "tests/modell-playback.test.ts",
     "src/server/route-params.test.ts",
     "src/server/student-claims.test.ts",
     "src/server/test-accounts.test.ts",

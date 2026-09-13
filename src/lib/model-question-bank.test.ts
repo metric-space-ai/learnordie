@@ -32,7 +32,7 @@ test("eight authored source slides each have one stable, complete four-level fam
     for (const question of family) {
       assert.equal(question.familySource, "prepared");
       assert.equal(question.reviewStatus, "reviewed");
-      assert.equal(question.promptVersion, "model-question-bank-reviewed-v1");
+      assert.equal(question.promptVersion, "model-question-bank-standalone-v2");
       assert.ok(question.sourceRef?.includes(`Originalfolie ${index + 1} „${nav}“`));
       assert.ok(question.sourceRef?.includes(`Begleitskript Kap. ${index + 1}`));
       assert.match(question.sourceRef ?? "", /Neu verfasste Übungsfrage/);

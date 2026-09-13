@@ -19,6 +19,7 @@ import {
 } from "../scenes/modell-state";
 import type { ModellSceneKey, ModellSceneState } from "../scenes/modell-types";
 import { modellTheme } from "../scenes/modell-theme";
+import { modellIsPlaying, toggleModellPlaying } from "../scenes/modell-playback";
 import { scene3dSceneKey } from "../scenes/scene-ids";
 import type { Scene3DBlock } from "./types";
 
@@ -130,7 +131,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           if (now - lastFrame < 31) return;
           let dt = lastFrame ? Math.min((now - lastFrame) / 1000, 0.065) : 0.033;
           lastFrame = now;
-          if (!state.playing) dt = 0;
+          if (!modellIsPlaying(sceneKey, state)) dt = 0;
           state.sceneTime += dt;
           if (sceneKey === "learning") trainModellStep(state, dt);
           if (sceneKey === "language" && !state.tokenAdded && state.playing) {
@@ -208,15 +209,15 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
         {mode === "live" ? (
           <div className="lb-scene3d-tools" onPointerUp={releasePointerFocus}>
             <button
-              aria-label={state.playing ? "Animation pausieren" : "Animation fortsetzen"}
-              aria-pressed={!state.playing}
+              aria-label={modellIsPlaying(sceneKey, state) ? "Animation pausieren" : "Animation fortsetzen"}
+              aria-pressed={!modellIsPlaying(sceneKey, state)}
               className="lb-scene3d-tool"
               type="button"
               onClick={() => update((next) => {
-                next.playing = !next.playing;
+                toggleModellPlaying(sceneKey, next);
               })}
             >
-              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={state.playing ? "M8 5v14M16 5v14" : "m7 4 13 8-13 8Z"} /></svg>
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={modellIsPlaying(sceneKey, state) ? "M8 5v14M16 5v14" : "m7 4 13 8-13 8Z"} /></svg>
             </button>
             <button
               aria-label="3D-Blick zurücksetzen"
@@ -332,14 +333,13 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
           />
           <div className="lb-scene3d-row">
             <button
-              aria-label={state.executing ? "Ausführung anhalten" : "Ausführung starten"}
-              aria-pressed={state.executing}
+              aria-label={modellIsPlaying(sceneKey, state) ? "Ausführung anhalten" : "Ausführung starten"}
+              aria-pressed={modellIsPlaying(sceneKey, state)}
               className="lb-scene3d-button"
               data-primary="true"
               type="button"
               onClick={() => update((next) => {
-                next.executing = !next.executing;
-                if (next.executing) next.outputAngle = next.inputX * 60;
+                toggleModellPlaying(sceneKey, next);
               })}
             >
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2v10M6 5a9 9 0 1 0 12 0" /></svg>
@@ -354,21 +354,15 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
           <div className="lb-scene3d-accessible-description" aria-label="Diagrammlegende">Punkte: Beispieldaten. Kurve: Modell. Markierter Punkt: Auswertung.</div>
           <div className="lb-scene3d-row">
             <button
-              aria-label={state.trainingRunning ? "Lernen anhalten" : state.steps ? "Weiterlernen" : "Lernen starten"}
+              aria-label={modellIsPlaying(sceneKey, state) ? "Lernen anhalten" : state.steps ? "Weiterlernen" : "Lernen starten"}
               className="lb-scene3d-button"
               data-primary="true"
               type="button"
               onClick={() => update((next) => {
-                if (next.trainingRunning) {
-                  next.trainingRunning = false;
-                } else {
-                  if (next.steps >= next.trainingLimit) next.trainingLimit += 400;
-                  next.trainingRunning = true;
-                  next.playing = true;
-                }
+                toggleModellPlaying(sceneKey, next);
               })}
             >
-              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d={state.trainingRunning ? "M8 5v14M16 5v14" : "m7 4 13 8-13 8Z"} /></svg>
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d={modellIsPlaying(sceneKey, state) ? "M8 5v14M16 5v14" : "m7 4 13 8-13 8Z"} /></svg>
             </button>
             <button aria-label="Lernen zurücksetzen" className="lb-scene3d-button" type="button" onClick={() => update(resetModellLearning)}>
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6" /></svg>
