@@ -3479,6 +3479,7 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
   await expect(page.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
   await command({ action: "close" });
   await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
+  await page.getByRole("button", { name: "Pseudonym", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Pseudonym sichern" })).toBeVisible();
   await page.getByLabel("Eigenes Pseudonym", { exact: true }).fill("E2E Lager");
   await page.getByRole("button", { name: "Sichern" }).click();

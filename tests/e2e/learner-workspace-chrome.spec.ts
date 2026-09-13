@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { demoLecture } from "../../src/lib/demo-data";
 
-const LEARN_TOKEN = "tm-kombiniert-demo";
+// e2e-server seeds this lecture; the optional mechanics fixture is not installed.
+const LEARN_TOKEN = demoLecture.publicToken;
 const LEARN_URL = `/learn/${LEARN_TOKEN}`;
 const LIVE_URL = `/l/${LEARN_TOKEN}`;
 

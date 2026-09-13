@@ -118,7 +118,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.getByRole("button", { name: "Weiterlernen", exact: true }).click();
     await openStudentMenu(page);
     await page.getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
-    await expect(page.locator(".learn-more")).not.toHaveAttribute("open", "");
+    await expect(page.locator(".learn-more")).toHaveAttribute("open", "");
     await expect(page.locator(".question-drawer")).toHaveCount(0);
     await expect(page.locator(".leader-row.self strong")).toHaveText(String(question!.points));
     const anonymousKey = (await page.context().cookies()).find((cookie) => cookie.name === "lb_student_key")?.value;
@@ -137,6 +137,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(page.getByRole("button", { name: "Dunkles Design", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await openStudentMenu(page);
     await expect(page.getByRole("button", { name: "Dunkles Design", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Dunkles Design", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
