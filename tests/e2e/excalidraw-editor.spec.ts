@@ -150,6 +150,17 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   const clean = diagnostics(page);
   const lecture = await createLecture(page, "Text");
   const editor = await nativeEditor(page);
+  // The native mobile toolbar is inset beside our insert actions. A 100%
+  // width here used to add that inset again and clip the right-hand tools.
+  for (const width of [320, 686, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const toolbar = page.locator(".native-canvas-edit .FixedSideContainer_side_top");
+    await expect(toolbar).toBeVisible();
+    await expect.poll(() => toolbar.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.left >= 0 && bounds.right <= innerWidth + 1;
+    }), { message: `Native tools stay inside the ${width}px workspace` }).toBe(true);
+  }
   await page.getByLabel("Element einfügen", { exact: true }).click();
   await page.getByRole("button", { name: "Text hinzufügen", exact: true }).click();
   await expect(page.locator(".studio-save-status")).toHaveText("Ungespeichert");
@@ -468,6 +479,8 @@ test("HTML/CSS embeds persist but scripts, parent DOM access, forms and external
   await page.getByLabel("Element einfügen", { exact: true }).click();
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "HTML", exact: true }).click();
   await page.getByRole("textbox", { name: "HTML und CSS", exact: true }).fill(html);
+  await expect(page.getByRole("textbox", { name: "HTML und CSS", exact: true })).toHaveCSS("border-radius", "8px");
+  await expect(page.getByRole("button", { name: "HTML einfügen", exact: true })).toHaveCSS("background-color", "rgb(105, 101, 219)");
   await page.getByRole("button", { name: "HTML einfügen", exact: true }).click();
   // The element must render in the editor immediately, not only after a
   // preview remount repairs missing native defaults.
@@ -531,6 +544,12 @@ test("three.js embeds are real WebGL, independently interactive and survive save
     return Boolean(context && !context.isContextLost() && context.drawingBufferWidth > 0 && context.drawingBufferHeight > 0);
   })).toBe(true);
   const slider = scene.getByRole("slider", { name: "Begriff", exact: true });
+  for (const dark of [false, true, false]) {
+    const toggle = page.getByRole("button", { name: "Dunkles Design", exact: true });
+    if ((await toggle.getAttribute("aria-pressed")) !== String(dark)) await toggle.click();
+    await expect(slider).toHaveCSS("accent-color", dark ? "rgb(168, 165, 255)" : "rgb(105, 101, 219)");
+    await expect(scene.locator(".lb-scene3d-controls")).toHaveCSS("background-color", dark ? "rgb(35, 35, 41)" : "rgb(255, 255, 255)");
+  }
   await slider.focus();
   await slider.press("Home");
   await expect(slider).toHaveValue("0");
