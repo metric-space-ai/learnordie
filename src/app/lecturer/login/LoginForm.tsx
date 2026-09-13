@@ -80,20 +80,25 @@ export function LoginForm({
           <span>Code</span>
           <input
             name="code"
+            className="login-code-input"
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
             inputMode="numeric"
             autoComplete="one-time-code"
             pattern="\d{6}"
+            maxLength={6}
+            aria-describedby="login-code-hint"
+            aria-invalid={Boolean(error)}
             autoFocus
             required
           />
         </label>
+        <p id="login-code-hint" className="join-hint">Den sechsstelligen Code aus deiner E-Mail eingeben.</p>
         <button className="primary-button" type="submit" disabled={pending || code.length !== 6}>
           {pending ? "Prüft …" : "Anmelden"}
         </button>
         {error && <p className="form-error" role="alert">{error}</p>}
-        {notice && <p className="form-success">{notice}</p>}
+        {notice && <p className="form-success" role="status">{notice}</p>}
         <p className="login-support">
           <button className="plain-button" type="button" disabled={pending} onClick={() => requestCode()}>Neuen Code senden</button>
           <button className="plain-button" type="button" onClick={() => { setStep("email"); setError(""); setNotice(""); }}>Andere E-Mail</button>

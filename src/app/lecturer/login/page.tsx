@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LoginForm } from "./LoginForm";
 import { TestAccountForm } from "./TestAccountForm";
 import { configuredTestAccounts } from "@/server/test-accounts";
@@ -28,6 +29,7 @@ export default async function LecturerLoginPage({
         <h1>Anmelden</h1>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
         {configuredTestAccounts().length > 0 && <TestAccountForm />}
+        <Link className="join-back" href="/">Zur Startseite</Link>
       </section>
     </main>
   );
