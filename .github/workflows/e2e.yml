@@ -15,7 +15,7 @@ jobs:
   production-smoke:
     name: Production smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -95,10 +95,9 @@ jobs:
         env:
           LEARNBUDDY_AI_PROVIDER: learnordie-responses
 
-      - name: Production smoke
-        # Leave time for failure evidence to upload before the job deadline.
-        timeout-minutes: 16
-        run: npm run test:e2e
+      - name: Build E2E app
+        timeout-minutes: 8
+        run: npm run build
 
       - name: Student draft race acceptance
         timeout-minutes: 8
@@ -108,6 +107,11 @@ jobs:
           E2E_STUDENT_DRAFT_DELAY_MS: "18000"
           E2E_STUDENT_DRAFT_DELAY_MARKER: E2E_SLOW_STUDENT_DRAFT
           LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW: "3"
+
+      - name: Production smoke
+        # Leave time for failure evidence to upload before the job deadline.
+        timeout-minutes: 16
+        run: npx playwright test --config=playwright.config.ts
 
       - name: Retain browser evidence
         if: always()
