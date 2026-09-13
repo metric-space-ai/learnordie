@@ -415,7 +415,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       abort.abort();
       queue.length = 0;
       void capture?.stop(false);
-      stream.getTracks().forEach(track => track.stop());
+      stream?.getTracks().forEach(track => track.stop());
       if (disposedRef.current) return;
       setTranscriptPending(0);
       if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
