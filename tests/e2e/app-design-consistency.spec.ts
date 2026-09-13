@@ -41,11 +41,11 @@ async function fitsViewport(page: Page, locator: Locator) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 }
 
-async function panelContract(page: Page, panel: Locator) {
+async function panelContract(page: Page, panel: Locator, sketch = false, radius = "12px") {
   await expect(page.locator("body")).toHaveAttribute("data-ui-design", "excalidraw");
   await fitsViewport(page, panel);
-  await expect(panel).toHaveCSS("border-radius", "12px");
-  await expect(panel).toHaveCSS("font-family", /Learnordie Assistant/);
+  await expect(panel).toHaveCSS("border-radius", radius);
+  await expect(panel).toHaveCSS("font-family", sketch ? /Learnordie Sketch/ : /Learnordie Assistant/);
   await expect(panel).toHaveCSS("background-image", "none");
   const dark = await page.evaluate(() => document.documentElement.dataset.theme === "dark" ||
     (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches));
@@ -53,12 +53,12 @@ async function panelContract(page: Page, panel: Locator) {
   await expect(panel).toHaveCSS("color", dark ? "rgb(241, 240, 245)" : "rgb(27, 27, 31)");
 }
 
-async function controlContract(page: Page, control: Locator) {
+async function controlContract(page: Page, control: Locator, sketch = false) {
   await fitsViewport(page, control);
   await expect(control).toHaveCSS("border-radius", "8px");
-  await expect(control).toHaveCSS("font-family", /Learnordie Assistant/);
+  await expect(control).toHaveCSS("font-family", sketch ? /Learnordie Sketch/ : /Learnordie Assistant/);
   const box = await control.boundingBox();
-  expect(box!.height).toBeGreaterThanOrEqual(44);
+  expect(box!.height).toBeGreaterThanOrEqual(sketch ? 40 : 44);
 }
 
 async function keyboardFocus(control: Locator) {
@@ -245,41 +245,38 @@ for (const variant of variants) {
       await expect(page.locator("main.learn-shell")).toBeVisible();
       const menu = page.locator(".learn-more");
       const summary = menu.locator("summary");
-      // Desktop exposes these controls directly; only narrow layouts use Mehr.
-      const compact = variant.viewport.width <= 900;
-      if (compact) {
-        await keyboardFocus(summary);
-        await page.keyboard.press("Enter");
-        await expect(menu).toHaveAttribute("open", "");
-        await panelContract(page, page.locator(".learn-more-panel"));
-      } else {
-        await expect(menu).toBeHidden();
-      }
-      const download = compact ? menu.getByRole("link", { name: "Lern-HTML herunterladen" }) : page.getByRole("link", { name: "Herunterladen", exact: true });
-      await controlContract(page, download);
+      // The same compact disclosure replaces the old separate desktop footer.
+      await expect(page.locator(".learn-bar, .action-stack, .slide-nav")).toHaveCount(0);
+      await keyboardFocus(summary);
+      await page.keyboard.press("Enter");
+      await expect(menu).toHaveAttribute("open", "");
+      await panelContract(page, page.locator(".learn-more-panel"), true, "10px 12px 9px 11px");
+      const download = menu.getByRole("link", { name: "Lern-HTML herunterladen" });
+      await download.scrollIntoViewIfNeeded();
+      await controlContract(page, download, true);
       await keyboardFocus(download);
       await expect(download).toHaveAttribute("href", `/api/lecture/${token}/export`);
-      const densityRoot = compact ? menu.locator(".learn-more-density") : page.locator(".learn-bar");
+      const densityRoot = menu.locator(".learner-density-control");
       const density = densityRoot.getByRole("slider");
       await density.focus();
       await density.press("Home");
       await density.press("ArrowRight");
-      await expect(densityRoot.locator("strong")).toHaveText(await density.inputValue());
+      await expect(densityRoot.locator("output")).toHaveText(await density.inputValue());
       await fitsViewport(page, density);
-      await (compact ? menu : page.locator(".action-stack")).getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
+      await menu.getByRole("button", { name: "Rangliste", exact: true }).click();
       const leaderboard = page.getByRole("complementary", { name: "Rangliste", exact: true });
-      await panelContract(page, leaderboard);
-      await expect(menu).not.toHaveAttribute("open", "");
+      await panelContract(page, leaderboard, true);
+      await expect(menu).toHaveAttribute("open", "");
       const closeLeaderboard = leaderboard.getByRole("button", { name: "Rangliste schließen" });
       await controlContract(page, closeLeaderboard);
       await closeLeaderboard.click();
       await expect(leaderboard).toHaveCount(0);
-      // Opening an overlay may close the disclosure; normalize using its state.
-      if (compact && !(await menu.evaluate((element) => (element as HTMLDetailsElement).open))) await summary.click();
-      await (compact ? menu.getByRole("button", { name: "Evaluation", exact: true }) : page.getByRole("button", { name: "Feedback", exact: true })).click();
+      // Keep the initiating control available for toggling the panel closed.
+      if (!(await menu.evaluate((element) => (element as HTMLDetailsElement).open))) await summary.click();
+      await menu.getByRole("button", { name: "Evaluation", exact: true }).click();
       const evaluation = page.getByRole("complementary", { name: "Evaluation", exact: true });
-      await panelContract(page, evaluation);
-      await expect(menu).not.toHaveAttribute("open", "");
+      await panelContract(page, evaluation, true);
+      await expect(menu).toHaveAttribute("open", "");
       const comment = evaluation.getByLabel("Evaluationskommentar");
       await comment.fill("Lesbare Bedienelemente auf kleinem Bildschirm.");
       await controlContract(page, comment);
@@ -292,12 +289,12 @@ for (const variant of variants) {
       await testInfo.attach("learn-evaluation", { body: await page.screenshot(), contentType: "image/png" });
       await close.click();
       await expect(evaluation).toHaveCount(0);
-      if (compact && await menu.evaluate((element) => (element as HTMLDetailsElement).open)) await summary.click();
+      if (await menu.evaluate((element) => (element as HTMLDetailsElement).open)) await summary.click();
       await page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
       await expect(page.locator(".question-drawer")).toBeVisible();
       await page.locator(".question-ai-link").click();
       const chat = page.getByRole("complementary", { name: "KI Chat", exact: true });
-      await panelContract(page, chat);
+      await panelContract(page, chat, true);
       const chatInput = chat.getByLabel("Eigene Frage", { exact: true });
       await controlContract(page, chatInput);
       await expect(chat.getByRole("button", { name: "Fragen", exact: true })).toBeDisabled();

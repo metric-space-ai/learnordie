@@ -15,6 +15,7 @@ import { Presence } from "./Presence";
 import { QuizDrawer } from "./QuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
 import { ThemeToggle } from "./theme/ThemeToggle";
+import "./learner-workspace.css";
 
 const hotspotLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0", "3.0", "2.0", "1.0"];
 const hotspotClasses = ["one", "two", "three", "four", "five", "six", "seven"];
@@ -127,8 +128,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     if (moreRef.current) moreRef.current.open = false;
   }
 
-  function openLeaderboard() {
-    closeMore();
+  function toggleLeaderboard() {
+    if (leaderboardOpen) {
+      setLeaderboardOpen(false);
+      return;
+    }
     setQuestionOpen(false);
     setPeekingSlide(false);
     setChatOpen(false);
@@ -137,8 +141,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     void loadLeaderboard();
   }
 
-  function openEvaluation() {
-    closeMore();
+  function toggleEvaluation() {
+    if (evaluationOpen) {
+      setEvaluationOpen(false);
+      return;
+    }
     setQuestionOpen(false);
     setPeekingSlide(false);
     setChatOpen(false);
@@ -158,6 +165,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         (event.target instanceof Element && Boolean(event.target.closest("button, a, summary, [contenteditable=true]")));
       if (event.code === "Space" && !isTyping) {
         event.preventDefault();
+        if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+        setChatOpen(false);
+        setLeaderboardOpen(false);
+        setEvaluationOpen(false);
         setQuestionOrigin("space");
         setActiveHotspotIndex(null);
         setQuestionOpen((current) => !current);
@@ -167,6 +178,19 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         if (peekingSlide) {
           event.preventDefault();
           setPeekingSlide(false);
+          return;
+        }
+        if (chatOpen || evaluationOpen || leaderboardOpen) {
+          event.preventDefault();
+          setChatOpen(false);
+          setEvaluationOpen(false);
+          setLeaderboardOpen(false);
+          closeMore();
+          return;
+        }
+        if (moreRef.current?.open) {
+          event.preventDefault();
+          closeMore();
           return;
         }
         if (questionOpen) {
@@ -180,11 +204,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [peekingSlide, questionOpen]);
+  }, [chatOpen, evaluationOpen, leaderboardOpen, peekingSlide, questionOpen]);
 
   useEffect(() => {
-    if (questionOpen || peekingSlide) closeMore();
-  }, [questionOpen, peekingSlide]);
+    if (peekingSlide) closeMore();
+  }, [peekingSlide]);
 
   useEffect(() => {
     if (!questionOpen || questionOrigin !== "hotspot" || activeHotspotIndex === null) return;
@@ -297,7 +321,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     if (eventType === "answer_selected" && !response?.ok) throw new Error("Antwort konnte nicht gespeichert werden.");
   }
 
-  function openChat() {
+  function toggleChat() {
+    if (chatOpen) {
+      setChatOpen(false);
+      return;
+    }
     const question = activeQuestion;
     setChatAnswer("");
     setChatSources([]);
@@ -311,6 +339,9 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       model: "",
       streamSource: ""
     });
+    setPeekingSlide(false);
+    setLeaderboardOpen(false);
+    setEvaluationOpen(false);
     setChatOpen(true);
     void recordLearnEvent("ai_chat_opened", {
       mode: "learn",
@@ -470,13 +501,46 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       {learningSaveMessage && <p className="learn-save-status" role="status" data-state={learningSaveState}>{learningSaveMessage}</p>}
       <SlideEngineCanvas
         lectureToken={lecture.publicToken}
+        participationPath={lecture.participationPath}
+        lectureTitle={lecture.title}
         current={slide}
         onNext={next}
         onPrevious={previous}
+        showNavigation={false}
         slideDocument={lecture.slideDocument}
         slides={lecture.slides}
       />
       {questionOpen && questionOrigin === "hotspot" && <span className="question-origin-trace" aria-hidden="true" />}
+      <div className="learner-workspace-toolbar lb-enter-control" role="group" aria-label="Lernsteuerung">
+        <nav className="learner-slide-navigation" aria-label="Foliennavigation">
+          <button type="button" onClick={previous} aria-label="Vorherige Folie" title="Vorherige Folie">‹</button>
+          <span className="learner-slide-count slide-count" aria-live="polite" aria-atomic="true">{slide + 1} / {lecture.slides.length}</span>
+          <button type="button" onClick={next} aria-label="Nächste Folie" title="Nächste Folie">›</button>
+        </nav>
+        <button
+          className="learner-question-toggle"
+          type="button"
+          title="Quiz (Leertaste)"
+          aria-label="Quiz (Leertaste)"
+          aria-pressed={questionOpen}
+          onClick={() => {
+            closeMore();
+            setChatOpen(false);
+            setLeaderboardOpen(false);
+            setEvaluationOpen(false);
+            setQuestionOrigin("control");
+            setActiveHotspotIndex(null);
+            setQuestionOpen((current) => {
+              if (current) setPeekingSlide(false);
+              return !current;
+            });
+          }}
+        >
+          <span className="lb-icon lb-icon-question" aria-hidden="true" />
+        </button>
+        <details ref={moreRef} className="learn-more learner-control-menu">
+          <summary aria-label="Weitere Aktionen">Mehr</summary>
+          <div className="learn-more-panel learner-control-menu-panel" role="group" aria-label="Weitere Aktionen">
       <div className="hotspots" aria-label="Fragen-Hotspots">
         <span className="hotspot-row-label">Fragen</span>
         {hotspotLevels.slice(0, density).map((level, index) => (
@@ -495,7 +559,15 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             aria-pressed={questionOpen && activeHotspotIndex === index}
             aria-label={`Frage Niveau ${level} anzeigen`}
             onClick={() => {
+              if (questionOpen && activeHotspotIndex === index) {
+                setQuestionOpen(false);
+                setPeekingSlide(false);
+                return;
+              }
               pendingHotspotSharedRef.current = { index, level };
+              setChatOpen(false);
+              setLeaderboardOpen(false);
+              setEvaluationOpen(false);
               setForcedLevel(level);
               setQuestionOrigin("hotspot");
               setActiveHotspotIndex(index);
@@ -507,47 +579,30 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           </button>
         ))}
       </div>
-      <div className="learn-bar island-control lb-enter-control">
-        <label>
-          Fragedichte
-          <input
-            aria-label="Fragedichte"
-            type="range"
-            min={MIN_LEARN_QUESTION_DENSITY}
-            max={MAX_LEARN_QUESTION_DENSITY}
-            value={density}
-            onChange={(event) => updateDensity(event.currentTarget.value)}
-            onInput={(event) => updateDensity(event.currentTarget.value)}
-          />
-          <strong>{density}</strong>
-        </label>
-        <a
-          className="learn-export-link"
-          href={`/api/lecture/${lecture.publicToken}/export`}
-          download
-          onClick={() => void recordLearnEvent("standalone_export_downloaded", { mode: "learn" })}
-        >
-          Herunterladen
-        </a>
-      </div>
-      <div className="action-stack island-control lb-enter-control">
-        <button
-          className="icon-action"
-          type="button"
-          title="Quiz (Leertaste)"
-          aria-label="Quiz (Leertaste)"
-          aria-pressed={questionOpen}
-          onClick={() => {
-            setQuestionOrigin("control");
-            setActiveHotspotIndex(null);
-            setQuestionOpen((current) => !current);
-          }}
-        >
-          <span className="lb-icon lb-icon-question" aria-hidden="true" />
-        </button>
-        <details ref={moreRef} className="learn-more">
-          <summary aria-label="Weitere Aktionen">Mehr</summary>
-          <div className="learn-more-panel" role="group" aria-label="Weitere Aktionen">
+            <label className="learner-density-control">
+              <span>Fragedichte</span>
+              <input
+                aria-label="Fragedichte"
+                type="range"
+                min={MIN_LEARN_QUESTION_DENSITY}
+                max={MAX_LEARN_QUESTION_DENSITY}
+                value={density}
+                onChange={(event) => updateDensity(event.currentTarget.value)}
+                onInput={(event) => updateDensity(event.currentTarget.value)}
+              />
+              <output aria-live="polite">{density}</output>
+            </label>
+            {activeQuestion && (
+              <button
+                className="plain-button small"
+                type="button"
+                aria-controls="learner-chat-panel"
+                aria-pressed={chatOpen}
+                onClick={toggleChat}
+              >
+                KI fragen
+              </button>
+            )}
             <a
               className="plain-button small"
               href={`/api/lecture/${lecture.publicToken}/export`}
@@ -560,45 +615,27 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
               <button
                 className="plain-button small"
                 type="button"
-                onClick={openLeaderboard}
+                aria-controls="learner-leaderboard-panel"
+                aria-pressed={leaderboardOpen}
+                onClick={toggleLeaderboard}
               >
                 Rangliste
               </button>
             )}
             {evaluationConfig.enabled && (
-              <button className="plain-button small" type="button" onClick={openEvaluation}>
+              <button
+                className="plain-button small"
+                type="button"
+                aria-controls="learner-evaluation-panel"
+                aria-pressed={evaluationOpen}
+                onClick={toggleEvaluation}
+              >
                 {evaluationConfig.title}
               </button>
             )}
-            <label className="learn-more-density">
-              Fragedichte
-              <input
-                aria-label="Fragedichte"
-                type="range"
-                min={MIN_LEARN_QUESTION_DENSITY}
-                max={MAX_LEARN_QUESTION_DENSITY}
-                value={density}
-                onChange={(event) => updateDensity(event.currentTarget.value)}
-              />
-              <strong>{density}</strong>
-            </label>
+            <ThemeToggle className="learner-menu-theme" />
           </div>
         </details>
-        {lecture.leaderboardEnabled && (
-          <button
-            className="icon-action action-text desktop-only-action"
-            type="button"
-            onClick={openLeaderboard}
-          >
-            Rangliste
-          </button>
-        )}
-        {evaluationConfig.enabled && (
-          <button className="icon-action action-text desktop-only-action" type="button" onClick={openEvaluation}>
-            Feedback
-          </button>
-        )}
-        <ThemeToggle />
       </div>
       <Presence show={questionOpen}>
         {(motionState) => (
@@ -619,7 +656,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
               setPeekingSlide(false);
             }}
             headerAction={(
-              <button className="plain-button question-ai-link lb-enter-control" type="button" onClick={openChat}>
+              <button
+                className="plain-button question-ai-link lb-enter-control"
+                type="button"
+                aria-controls="learner-chat-panel"
+                aria-pressed={chatOpen}
+                onClick={toggleChat}
+              >
                 KI fragen
               </button>
             )}
@@ -675,6 +718,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         {(motionState) => (
         <aside
           className="overlay-panel tall lb-enter-overlay"
+          id="learner-chat-panel"
           data-panel-origin="chat"
           data-state={motionState}
           data-ai-answer-state={chatProviderMeta.answerState}
@@ -684,7 +728,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           aria-label="KI Chat"
         >
           <div className="overlay-head">
-            <h2>KI-Assistent</h2>
+            <h2 id="learner-chat-panel-title">KI-Assistent</h2>
             <button type="button" onClick={() => setChatOpen(false)} aria-label="Chat schließen" title="Schließen">×</button>
           </div>
           <div className="chat-body">
@@ -746,9 +790,9 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
       </Presence>
       <Presence show={evaluationOpen && evaluationConfig.enabled}>
         {(motionState) => (
-        <aside className="overlay-panel tall evaluation-panel lb-enter-overlay" data-panel-origin="evaluation" data-state={motionState} aria-label="Evaluation">
+        <aside className="overlay-panel tall evaluation-panel lb-enter-overlay" id="learner-evaluation-panel" data-panel-origin="evaluation" data-state={motionState} aria-label="Evaluation">
           <div className="overlay-head">
-            <h2>{evaluationConfig.title}</h2>
+            <h2 id="learner-evaluation-panel-title">{evaluationConfig.title}</h2>
             <button type="button" onClick={() => setEvaluationOpen(false)} aria-label="Evaluation schließen" title="Schließen">×</button>
           </div>
           <p className="form-note lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>{evaluationConfig.intro}</p>

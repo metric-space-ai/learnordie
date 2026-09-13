@@ -165,9 +165,11 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
 
     await teacher.getByRole("button", { name: "Frage schließen", exact: true }).click();
     for (const page of [first, second, third]) await expect(page.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
+    await first.getByRole("button", { name: "Pseudonym", exact: true }).click();
     await first.getByLabel("Eigenes Pseudonym", { exact: true }).fill(`Sync Alias ${Date.now()}`);
     await first.getByRole("button", { name: "Sichern", exact: true }).click();
     await expect(first.getByLabel("Pseudonym sichern", { exact: true })).toContainText("Pseudonym gesichert");
+    await first.getByRole("button", { name: "Pseudonym schließen", exact: true }).click();
     // Body-level utility controls must not intercept panel actions, including
     // when the slide surface establishes a separate stacking context.
     for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {

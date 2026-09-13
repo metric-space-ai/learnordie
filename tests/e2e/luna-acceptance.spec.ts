@@ -16,7 +16,6 @@ function captureDiagnostics(page: Page) {
 }
 
 async function openStudentMenu(page: Page) {
-  if (page.viewportSize()!.width > 900) return;
   const menu = page.locator(".learn-more");
   if (!await menu.evaluate((node) => (node as HTMLDetailsElement).open)) {
     await menu.locator("summary").click();
@@ -85,8 +84,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     expect(selectedHotspots).toBeGreaterThanOrEqual(minimumHotspots);
     expect(selectedHotspots).toBeLessThanOrEqual(maximumHotspots);
 
-    if (viewport.width <= 900) await page.locator(".learn-more summary").click();
-    const slideNav = page.locator(".slide-nav");
+    await page.locator(".learn-more summary").click();
+    const slideNav = page.getByRole("navigation", { name: "Foliennavigation" });
     const slideTotal = Number((await slideNav.innerText()).match(/\/\s*(\d+)/)?.[1]);
     expect(slideTotal).toBeGreaterThan(1);
     const visitedSlides = new Set<string>([(await page.locator("[data-slide-id]").first().getAttribute("data-slide-id"))!]);
@@ -100,7 +99,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await openStudentMenu(page);
     await expect(density).toHaveValue(selectedDensity);
     await expect(page.locator(".hotspots button")).toHaveCount(selectedHotspots);
-    if (viewport.width <= 900) await page.locator(".learn-more summary").click();
+    await page.locator(".learn-more summary").click();
 
     const questionResponse = await page.request.get(`/api/lecture/${token}/questions`);
     expect(questionResponse.ok()).toBe(true);
@@ -119,7 +118,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.getByRole("button", { name: "Weiterlernen", exact: true }).click();
     await openStudentMenu(page);
     await page.getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
-    await expect(page.locator(".learn-more")).not.toHaveAttribute("open", "");
+    await expect(page.locator(".learn-more")).toHaveAttribute("open", "");
     await expect(page.locator(".question-drawer")).toHaveCount(0);
     await expect(page.locator(".leader-row.self strong")).toHaveText(String(question!.points));
     const anonymousKey = (await page.context().cookies()).find((cookie) => cookie.name === "lb_student_key")?.value;
@@ -138,6 +137,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(page.getByRole("button", { name: "Dunkles Design", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await openStudentMenu(page);
     await expect(page.getByRole("button", { name: "Dunkles Design", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Dunkles Design", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
