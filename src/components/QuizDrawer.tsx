@@ -119,7 +119,7 @@ export function QuizDrawer({
   const selectedIsCorrect = Boolean(question.answers.find((answer) => answer.key === selected)?.correct);
   const timerCaption = revealed
     ? selectedIsCorrect
-      ? `+${question.points} Punkte`
+      ? mode === "learn" ? `${question.points} Punkte · bestes Ergebnis zählt` : `+${question.points} Punkte`
       : "0 Punkte"
     : timedOut
       ? mode === "learn"

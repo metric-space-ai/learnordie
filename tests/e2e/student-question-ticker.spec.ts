@@ -119,6 +119,32 @@ test("student question becomes a reviewed live round while presenter and three s
     await expect.poll(async () => (await state()).round).toBeNull();
     await students[0].getByRole("button", { name: "Rangliste", exact: true }).click();
     await expect(students[0].locator(".leader-row")).toHaveCount(3);
+    // Continue into independent study. Reopening after reload may be useful
+    // practice, but must not award the same question family's points twice.
+    const learner = students[0];
+    const practiceQuestion = lecture.questions.find(question => question.level === "2.0" && (!question.slideId || question.slideId === lecture.slides[0].id))!;
+    expect(practiceQuestion).toBeTruthy();
+    const correctKey = practiceQuestion.answers.find(answer => answer.correct)!.key;
+    let firstScore: string | null = null;
+    await learner.goto(`/learn/${lecture.publicToken}`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await learner.reload();
+      await learner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
+      const saved = learner.waitForResponse(response => response.url().endsWith("/api/events")
+        && response.request().method() === "POST" && response.request().postDataJSON()?.eventType === "answer_selected");
+      await learner.locator(".answers .answer").filter({ has: learner.locator(".letter", { hasText: correctKey }) }).click();
+      expect((await saved).ok()).toBe(true);
+      await expect(learner.locator(".question-feedback")).toContainText("Richtig");
+      await learner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
+      await learner.locator(".learn-more summary").click();
+      await learner.getByRole("button", { name: "Rangliste", exact: true }).click();
+      const ownRow = learner.locator(".leader-row").filter({ hasText: "· Du" });
+      await expect(ownRow).toBeVisible();
+      await expect(learner.getByRole("complementary", { name: "Rangliste", exact: true })).not.toContainText("Lädt");
+      const score = await ownRow.locator("strong").textContent();
+      if (attempt === 0) { firstScore = score; expect(Number(score)).toBeGreaterThan(0); }
+      else expect(score).toBe(firstScore);
+    }
     expect(errors).toEqual([]);
   } finally {
     await Promise.all(contexts.map(context => context.close()));

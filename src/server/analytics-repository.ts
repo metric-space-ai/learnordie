@@ -13,6 +13,7 @@ import type {
   QuestionLevel
 } from "@/lib/types";
 import { estimateAiCost } from "./ai-cost";
+import { learningScoreEvents } from "@/lib/learning-score";
 import { getDb } from "./db/client";
 import { analyticsEvents, lectureSeries, lectures, participantSessions, studentChatQuestions } from "./db/schema";
 
@@ -127,7 +128,7 @@ function safeLeaderboardName(value: string | undefined, fallback: string) {
 function buildLeaderboardEntries(events: AnalyticsEventRecord[], currentAnonymousKey?: string): LeaderboardEntry[] {
   const totals = new Map<string, { anonymousKey: string; name: string; points: number; correct: number; answers: number; lastAt: string }>();
 
-  for (const event of events) {
+  for (const event of learningScoreEvents(events, scoreFromAnswerPayload)) {
     if (event.eventType !== "answer_selected") continue;
     const anonymousKey = event.anonymousKey ?? `event:${event.id}`;
     const existing = totals.get(anonymousKey) ?? {
