@@ -74,6 +74,7 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
         .for("update").limit(1);
       if (!studentQuestion) throw new LiveSessionError(404, "Entwurf nicht gefunden.");
       if (studentQuestion.examDraftStatus === "published" && studentQuestion.examDraftRoundId) return;
+      if (studentQuestion.status !== "accepted") throw new LiveSessionError(409, "Diese Studierendenfrage wurde nicht als fachliche Frage übernommen.");
       if (studentQuestion.examDraftStatus !== "draft") throw new LiveSessionError(409, "Der Entwurf ist nicht zur Veröffentlichung bereit.");
     }
     const [current] = await tx.select().from(liveSessions).where(eq(liveSessions.lectureId, lecture.id)).for("update");
