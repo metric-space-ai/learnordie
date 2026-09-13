@@ -21,7 +21,7 @@ type StudioSlideDocumentEditorProps = {
   onLecturesChange?: (lectures: Lecture[]) => void;
 };
 
-const initialHtml = '<article style="font-family:system-ui;color:#243f43;padding:32px;background:#fffef8"><h2>Ein Gedanke, anschaulich erklärt</h2><p>HTML und CSS für Tabellen, Formeln und besondere Inhalte.</p><div style="height:12px;background:#dcece6;border-radius:8px"><div style="width:65%;height:100%;background:#498b79;border-radius:8px"></div></div></article>';
+const initialHtml = '<article style="font-family:system-ui;color:#1b1b1f;padding:32px;background:#ffffff"><h2>Ein Gedanke, anschaulich erklärt</h2><p>HTML und CSS für Tabellen, Formeln und besondere Inhalte.</p><div style="height:12px;background:#f1f0ff;border-radius:8px"><div style="width:65%;height:100%;background:#6965db;border-radius:8px"></div></div></article>';
 
 export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle, slides, slideDocument, onSlideDocumentChange, readOnly = false }: StudioSlideDocumentEditorProps) {
   const document = useMemo(() => slideDocument ?? legacySlidesToSlideDocument(slides, {

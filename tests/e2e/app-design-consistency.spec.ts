@@ -168,6 +168,19 @@ for (const variant of variants) {
       assertClean();
     });
 
+    test("missing pages and expired lecture links use the same entry island", async ({ page }, testInfo) => {
+      for (const route of ["/not-a-learnordie-page", "/l/design-lecture-does-not-exist", "/learn/design-lecture-does-not-exist"]) {
+        await page.goto(route);
+        await expect(page.getByRole("heading", { name: "Diese Seite gibt es nicht" })).toBeVisible();
+        await panelContract(page, page.locator(".app-status-card"));
+        await controlContract(page, page.getByRole("button", { name: "Dunkles Design", exact: true }));
+        await keyboardFocus(page.getByRole("link", { name: "Zur Startseite" }));
+      }
+      await testInfo.attach("missing-lecture-design", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+      await page.getByRole("link", { name: "Zur Startseite" }).click();
+      await panelContract(page, page.locator(".home-join-island"));
+    });
+
     test("student dashboard, rename, series and event preserve readable route contracts", async ({ page }, testInfo) => {
       const assertClean = diagnostics(page);
       // Established fixture pattern: direct Learn entry creates a lazy enrollment.
