@@ -4,7 +4,8 @@ import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { audioFileExtension, recordAudioSnippet } from "@/lib/audio-capture";
+import { audioFileExtension, recordAudioSnippet, startContinuousWavCapture } from "@/lib/audio-capture";
+import type { RecordedPassage } from "@/lib/audio-capture";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
 import { LeaderboardModal } from "./LeaderboardModal";
@@ -28,7 +29,7 @@ type TranscriptDraft = {
 
 const MANUAL_STT_SEGMENT_MS = 1200;
 const AUTO_STT_SEGMENT_MS = 6500;
-const AUTO_STT_PAUSE_MS = 700;
+const MAX_QUEUED_PASSAGES = 12;
 const MAX_TRANSCRIPT_DRAFTS = 4;
 // Live-Fragen: etwa eine Minute Sprechen je Frage, nicht oefter als alle 75 s.
 const LIVE_QUESTION_MIN_CHARS = 700;
@@ -57,6 +58,9 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [transcriptSavingId, setTranscriptSavingId] = useState<string | null>(null);
   const [transcriptDrafts, setTranscriptDrafts] = useState<TranscriptDraft[]>([]);
   const [sttStatus, setSttStatus] = useState<"idle" | "requesting" | "listening" | "transcribing" | "ready" | "error">("idle");
+  const [lastTranscriptAt, setLastTranscriptAt] = useState(0);
+  const [transcriptPending, setTranscriptPending] = useState(0);
+  const [statusClock, setStatusClock] = useState(Date.now());
   const [questions, setQuestions] = useState(lecture.questions);
   const families = groupQuestionFamilies(questionsForSlide(questions, lecture.slides[slide]?.id));
   const [liveQuestionsOn, setLiveQuestionsOn] = useState(true);
@@ -64,22 +68,30 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [liveQuestionMessage, setLiveQuestionMessage] = useState("");
   const liveQuestionsOnRef = useRef(true);
   const pendingTranscriptRef = useRef("");
+  const recentSpeechRef = useRef({ text: "", endedAt: 0 });
   const liveGeneratingRef = useRef(false);
   const lastLiveQuestionAtRef = useRef(0);
   const livePipelineRef = useRef<((draft: TranscriptDraft, slideIndex: number) => Promise<void>) | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const autoSegmentingRef = useRef(false);
-  const autoLoopRunningRef = useRef(false);
+  const microphoneRequestRef = useRef(0);
+  const disposedRef = useRef(false);
+  const transcriptionAbortRef = useRef<AbortController | null>(null);
   const slideRef = useRef(slide);
-  const dynamicRoundRef = useRef<(() => Promise<void>) | null>(null);
+  const dynamicRoundRef = useRef<((mode?: "transcript-only") => Promise<void>) | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   const [roundMessage, setRoundMessage] = useState("");
 
   // This handler is refreshed without capturing the slide while a provider is
   // in flight. Its result is explicitly bound to the original family/session.
   useEffect(() => {
-    dynamicRoundRef.current = async () => {
+    dynamicRoundRef.current = async (mode) => {
       if (showJoinIntro || liveStatus !== "active" || !live.connected || live.busy || questionOpen || liveGeneratingRef.current) return;
+      const recentSpeech = recentSpeechRef.current;
+      if (mode === "transcript-only" && (Date.now() - recentSpeech.endedAt > 120_000 || recentSpeech.text.length < 120)) {
+        setRoundMessage("Noch kein ausreichend langes aktuelles Transkript. Mikrofon einschalten und die nächste Passage abwarten.");
+        return;
+      }
       const slideId = lecture.slides[slide]?.id;
       const sessionId = live.state?.sessionId;
       if (!slideId || !sessionId) return;
@@ -92,7 +104,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       try {
         const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
           method: "POST", headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
-          body: JSON.stringify({ slideId, transcript: pendingTranscriptRef.current, allowSlideContext: true }), signal: abort.signal
+          body: JSON.stringify({ slideId, mode, transcript: mode ? recentSpeech.text : pendingTranscriptRef.current, allowSlideContext: !mode }), signal: abort.signal
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
@@ -136,6 +148,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   }, [showJoinIntro, slide, lecture.slides.length, sendLive]);
 
   function stopListening() {
+    microphoneRequestRef.current += 1;
     autoSegmentingRef.current = false;
     setAutoSegmenting(false);
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -152,23 +165,31 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       return;
     }
 
+    const requestId = ++microphoneRequestRef.current;
     try {
       setTranscriptMessage("");
       setSttStatus("requesting");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (requestId !== microphoneRequestRef.current || disposedRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = stream;
       setListening(true);
+      autoSegmentingRef.current = true;
+      setAutoSegmenting(true);
       setSttStatus("listening");
       setTranscriptMessage("");
     } catch {
+      if (requestId !== microphoneRequestRef.current || disposedRef.current) return;
       setListening(false);
       setSttStatus("error");
       setTranscriptMessage("Mikrofon nicht freigegeben.");
     }
   }
 
-  const transcribeAudioBlob = useCallback(async (audio: Blob, startedAt: string, endedAt: string, slideIndex: number, mode: TranscriptDraft["mode"]) => {
+  const transcribeAudioBlob = useCallback(async (audio: Blob, startedAt: string, endedAt: string, slideIndex: number, mode: TranscriptDraft["mode"], signal?: AbortSignal) => {
     const formData = new FormData();
     formData.set("audio", audio, `lecture-audio-${Date.now()}.${audioFileExtension(audio)}`);
     formData.set("slideTopic", lecture.slides[slideIndex]?.topic ?? lecture.title);
@@ -177,7 +198,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     const response = await fetch(`/api/lectures/${lecture.id}/stt`, {
       method: "POST",
       headers: { "x-learnbuddy-csrf": csrfToken },
-      body: formData
+      body: formData,
+      signal: AbortSignal.any([AbortSignal.timeout(55_000), ...(signal ? [signal] : [])])
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -194,9 +216,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       endedAt: payload.endedAt ?? endedAt,
       mode
     };
-    setTranscriptDrafts((current) => [draft, ...current].slice(0, MAX_TRANSCRIPT_DRAFTS));
+    if (disposedRef.current) throw new DOMException("Cancelled", "AbortError");
+    if (draft.text.trim()) setTranscriptDrafts((current) => [draft, ...current].slice(0, MAX_TRANSCRIPT_DRAFTS));
     setTranscriptMessage("");
-    setSttStatus("ready");
+    setSttStatus(mediaStreamRef.current ? "transcribing" : "idle");
     return draft;
   }, [csrfToken, lecture.id, lecture.slides, lecture.title]);
 
@@ -232,16 +255,25 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         "x-learnbuddy-csrf": csrfToken
       },
       body: JSON.stringify({
-        text: draft.text.slice(0, 1200),
+        text: draft.text,
         provider: draft.provider,
         startedAt: draft.startedAt,
         endedAt: draft.endedAt
-      })
+      }),
+      signal: AbortSignal.timeout(20_000)
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error ?? "Transkript konnte nicht gespeichert werden.");
+    if (disposedRef.current) return payload.segment as TranscriptSegment;
     setTranscriptSegments((current) => [payload.segment, ...current]);
     setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
+    if (payload.segment.status === "accepted") {
+      const endedAt = Date.parse(draft.endedAt);
+      const previous = recentSpeechRef.current;
+      recentSpeechRef.current = { text: `${endedAt - previous.endedAt < 120_000 ? previous.text : ""} ${draft.text}`.trim().slice(-LIVE_QUESTION_MAX_PENDING_CHARS), endedAt };
+      setLastTranscriptAt(endedAt);
+      setSttStatus(mediaStreamRef.current ? "ready" : "idle");
+    }
     return payload.segment as TranscriptSegment;
   }
 
@@ -255,7 +287,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
-        body: JSON.stringify({ slideId, transcript })
+        body: JSON.stringify({ slideId, transcript, mode: "transcript-only" }),
+        signal: AbortSignal.timeout(55_000)
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
@@ -281,17 +314,13 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   // Die Funktion wird nach jedem Render aktualisiert, damit die Aufnahmeschleife aktuelle Werte sieht.
   useEffect(() => {
     livePipelineRef.current = async (draft, slideIndex) => {
-      try {
-        await persistTranscriptDraft(draft);
-      } catch (error) {
-        setLiveQuestionMessage(error instanceof Error ? error.message : "Transkript konnte nicht gespeichert werden.");
-        return;
-      }
+      const segment = await persistTranscriptDraft(draft);
+      if (segment.status !== "accepted") return;
       pendingTranscriptRef.current = `${pendingTranscriptRef.current} ${draft.text}`.trim().slice(-LIVE_QUESTION_MAX_PENDING_CHARS);
       setLiveQuestionStatus((current) => (current === "idle" ? "collecting" : current));
       const enoughText = pendingTranscriptRef.current.length >= LIVE_QUESTION_MIN_CHARS;
       const pausedLongEnough = Date.now() - lastLiveQuestionAtRef.current >= LIVE_QUESTION_MIN_INTERVAL_MS;
-      if (enoughText && pausedLongEnough) {
+      if (liveQuestionsOnRef.current && enoughText && pausedLongEnough) {
         void generateLiveQuestion(slideIndex, pendingTranscriptRef.current);
       }
     };
@@ -303,31 +332,12 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     setTranscriptSavingId(draft.id);
     setTranscriptMessage("");
 
-    const response = await fetch(`/api/lectures/${lecture.id}/transcript-segments`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-learnbuddy-csrf": csrfToken
-      },
-      body: JSON.stringify({
-        text: draft.text,
-        provider: draft.provider,
-        startedAt: draft.startedAt,
-        endedAt: draft.endedAt
-      })
-    });
-    const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      setTranscriptMessage(payload.error ?? "Transkript konnte nicht gespeichert werden.");
-      setTranscriptSavingId(null);
-      return;
-    }
-
-    setTranscriptSegments((current) => [payload.segment, ...current]);
-    setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
-    setTranscriptMessage(payload.message ?? "Transkript gespeichert.");
-    setTranscriptSavingId(null);
+    try {
+      await livePipelineRef.current?.(draft, slideRef.current);
+    } catch (error) {
+      setTranscriptMessage(error instanceof Error ? error.message : "Transkript konnte nicht gespeichert werden.");
+      setSttStatus("error");
+    } finally { setTranscriptSavingId(null); }
   }
 
   useEffect(() => {
@@ -352,17 +362,29 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         setQuestionOrigin("space");
         void dynamicRoundRef.current?.();
       }
+      if (event.key.toLowerCase() === "l" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        if (!event.repeat) void dynamicRoundRef.current?.("transcript-only");
+      }
     };
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [showJoinIntro, next]);
 
-  useEffect(() => () => {
+  useEffect(() => {
+    disposedRef.current = false;
+    const timer = window.setInterval(() => setStatusClock(Date.now()), 5000);
+    return () => {
+    disposedRef.current = true;
+    microphoneRequestRef.current += 1;
+    window.clearInterval(timer);
+    transcriptionAbortRef.current?.abort();
     autoSegmentingRef.current = false;
     generationAbortRef.current?.abort();
     generationAbortRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   useEffect(() => {
@@ -378,47 +400,73 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   }, [liveQuestionsOn]);
 
   useEffect(() => {
-    if (!autoSegmenting || !listening || autoLoopRunningRef.current) return;
-
-    let cancelled = false;
-    autoLoopRunningRef.current = true;
+    const stream = mediaStreamRef.current;
+    if (!autoSegmenting || !listening || !stream) return;
+    const abort = new AbortController();
+    transcriptionAbortRef.current = abort;
+    let closing = false;
+    let draining = false;
+    let capture: Awaited<ReturnType<typeof startContinuousWavCapture>> | undefined;
+    const queue: Array<RecordedPassage & { slideIndex: number }> = [];
+    let passageSlide = slideRef.current;
     setTranscriptMessage("");
-
-    async function runAutoLoop() {
-      while (!cancelled && autoSegmentingRef.current && mediaStreamRef.current) {
-        const stream = mediaStreamRef.current;
-        const startedAt = new Date().toISOString();
-        setSttStatus("transcribing");
-        try {
-          const audio = await recordAudioSnippet(stream, AUTO_STT_SEGMENT_MS);
-          const endedAt = new Date().toISOString();
-          const slideIndex = slideRef.current;
-          const draft = await transcribeAudioBlob(audio, startedAt, endedAt, slideIndex, "auto");
-          if (liveQuestionsOnRef.current && draft.text.trim()) {
-            await livePipelineRef.current?.(draft, slideIndex);
-          }
-        } catch (error) {
-          if (!cancelled) {
-            setTranscriptMessage(error instanceof Error ? error.message : "Automatische Transkription fehlgeschlagen.");
-            setSttStatus("error");
-          }
+    function fail(error: unknown) {
+      closing = true;
+      abort.abort();
+      queue.length = 0;
+      void capture?.stop(false);
+      stream.getTracks().forEach(track => track.stop());
+      if (disposedRef.current) return;
+      setTranscriptPending(0);
+      if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
+      setListening(false); setAutoSegmenting(false);
+      setSttStatus("error");
+      setTranscriptMessage(`${error instanceof Error ? error.message : "Transkription fehlgeschlagen."} Aufnahme gestoppt; ausstehendes Audio wurde nicht übernommen. Mikrofon zum erneuten Versuch einschalten.`);
+    }
+    async function drain() {
+      if (draining) return;
+      draining = true;
+      try {
+        while (queue.length && !abort.signal.aborted) {
+          const passage = queue.shift()!;
+          setSttStatus("transcribing");
+          const draft = await transcribeAudioBlob(passage.audio, passage.startedAt, passage.endedAt, passage.slideIndex, "auto", abort.signal);
+          if (draft.text.trim().length >= 8) await livePipelineRef.current?.(draft, passage.slideIndex);
+          if (!disposedRef.current) setTranscriptPending(queue.length);
         }
-        await new Promise((resolve) => window.setTimeout(resolve, AUTO_STT_PAUSE_MS));
-      }
-
-      autoLoopRunningRef.current = false;
-      if (!cancelled && listening) {
-        setSttStatus("listening");
-        setTranscriptMessage("");
+      } catch (error) { if (!disposedRef.current && !abort.signal.aborted) fail(error); }
+      finally {
+        draining = false;
+        if (!disposedRef.current) setTranscriptPending(queue.length);
       }
     }
-
-    void runAutoLoop();
+    void startContinuousWavCapture(stream, AUTO_STT_SEGMENT_MS, passage => {
+      if (abort.signal.aborted || disposedRef.current) return;
+      if (queue.length >= MAX_QUEUED_PASSAGES) {
+        fail(new Error("Der Transkriptionsdienst verarbeitet die Aufnahme zu langsam."));
+        return;
+      }
+      queue.push({ ...passage, slideIndex: passageSlide });
+      setTranscriptPending(queue.length + (draining ? 1 : 0));
+      passageSlide = slideRef.current;
+      void drain();
+    }, fail).then(active => {
+      capture = active;
+      if (closing || abort.signal.aborted) void active.stop(false);
+    }).catch(fail);
     return () => {
-      cancelled = true;
-      autoSegmentingRef.current = false;
+      closing = true;
+      // User stop flushes the final passage; navigation aborts queued requests.
+      void capture?.stop(!disposedRef.current && !abort.signal.aborted);
     };
   }, [autoSegmenting, listening, transcribeAudioBlob]);
+
+  const recordingState = sttStatus === "error" ? "error" : !listening ? transcriptPending ? "pending" : "off"
+    : lastTranscriptAt > 0 && statusClock - lastTranscriptAt < 30_000 ? "confirmed" : "pending";
+  const recordingLabel = recordingState === "error" ? "Live-Transkript: Fehler"
+    : recordingState === "off" ? "Live-Transkript: aus"
+    : recordingState === "confirmed" ? "Live-Transkript: aktueller Text bestätigt"
+    : listening ? "Live-Transkript: Aufnahme läuft, Bestätigung ausstehend" : "Live-Transkript: letzte Passage wird verarbeitet";
 
   return (
     <main
@@ -446,6 +494,12 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         slides={lecture.slides}
       />
 
+      <button type="button" className="transcript-indicator" data-status={recordingState}
+        title={recordingLabel} aria-label={recordingLabel} aria-expanded={transcriptVisible}
+        onClick={() => setTranscriptVisible(current => !current)}>
+        <span aria-hidden="true" />
+      </button>
+
       <Presence show={transcriptVisible}>
         {(motionState) => (
         <aside className="transcript-panel lb-enter-overlay" data-panel-origin="transcript" data-state={motionState} aria-label="Transkriptstatus">
@@ -454,14 +508,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
             <button type="button" aria-label="Transkript ausblenden" title="Transkript ausblenden" onClick={() => setTranscriptVisible(false)}>×</button>
           </div>
           <p className="lb-enter-row" style={{ "--lb-i": 0 } as MotionStyle}>
-            <span className={`status-dot ${listening ? "live" : ""}`} />
-            {sttStatus === "requesting"
-              ? "Mikrofon wird freigegeben"
-              : sttStatus === "transcribing"
-                ? "Transkribiert …"
-                : listening
-                  ? (autoSegmenting ? "Hört zu · automatisch" : "Hört zu")
-                  : "Mikrofon aus"}
+            {recordingLabel}
           </p>
           {transcriptDrafts.length > 0 && (
             <div className="transcript-draft-list lb-enter-row" style={{ "--lb-i": 2 } as MotionStyle} aria-label="Neues Transkript">
@@ -490,15 +537,15 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
             </div>
           )}
           <div className="transcript-actions lb-enter-row" style={{ "--lb-i": 7 } as MotionStyle}>
-            <button className="plain-button" type="button" onClick={listening ? stopListening : startListening}>
+            <button className="plain-button" type="button" disabled={sttStatus === "requesting" || (!listening && transcriptPending > 0)} onClick={listening ? stopListening : startListening}>
               {listening ? "Mikrofon aus" : "Mikrofon an"}
             </button>
-            <button className="plain-button" disabled={!listening || sttStatus === "transcribing" || autoSegmenting} type="button" onClick={transcribeCurrentPassage}>
+            <button className="plain-button" disabled={!listening || sttStatus === "transcribing" || autoSegmenting || transcriptPending > 0} type="button" onClick={transcribeCurrentPassage}>
               Jetzt transkribieren
             </button>
             <button
               className="plain-button"
-              disabled={!listening}
+              disabled={!listening || (!autoSegmenting && transcriptPending > 0)}
               type="button"
               aria-pressed={autoSegmenting}
               onClick={() => setAutoSegmenting((current) => !current)}
@@ -552,6 +599,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       <div className="live-controls">
         <button type="button" disabled={showJoinIntro || questionOpen || live.busy || !live.connected || liveStatus !== "active" || liveQuestionStatus === "generating"}
           onClick={() => void dynamicRoundRef.current?.()}>Neue Frage · Leertaste</button>
+        <button type="button" disabled={showJoinIntro || questionOpen || live.busy || !live.connected || liveQuestionStatus === "generating"}
+          onClick={() => void dynamicRoundRef.current?.("transcript-only")}>Frage aus letzter Passage · L</button>
         {questionOpen && <button type="button" disabled={live.busy} onClick={() => void sendLive({ action: "close" })}>Frage schließen</button>}
         <button className="live-back-link" type="button" disabled={live.busy} onClick={async () => {
           if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }
