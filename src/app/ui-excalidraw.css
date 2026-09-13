@@ -137,6 +137,9 @@
 .native-canvas-mobile .lb-scene3d-stage { min-height: 240px; }
 .native-canvas-mobile .lb-scene3d-tool { min-width: 44px; min-height: 44px; }
 .native-canvas-mobile:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; }
+/* Reader reflow scrolls between the quiet participation link and the existing
+   compact controls; fullscreen canvas rules must not put text underneath them. */
+.learn-shell.slide-screen .slide-engine-stage:has(> .native-canvas.native-canvas-mobile) { padding: 48px 0 84px; }
 .native-canvas-notice { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; margin: 0; padding: 24px; background: var(--studio-surface, var(--panel, #fff)); color: var(--studio-ink, var(--ink, #1b1b1f)); font-size: 15px; text-align: center; }
 .native-canvas-notice button { padding: 10px 16px; border-radius: 8px; border: 1px solid #6965db; background: transparent; color: inherit; cursor: pointer; }
 .native-insert-panel { position: absolute; z-index: 25; right: 12px; top: 52px; width: min(400px, calc(100% - 24px)); max-height: calc(100% - 64px); overflow: auto; padding: 20px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-surface); box-shadow: var(--studio-shadow); animation: canvas-panel-in 140ms ease-out; }
