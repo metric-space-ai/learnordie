@@ -73,7 +73,9 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     const minimumHotspots = await page.locator(".hotspots button").count();
     await density.press("End");
     const maximumHotspots = await page.locator(".hotspots button").count();
-    expect(maximumHotspots).toBeGreaterThan(minimumHotspots);
+    expect(minimumHotspots).toBe(4);
+    expect(maximumHotspots).toBe(4);
+    await expect(density).toHaveAttribute("aria-valuetext", "jede Folie");
     await density.press("Home");
     await density.press("ArrowRight");
     await density.press("ArrowRight");

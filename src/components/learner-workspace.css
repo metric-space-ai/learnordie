@@ -157,7 +157,10 @@
 }
 
 .learn-shell .learner-density-control output {
+  grid-column: 2;
+  grid-row: 1;
   color: var(--muted);
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 

@@ -4,7 +4,7 @@ import { questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { MAX_LEARN_QUESTION_DENSITY, MIN_LEARN_QUESTION_DENSITY, normalizeLearnQuestionDensity } from "@/lib/learn-settings";
+import { MAX_LEARN_QUESTION_DENSITY, MIN_LEARN_QUESTION_DENSITY, learnQuestionCadenceLabel, normalizeLearnQuestionDensity, shouldOfferLearnQuestion } from "@/lib/learn-settings";
 import { seriesIdForLecture } from "@/lib/series";
 import { ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
 import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
@@ -17,7 +17,7 @@ import { SlideEngineCanvas } from "./SlideEngineCanvas";
 import { ThemeToggle } from "./theme/ThemeToggle";
 import "./learner-workspace.css";
 
-const hotspotLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0", "3.0", "2.0", "1.0"];
+const hotspotLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 const hotspotClasses = ["one", "two", "three", "four", "five", "six", "seven"];
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
 type ScreenMotionStyle = CSSProperties & Partial<Record<"--origin-x" | "--origin-y", string>>;
@@ -73,9 +73,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const evaluationConfig = lecture.evaluationConfig;
   const [slide, setSlide] = useState(0);
   const [density, setDensity] = useState(() => normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
+  const slidesSinceQuestion = useRef(0);
+  const pendingNextSlide = useRef<number | null>(null);
+  const offeredSlide = useRef<number | null>(null);
   function updateDensity(value: string) {
     const next = normalizeLearnQuestionDensity(value);
     setDensity(next);
+    slidesSinceQuestion.current = 0;
     try { window.localStorage.setItem(`lb_learn_density_${lecture.publicToken}`, String(next)); } catch { /* Learning works without local storage. */ }
   }
   useEffect(() => {
@@ -153,8 +157,43 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     setEvaluationOpen(true);
   }
 
-  const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
-  const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
+  const previous = useCallback(() => {
+    pendingNextSlide.current = null;
+    offeredSlide.current = null;
+    setQuestionOpen(false);
+    setPeekingSlide(false);
+    setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length);
+  }, [lecture.slides.length]);
+
+  const next = useCallback(() => {
+    const nextSlide = pendingNextSlide.current ?? (slide + 1) % lecture.slides.length;
+    if (pendingNextSlide.current === null && offeredSlide.current !== slide) {
+      slidesSinceQuestion.current += 1;
+      const hasQuestions = lecture.questions.some((question) => !question.slideId || question.slideId === lecture.slides[slide]?.id);
+      if (shouldOfferLearnQuestion({ density, completedSlides: slidesSinceQuestion.current, atEnd: slide === lecture.slides.length - 1, hasQuestions })) {
+        slidesSinceQuestion.current = 0;
+        pendingNextSlide.current = nextSlide;
+        offeredSlide.current = slide;
+        closeMore();
+        setChatOpen(false);
+        setLeaderboardOpen(false);
+        setEvaluationOpen(false);
+        setPeekingSlide(false);
+        setForcedLevel(null);
+        setActiveHotspotIndex(null);
+        setQuestionOrigin("control");
+        setQuestionOpen(true);
+        return;
+      }
+    }
+    // A second explicit Next can skip the offered question. Closing the drawer
+    // alone keeps the current slide; it must not create a prompt/close loop.
+    pendingNextSlide.current = null;
+    offeredSlide.current = null;
+    setQuestionOpen(false);
+    setPeekingSlide(false);
+    setSlide(nextSlide);
+  }, [density, lecture.questions, lecture.slides, slide]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -171,6 +210,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
         setEvaluationOpen(false);
         setQuestionOrigin("space");
         setActiveHotspotIndex(null);
+        if (!questionOpen) {
+          slidesSinceQuestion.current = 0;
+          offeredSlide.current = slide;
+        }
         setQuestionOpen((current) => !current);
         closeMore();
       }
@@ -204,7 +247,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [chatOpen, evaluationOpen, leaderboardOpen, peekingSlide, questionOpen]);
+  }, [chatOpen, evaluationOpen, leaderboardOpen, peekingSlide, questionOpen, slide]);
 
   useEffect(() => {
     if (peekingSlide) closeMore();
@@ -531,6 +574,10 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             setEvaluationOpen(false);
             setQuestionOrigin("control");
             setActiveHotspotIndex(null);
+            if (!questionOpen) {
+              slidesSinceQuestion.current = 0;
+              offeredSlide.current = slide;
+            }
             setQuestionOpen((current) => {
               if (current) setPeekingSlide(false);
               return !current;
@@ -544,7 +591,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           <div className="learn-more-panel learner-control-menu-panel" role="group" aria-label="Weitere Aktionen">
       <div className="hotspots" aria-label="Fragen-Hotspots">
         <span className="hotspot-row-label">Fragen</span>
-        {hotspotLevels.slice(0, density).map((level, index) => (
+        {hotspotLevels.map((level, index) => (
           <button
             className={`hotspot lb-enter-hotspot ${hotspotClasses[index]}`}
             key={`${level}-${index}`}
@@ -567,6 +614,8 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 return;
               }
               pendingHotspotSharedRef.current = { index, level };
+              slidesSinceQuestion.current = 0;
+              offeredSlide.current = slide;
               setChatOpen(false);
               setLeaderboardOpen(false);
               setEvaluationOpen(false);
@@ -589,10 +638,11 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
                 min={MIN_LEARN_QUESTION_DENSITY}
                 max={MAX_LEARN_QUESTION_DENSITY}
                 value={density}
+                aria-valuetext={learnQuestionCadenceLabel(density)}
                 onChange={(event) => updateDensity(event.currentTarget.value)}
                 onInput={(event) => updateDensity(event.currentTarget.value)}
               />
-              <output aria-live="polite">{density}</output>
+              <output aria-live="polite">{learnQuestionCadenceLabel(density)}</output>
             </label>
             {activeQuestion && (
               <button
@@ -656,6 +706,12 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             onContinue={() => {
               setQuestionOpen(false);
               setPeekingSlide(false);
+              const destination = pendingNextSlide.current;
+              pendingNextSlide.current = null;
+              if (destination !== null) {
+                offeredSlide.current = null;
+                setSlide(destination);
+              }
             }}
             headerAction={(
               <button

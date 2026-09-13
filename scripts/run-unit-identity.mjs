@@ -21,6 +21,7 @@ const child = spawn(
     "src/lib/canvas-sync.test.ts",
     "src/lib/participation-url.test.ts",
     "src/lib/presenter-question-shortcut.test.ts",
+    "src/lib/learn-settings.test.ts",
     "tests/unit/transcript-recording-status.test.mjs",
     "scripts/lib/purge-session-transcripts.test.mjs",
     "scripts/lib/upgrade-original-slides.test.mjs",
