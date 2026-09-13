@@ -44,12 +44,24 @@ const originalFetch = globalThis.fetch;
 let responseStatus = null;
 let endpointOrigin = null;
 let phase = "provider-selection";
+let diagnostics = {};
 globalThis.fetch = async (...args) => {
   const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]));
   if (url.hostname === "openai.com" || url.hostname.endsWith(".openai.com")) throw new Error("openai-forbidden");
   endpointOrigin = url.origin;
   const response = await originalFetch(...args);
   responseStatus = response.status;
+  if (phase === "four-question-levels") {
+    const payload = await response.clone().json().catch(() => null);
+    diagnostics = {
+      responseJson: payload !== null,
+      outputItems: Array.isArray(payload?.output) ? payload.output.length : null,
+      hasOutputText: typeof payload?.output_text === "string",
+      providerError: Boolean(payload?.error),
+      incomplete: payload?.status === "incomplete",
+      outputTokens: typeof payload?.usage?.output_tokens === "number" ? payload.usage.output_tokens : null
+    };
+  }
   return response;
 };
 const started = Date.now();
@@ -63,7 +75,12 @@ try {
     user: "Synthetic learning context: A spring stores elastic energy. Its force is proportional to displacement. Create four distinct short German multiple-choice questions for levels 4.0, 3.0, 2.0, 1.0. Return {\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"explanation\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true}]}]}. Each variant needs four answers, exactly one correct. Keep each question and answer concise.",
     maxOutputTokens: 2600, responseFormat: "json_object", timeoutMs: 30000
   });
+  phase = "parse-question-json";
+  diagnostics.answerLength = result.answer.length;
+  diagnostics.markdownFence = result.answer.trim().startsWith("```");
   const variants = JSON.parse(result.answer).variants;
+  phase = "validate-question-levels";
+  diagnostics.variantCount = Array.isArray(variants) ? variants.length : null;
   if (!Array.isArray(variants) || variants.length !== 4) throw new Error("invalid-variants");
   for (const level of ["4.0", "3.0", "2.0", "1.0"]) {
     const variant = variants.find(item => item.level === level);
@@ -76,8 +93,10 @@ try {
   for await (const chunk of stream.chunks) streamedText += chunk;
   if (!streamedText.trim() || !(await completion)?.answer?.trim()) throw new Error("invalid-stream");
   report.ai = { status: "pass", provider: provider.info, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, levels: variants.map(item => item.level), stream: true, syntheticInputOnly: true };
-} catch {
-  report.ai = { status: "fail", phase, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, message: "Configured MiniMax adapter failed its synthetic check; no provider response or credentials logged." };
+} catch (error) {
+  const knownFailures = ["unexpected-model", "invalid-variants", "invalid-question", "invalid-stream", "Responses proxy returned no answer text.", "Responses proxy request timed out."];
+  const failure = knownFailures.includes(error?.message) ? error.message : error instanceof SyntaxError ? "invalid-json" : "unclassified-adapter-error";
+  report.ai = { status: "fail", phase, failure, diagnostics, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, message: "Configured MiniMax adapter failed its synthetic check; no provider response or credentials logged." };
   process.exitCode = 1;
 } finally {
   globalThis.fetch = originalFetch;

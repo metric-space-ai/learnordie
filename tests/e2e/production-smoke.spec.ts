@@ -1150,6 +1150,7 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
   const helpContracts = [
     ["scripts/alias-loader.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
     ["scripts/alias-register.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
+    ["scripts/apply-question-wording.mjs", "Usage: node scripts/apply-question-wording.mjs"],
     ["scripts/create-test-account.mjs", "Usage: node scripts/create-test-account.mjs"],
     ["scripts/identity-gates.mjs", "Usage: node scripts/identity-gates.mjs"],
     ["scripts/import-model-original.mjs", "Usage: node scripts/import-model-original.mjs"],
