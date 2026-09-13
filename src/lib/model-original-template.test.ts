@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { validateSlideDocument } from "@learnordie/slide-engine/schema";
+import { parseSlideDocument, validateSlideDocument } from "@learnordie/slide-engine/schema";
 import { canvasSceneForSlide, updateSlideCanvas } from "@learnordie/slide-engine/excalidraw/scene";
 import { canvasSceneSchema } from "@learnordie/slide-engine/excalidraw/canvas-schema";
 import { originalModelSlides, originalModelCompanion, originalModelSourcesHtml, originalModelProvenance } from "./model-original-source";
-import { createOriginalModelDocument, MODEL_ORIGINAL_KEY, MODEL_ORIGINAL_SCENE_LABELS, originalModelText } from "./model-original-template";
+import { applyOriginalModelUpgrade, createOriginalModelDocument, MODEL_ORIGINAL_KEY, MODEL_ORIGINAL_SCENE_LABELS, MODEL_ORIGINAL_TITLE, originalModelText, planOriginalModelUpgrade } from "./model-original-template";
+import { createModelDemoDocument } from "./model-demo-template";
 import { handleModelOriginalSource } from "@/server/model-original-source-handler";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -93,4 +94,181 @@ test("native edits survive JSON round-trip without altering authored assets and 
   assert.deepEqual(persisted.slides[0].speakerNotes, slide.speakerNotes);
   assert.throws(() => createOriginalModelDocument("bad", ["one"]));
   assert.throws(() => createOriginalModelDocument("bad", Array(8).fill("same")));
+});
+
+test("the planner upgrades the abbreviated generated deck without losing slide identity, grades or assets", () => {
+  const ids = originalModelSlides.map((_, index) => `legacy-slide-${index}`);
+  const abbreviated = createModelDemoDocument("legacy", ids);
+  abbreviated.slides[0].quizAnchors = [{ id: "legacy-grade", level: "2.0", blockId: "morph-task", label: "Prüffrage" }];
+  abbreviated.assets.push({ id: "student-attachment", kind: "sourceDocument", title: "Eigene Anlage", extractedText: "Zusatzmaterial" });
+  const before = JSON.stringify(abbreviated);
+  const plan = planOriginalModelUpgrade(abbreviated);
+  assert.equal(plan.status, "ready");
+  assert.deepEqual(plan.conflicts, []);
+  const upgraded = applyOriginalModelUpgrade(plan);
+  assert.deepEqual(upgraded.slides.map((slide) => slide.id), ids);
+  assert.deepEqual(upgraded.slides[0].quizAnchors, abbreviated.slides[0].quizAnchors);
+  assert.ok(upgraded.assets.some((asset) => asset.id === "student-attachment"));
+  assert.ok(upgraded.assets.some((asset) => asset.id === "model-original-html"));
+  assert.equal(upgraded.slides[0].blocks.find((block) => block.id === "morph-task")?.type, "paragraph");
+  assert.equal(JSON.stringify(abbreviated), before, "planning must not mutate the source document");
+  assert.equal(plan.coverage.length, 8 * 13);
+  assert.ok(plan.coverage.every((evidence) => evidence.target.length > 0));
+  assert.equal(planOriginalModelUpgrade(parseSlideDocument(JSON.parse(JSON.stringify(upgraded)))).status, "noop");
+});
+
+test("a source-import shaped deck gets missing authored fields while retaining existing source blocks", () => {
+  const source = doc();
+  const reduced = parseSlideDocument({
+    ...source,
+    id: "imported-lecture",
+    title: "Der Modellbegriff im Wandel",
+    createdBy: { mode: "import", promptVersion: "modellbegriff-threejs-html-import-v1" },
+    assets: [source.assets[1]],
+    slides: source.slides.map((slide) => ({
+      ...slide,
+      canvas: undefined,
+      blocks: slide.blocks
+        .filter((block) => ["kicker", "lead", "formula", "scene"].some((field) => block.id.endsWith(`-${field}`)))
+        .map((block) => block.id.endsWith("-kicker") ? { ...block, type: "heading" as const } : block.id.endsWith("-formula") ? { ...block, type: "callout" as const, tone: "key" as const } : block.id.endsWith("-scene") && block.type === "scene3d" ? { ...block, altText: `${block.altText}. ${block.caption}`, caption: undefined } : block)
+    }))
+  });
+  const plan = planOriginalModelUpgrade(reduced);
+  assert.equal(plan.status, "ready");
+  assert.deepEqual(plan.conflicts, []);
+  const upgraded = applyOriginalModelUpgrade(plan);
+  assert.equal(upgraded.id, reduced.id);
+  assert.equal(upgraded.title, MODEL_ORIGINAL_TITLE);
+  assert.ok(upgraded.slides.every((slide) => slide.canvas));
+  assert.ok(upgraded.slides[0].blocks.some((block) => block.id === "original-morph-lead"));
+  assert.equal(upgraded.assets.some((asset) => asset.id === "model-original-companion"), true);
+  assert.equal(upgraded.assets.some((asset) => asset.id === "model-original-html"), true);
+  assert.ok(plan.coverage.filter((evidence) => evidence.field === "nav").every((evidence) => evidence.status === "added"));
+  assert.ok(plan.coverage.some((evidence) => evidence.field === "sceneTitle" && evidence.target.includes("sceneTitle")));
+});
+
+test("the recognized historical import keeps 4/5 existing notes, bundles missing source notes, and upgrades the flattened language formula", () => {
+  const source = doc();
+  const noteCounts = [4, 4, 5, 4, 4, 5, 5, 4];
+  const historical = parseSlideDocument({
+    ...source,
+    id: "historical-import",
+    title: "Der Modellbegriff im Wandel",
+    createdBy: { mode: "import", promptVersion: "modellbegriff-threejs-html-import-v1" },
+    assets: [source.assets[1]],
+    slides: source.slides.map((slide, index) => {
+      const notes = Array.from({ length: noteCounts[index] }, (_, note) => ({ id: `uuid-${index}-${note}`, kind: "talkingPoint" as const, text: `Historische Zusatznotiz ${index}-${note}` }));
+      return {
+        ...slide,
+        title: originalModelText(originalModelSlides[index].title).replace(/\n/g, " "),
+        canvas: undefined,
+        speakerNotes: notes,
+        blocks: slide.blocks
+          .filter((block) => ["kicker", "lead", "formula", "scene"].some((field) => block.id.endsWith(`-${field}`)))
+          .map((block) => {
+            const id = `${slide.id}-${block.id.split("-").at(-1)}`;
+            if (block.id.endsWith("-kicker")) return { ...block, id, type: "heading" as const };
+            if (block.id.endsWith("-formula")) return { ...block, id, type: "callout" as const, tone: "key" as const, text: index === 6 ? "pθ(nächstes Token | Kontext)" : ("text" in block ? block.text : "") };
+            if (block.id.endsWith("-scene") && block.type === "scene3d") return { ...block, id, altText: `${block.altText}. ${block.caption}`, caption: undefined };
+            return { ...block, id };
+          })
+      };
+    })
+  });
+  const plan = planOriginalModelUpgrade(historical);
+  if (plan.status !== "ready") console.log("historical-plan-conflicts", plan.conflicts.map(({ code, path }) => ({ code, path })));
+  assert.equal(plan.status, "ready");
+  assert.deepEqual(plan.conflicts, []);
+  const upgraded = applyOriginalModelUpgrade(plan);
+  const upgradedFormula = upgraded.slides[6].blocks.find((block) => block.id.endsWith("-formula"));
+  assert.equal(upgradedFormula && "text" in upgradedFormula ? upgradedFormula.text : undefined, "p_θ(nächstes Token | Kontext)");
+  for (const [index, slide] of historical.slides.entries()) {
+    assert.equal(upgraded.slides[index].speakerNotes!.filter((note) => note.id.startsWith(`uuid-${index}-`)).length, noteCounts[index]);
+    const authoredNotes = source.slides[index].speakerNotes!.map((note) => note.text);
+    const mergedText = upgraded.slides[index].speakerNotes!.map((note) => note.text).join("\n\n");
+    for (const text of authoredNotes) assert.ok(mergedText.includes(text), `missing authored note on slide ${index}`);
+    assert.ok(upgraded.slides[index].speakerNotes!.length <= 12);
+  }
+  const secondPlan = planOriginalModelUpgrade(parseSlideDocument(JSON.parse(JSON.stringify(upgraded))));
+  assert.equal(secondPlan.status, "noop");
+  const edited = parseSlideDocument({
+    ...historical,
+    slides: historical.slides.map((slide, index) => index === 6 ? { ...slide, blocks: slide.blocks.map((block) => block.id.endsWith("-formula") ? { ...block, text: "Eigene Formel" } : block) } : slide)
+  });
+  const conflict = planOriginalModelUpgrade(edited);
+  assert.equal(conflict.status, "conflict");
+  assert.ok(conflict.conflicts.some((item) => item.path.includes("formula")));
+  const leadEdited = parseSlideDocument({
+    ...historical,
+    slides: historical.slides.map((slide, index) => index === 0 ? { ...slide, blocks: slide.blocks.map((block) => block.id.endsWith("-lead") ? { ...block, text: "Eigene Leitfrage" } : block) } : slide)
+  });
+  const leadConflict = planOriginalModelUpgrade(leadEdited);
+  assert.equal(leadConflict.status, "conflict");
+  assert.ok(leadConflict.conflicts.some((item) => item.path.includes("-lead")));
+});
+
+test("invalid cardinality, capacity and semantic extras return conflicts without constructing an invalid candidate", () => {
+  const source = doc();
+  const extraSlide = { ...source.slides[0], id: "extra-slide" };
+  const tooManySlides = parseSlideDocument({ ...source, slides: [...source.slides, extraSlide] });
+  assert.doesNotThrow(() => planOriginalModelUpgrade(tooManySlides));
+  assert.equal(planOriginalModelUpgrade(tooManySlides).status, "conflict");
+
+  const tooManyNotes = parseSlideDocument({
+    ...source,
+    slides: source.slides.map((slide, index) => index === 0 ? {
+      ...slide,
+      speakerNotes: Array.from({ length: 12 }, (_, note) => ({ id: `user-note-${note}`, kind: "talkingPoint" as const, text: `Zusatznotiz ${note}` }))
+    } : slide)
+  });
+  assert.doesNotThrow(() => planOriginalModelUpgrade(tooManyNotes));
+  assert.equal(planOriginalModelUpgrade(tooManyNotes).status, "conflict");
+
+  const withSemanticExtra = parseSlideDocument({
+    ...source,
+    title: "Benutzername",
+    slides: source.slides.map((slide, index) => index === 0 ? {
+      ...slide,
+      canvas: undefined,
+      blocks: [...slide.blocks, { id: "user-paragraph", type: "paragraph" as const, text: "Eigener Inhalt" }]
+    } : slide)
+  });
+  const plan = planOriginalModelUpgrade(withSemanticExtra);
+  assert.equal(plan.status, "conflict");
+  assert.ok(plan.conflicts.some((conflict) => conflict.path.includes("blocks") || conflict.path.includes("title")));
+});
+
+test("already-upgraded documents are idempotent and extra native elements remain attached", () => {
+  const original = doc();
+  const extra = { ...original.slides[0].canvas!.elements[0], id: "user-drawing", x: 1440, y: 24, width: 80, height: 80 };
+  const edited = parseSlideDocument({
+    ...original,
+    assets: [...original.assets, { id: "extra-asset", kind: "figure", title: "User figure" }],
+    slides: original.slides.map((slide, index) => index === 0 ? { ...slide, canvas: { ...slide.canvas!, elements: [...slide.canvas!.elements, extra] } } : slide)
+  });
+  const plan = planOriginalModelUpgrade(edited);
+  assert.equal(plan.status, "noop");
+  assert.deepEqual(plan.conflicts, []);
+  assert.ok(plan.preserved.canvasElementIds.includes("user-drawing"));
+  assert.ok(plan.preserved.assetIds.includes("extra-asset"));
+  assert.ok(applyOriginalModelUpgrade(plan).slides[0].canvas!.elements.some((element) => element.id === "user-drawing"));
+  assert.equal(planOriginalModelUpgrade(doc()).status, "noop");
+  const serialized = parseSlideDocument(JSON.parse(JSON.stringify(original)));
+  assert.equal(planOriginalModelUpgrade(serialized).status, "noop");
+});
+
+test("edited source content is surfaced as a conflict and cannot be applied", () => {
+  const abbreviated = createModelDemoDocument("legacy", originalModelSlides.map((_, index) => `legacy-${index}`));
+  const edited = parseSlideDocument({
+    ...abbreviated,
+    slides: abbreviated.slides.map((slide, index) => index === 2 ? {
+      ...slide,
+      blocks: slide.blocks.map((block) => block.id === "law-text" ? { ...block, text: "Eigene Bearbeitung" } : block)
+    } : slide)
+  });
+  const plan = planOriginalModelUpgrade(edited);
+  assert.equal(plan.status, "conflict");
+  assert.ok(plan.conflicts.some((conflict) => conflict.path.includes("law-text")));
+  assert.throws(() => applyOriginalModelUpgrade(plan), /unresolved conflict/);
+  assert.equal(plan.document, edited);
 });
