@@ -2,7 +2,7 @@
 // Run inside a staged Vercel production build: credentials never leave that environment.
 // No database writes, mail, uploads, or user content sent to external providers.
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/production-release-probe.mjs --run\nRead-only production inventory and one synthetic embedding request. Requires VERCEL_ENV=production. Does not certify release readiness.");
+  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/production-release-probe.mjs --run\nRead-only production inventory and synthetic MiniMax M3 generation/streaming. No embeddings or OpenAI API calls. Requires VERCEL_ENV=production. Does not certify release readiness.");
   process.exit(0);
 }
 
@@ -12,8 +12,7 @@ if (!process.argv.includes("--run") || process.env.VERCEL_ENV !== "production" |
 }
 
 const { default: postgres } = await import("postgres");
-const { getEmbeddingProvider } = await import("@/server/providers/embeddings");
-const report = { mode: "read-only-inventory-and-synthetic-providers", database: null, embedding: null, ai: null };
+const report = { mode: "read-only-inventory-and-synthetic-minimax", database: null, ai: null };
 const sql = postgres(process.env.DATABASE_URL, {
   max: 1, prepare: false, connect_timeout: 10,
   connection: { statement_timeout: 15000, application_name: "learnordie-release-readonly" }
@@ -40,43 +39,45 @@ try {
   await sql.end({ timeout: 5 });
 }
 
-// Probe the already configured external adapter without changing the deployment selection.
-const selected = process.env.LEARNBUDDY_EMBEDDING_PROVIDER;
+// Use the configured app adapter, never an alternate key/provider or an OpenAI endpoint.
 const originalFetch = globalThis.fetch;
 let responseStatus = null;
+let endpointOrigin = null;
+let phase = "provider-selection";
 globalThis.fetch = async (...args) => {
+  const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]));
+  if (url.hostname === "openai.com" || url.hostname.endsWith(".openai.com")) throw new Error("openai-forbidden");
+  endpointOrigin = url.origin;
   const response = await originalFetch(...args);
   responseStatus = response.status;
   return response;
 };
-const missingEmbeddingConfig = ["LEARNBUDDY_EMBEDDING_API_KEY", "LEARNBUDDY_EMBEDDING_BASE_URL", "LEARNBUDDY_EMBEDDING_MODEL"].filter(key => !process.env[key]);
-try {
-  if (missingEmbeddingConfig.length) {
-    throw new Error("missing-config");
-  }
-  process.env.LEARNBUDDY_EMBEDDING_PROVIDER = "openai-compatible";
-  const provider = getEmbeddingProvider();
-  const vector = await provider.embedText("Synthetic deployment check: a model describes a selected aspect of a system.");
-  const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
-  if (vector.length !== provider.dimensions || !Number.isFinite(norm) || norm <= 0) throw new Error("invalid-vector");
-  report.embedding = { status: "pass", adapter: provider.name, dimensions: vector.length, syntheticInputOnly: true };
-} catch {
-  report.embedding = { status: "fail", httpStatus: responseStatus, missingConfig: missingEmbeddingConfig, message: "Configured external embedding adapter failed its synthetic request; no provider response or credentials logged." };
-  process.exitCode = 1;
-} finally {
-  if (selected === undefined) delete process.env.LEARNBUDDY_EMBEDDING_PROVIDER;
-  else process.env.LEARNBUDDY_EMBEDDING_PROVIDER = selected;
-}
-
-responseStatus = null;
+const started = Date.now();
 try {
   const { getAIProvider } = await import("@/server/providers/ai");
   const provider = getAIProvider();
-  const result = await provider.complete({ system: "Synthetic deployment check. Reply with exactly: ok", user: "Return ok.", maxOutputTokens: 32 });
-  if (!result.answer?.trim()) throw new Error("empty-answer");
-  report.ai = { status: "pass", httpStatus: responseStatus, syntheticInputOnly: true };
+  if (provider.info.model.toLowerCase() !== "minimax-m3") throw new Error("unexpected-model");
+  phase = "four-question-levels";
+  const result = await provider.complete({
+    system: "Return valid JSON only, with no Markdown fences.",
+    user: "Synthetic learning context: A spring stores elastic energy. Its force is proportional to displacement. Create four distinct short German multiple-choice questions for levels 4.0, 3.0, 2.0, 1.0. Return {\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"explanation\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true}]}]}. Each variant needs four answers, exactly one correct. Keep each question and answer concise.",
+    maxOutputTokens: 2600, responseFormat: "json_object", timeoutMs: 30000
+  });
+  const variants = JSON.parse(result.answer).variants;
+  if (!Array.isArray(variants) || variants.length !== 4) throw new Error("invalid-variants");
+  for (const level of ["4.0", "3.0", "2.0", "1.0"]) {
+    const variant = variants.find(item => item.level === level);
+    if (!variant?.text?.trim() || !variant.explanation?.trim() || variant.answers?.length !== 4 || variant.answers.some(answer => !answer.text?.trim()) || variant.answers.filter(answer => answer.correct === true).length !== 1) throw new Error("invalid-question");
+  }
+  phase = "stream";
+  const stream = await provider.streamComplete({ system: "Reply exactly: ok", user: "Return ok.", maxOutputTokens: 32, timeoutMs: 15000 });
+  let streamedText = "";
+  const completion = stream.completed.catch(() => null);
+  for await (const chunk of stream.chunks) streamedText += chunk;
+  if (!streamedText.trim() || !(await completion)?.answer?.trim()) throw new Error("invalid-stream");
+  report.ai = { status: "pass", provider: provider.info, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, levels: variants.map(item => item.level), stream: true, syntheticInputOnly: true };
 } catch {
-  report.ai = { status: "fail", httpStatus: responseStatus, message: "Configured app AI adapter failed its synthetic request; no provider response or credentials logged." };
+  report.ai = { status: "fail", phase, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, message: "Configured MiniMax adapter failed its synthetic check; no provider response or credentials logged." };
   process.exitCode = 1;
 } finally {
   globalThis.fetch = originalFetch;
