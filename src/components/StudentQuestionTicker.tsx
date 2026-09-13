@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { QuestionVariant, StudentChatQuestionStatus, StudentExamDraftStatus } from "@/lib/types";
 
 export type TickerQuestion = {
@@ -34,7 +34,10 @@ export function StudentQuestionTickerItem({ question, canPublish, busyId, onPubl
     <p className="student-question-ticker__meta">{question.pseudonym} · {new Date(question.createdAt).toLocaleTimeString()}</p>
     <p className="student-question-ticker__question">{question.text}</p>
     {question.draft ? <details>
-      <summary className="student-question-ticker__draft-summary">Entwurf prüfen · {question.draft.topic}</summary>
+      <summary className="student-question-ticker__draft-summary">
+        Entwurf prüfen · {question.draft.topic}
+        {question.examDraftStatus === "published" && <span className="student-question-ticker__status"> · Veröffentlicht</span>}
+      </summary>
       <p className="student-question-ticker__core">{question.draft.coreStatement}</p>
       {question.draft.variants.map((variant) => <div key={variant.level} className="student-question-ticker__variant">
         <strong>{variant.level}</strong>
@@ -79,6 +82,10 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
   const [error, setError] = useState("");
   const polling = useRef(false);
   const mutating = useRef(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const tickerId = useId();
+  const toggleId = `${tickerId}-toggle`;
+  const panelId = `${tickerId}-panel`;
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const response = await boundedFetch(`/api/lectures/${encodeURIComponent(lectureId)}/student-question-ticker`, {
@@ -137,7 +144,10 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        toggleRef.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -187,10 +197,21 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
 
   const pendingCount = questions.filter((question) => question.examDraftStatus !== "published" && question.examDraftStatus !== "rejected").length;
   return <aside aria-label="Eingehende Studierendenfragen" className={`student-question-ticker ${className ?? ""}`} data-open={open} data-placement={placement}>
-    <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="student-question-ticker__toggle">
+    <button
+      id={toggleId}
+      ref={toggleRef}
+      type="button"
+      aria-expanded={open}
+      aria-controls={panelId}
+      aria-label={`Eingehende Studierendenfragen, ${pendingCount} offen`}
+      aria-live="polite"
+      aria-atomic="true"
+      onClick={() => setOpen((value) => !value)}
+      className="student-question-ticker__toggle"
+    >
       Fragen{pendingCount ? ` · ${pendingCount}` : ""}
     </button>
-    {open && <section aria-label="Fragen und Entwürfe" className="student-question-ticker__panel">
+    <section id={panelId} aria-label="Fragen und Entwürfe" hidden={!open} className="student-question-ticker__panel">
       {error && <p role="status" className="student-question-ticker__error">{error}</p>}
       {questions.length === 0 && <p className="student-question-ticker__empty">Noch keine Fragen.</p>}
       <div className="student-question-ticker__list">
@@ -205,7 +226,7 @@ export function StudentQuestionTicker({ lectureId, csrfToken, canPublish, onPubl
         />)}
       </div>
       {!canPublish && <p className="student-question-ticker__hint">Veröffentlichen ist verfügbar, wenn die Präsentation läuft und keine andere Fragerunde offen ist.</p>}
-    </section>}
+    </section>
   </aside>;
 }
 

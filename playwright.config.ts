@@ -6,9 +6,13 @@ delete process.env.NO_COLOR;
 const host = process.env.E2E_HOST ?? "127.0.0.1";
 const port = process.env.E2E_PORT ?? "3070";
 const baseURL = process.env.E2E_BASE_URL ?? `http://${host}:${port}`;
+const evidenceScope = process.env.E2E_EVIDENCE_SCOPE === "student-draft-races" ? "student-draft-races" : null;
+const outputDir = evidenceScope ? `test-results/${evidenceScope}` : "test-results";
+const htmlOutputFolder = evidenceScope ? `playwright-report/${evidenceScope}` : "playwright-report";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  outputDir,
   testIgnore: [
     /deploy-smoke\.spec\.ts/,
     /student-local\.spec\.ts/
@@ -22,7 +26,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   // Stop a broken release quickly; a passing gate still runs the entire suite.
   maxFailures: process.env.CI ? 6 : undefined,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }], ["json", { outputFile: "test-results/results.json" }]] : "list",
+  reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: htmlOutputFolder }], ["json", { outputFile: `${outputDir}/results.json` }]] : "list",
   use: {
     baseURL,
     actionTimeout: 15_000,

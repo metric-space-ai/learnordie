@@ -1,7 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import postgres from "postgres";
 
 import { seriesIdForLecture } from "../../src/lib/series";
@@ -129,8 +127,28 @@ async function startPresentation(lecture: Lecture) {
   await commandLiveSession(lecture, { action: "slide", revision: 1, slideIndex: 0, showIntro: false });
 }
 
+type RenderedTreeNode = { type?: unknown; props?: Record<string, unknown> };
+
+function renderedTreeText(node: unknown): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(renderedTreeText).join("");
+  if (typeof node !== "object" || node === null) return "";
+  return renderedTreeText((node as RenderedTreeNode).props?.children);
+}
+
+function renderedTreeElements(node: unknown, elementType: string): RenderedTreeNode[] {
+  if (Array.isArray(node)) return node.flatMap((child) => renderedTreeElements(child, elementType));
+  if (typeof node !== "object" || node === null) return [];
+  const element = node as RenderedTreeNode;
+  return [
+    ...(element.type === elementType ? [element] : []),
+    ...renderedTreeElements(element.props?.children, elementType)
+  ];
+}
+
 test("ticker renders retry/reject controls only after generation is stale", () => {
-  const renderItem = (generationStale: boolean) => renderToStaticMarkup(createElement(StudentQuestionTickerItem, {
+  const actionCalls: string[] = [];
+  const renderItem = (generationStale: boolean) => StudentQuestionTickerItem({
     question: {
       id: "ticker-stale-state",
       text: "Wie verändert die Viskosität die Tragfähigkeit?",
@@ -145,19 +163,46 @@ test("ticker renders retry/reject controls only after generation is stale", () =
     canPublish: true,
     busyId: null,
     onPublish: () => undefined,
-    onRetry: () => undefined,
-    onReject: () => undefined
-  }));
+    onRetry: () => actionCalls.push("retry"),
+    onReject: () => actionCalls.push("reject")
+  }) as unknown;
 
   const staleMarkup = renderItem(true);
-  expect(staleMarkup).toContain("Die Entwurfserstellung hängt möglicherweise fest.");
-  expect(staleMarkup).toContain("Erstellung neu starten");
-  expect(staleMarkup).toContain("Entwurf ablehnen");
+  expect(renderedTreeText(staleMarkup)).toContain("Die Entwurfserstellung hängt möglicherweise fest.");
+  const staleButtons = renderedTreeElements(staleMarkup, "button");
+  expect(staleButtons.map((button) => renderedTreeText(button.props?.children))).toEqual([
+    "Erstellung neu starten",
+    "Entwurf ablehnen"
+  ]);
+  staleButtons.forEach((button) => {
+    const onClick = button.props?.onClick;
+    if (typeof onClick === "function") onClick();
+  });
+  expect(actionCalls).toEqual(["retry", "reject"]);
 
   const activeMarkup = renderItem(false);
-  expect(activeMarkup).toContain("Entwurf wird vorbereitet");
-  expect(activeMarkup).not.toContain("Erstellung neu starten");
-  expect(activeMarkup).not.toContain("Entwurf ablehnen");
+  expect(renderedTreeText(activeMarkup)).toContain("Entwurf wird vorbereitet");
+  expect(renderedTreeElements(activeMarkup, "button")).toHaveLength(0);
+
+  const publishedMarkup = StudentQuestionTickerItem({
+    question: {
+      id: "ticker-published-state",
+      text: "Wie verändert die Viskosität die Tragfähigkeit?",
+      pseudonym: "Student",
+      status: "accepted",
+      createdAt: new Date().toISOString(),
+      attemptAt: new Date().toISOString(),
+      examDraftStatus: "published",
+      generationStale: false,
+      draft: { id: "published-draft", status: "approved", topic: "Gleitlagerung", coreStatement: "Schmierfilm", variants: [] }
+    },
+    canPublish: true,
+    busyId: null,
+    onPublish: () => undefined,
+    onRetry: () => undefined,
+    onReject: () => undefined
+  }) as unknown;
+  expect(renderedTreeText(publishedMarkup)).toContain("Veröffentlicht");
 });
 
 test("slow student draft generation acknowledges once, stays private, and cannot bypass profile rate limits", async ({ page, browser }) => {
@@ -292,6 +337,7 @@ test("ticker exposes stale generation actions, reclaims safely, and fences the o
   const sql = database();
   const repo = repository();
   try {
+    await startPresentation(lecture);
     const staleAttemptId = randomUUID();
     const staleQuestionId = await seedQuestion(sql, lecture, {
       text: "Wie verändert die Viskosität die Tragfähigkeit im Gleitlager?",

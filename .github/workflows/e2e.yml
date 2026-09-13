@@ -104,9 +104,21 @@ jobs:
         run: npx playwright test --config=playwright.config.ts --workers=1 tests/e2e/student-draft-postgres-races.spec.ts
         env:
           E2E_AI_PROVIDER: learnordie-responses
+          E2E_EVIDENCE_SCOPE: student-draft-races
           E2E_STUDENT_DRAFT_DELAY_MS: "18000"
           E2E_STUDENT_DRAFT_DELAY_MARKER: E2E_SLOW_STUDENT_DRAFT
           LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW: "3"
+
+      - name: Retain student draft race evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-draft-race-evidence
+          path: |
+            playwright-report/student-draft-races/
+            test-results/student-draft-races/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Production smoke
         # Leave time for failure evidence to upload before the job deadline.
