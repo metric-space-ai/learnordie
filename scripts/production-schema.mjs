@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: node scripts/production-schema.mjs --check | --apply-reviewed-live-migrations\nCheck production migration history, or explicitly apply only reviewed additive migrations 0027 and 0028. No reset, schema push or lecture-content writes.");
+  process.exit(0);
+}
+
 // A deliberately bounded release repair, never a general schema push/reset.
 const apply = process.argv.includes("--apply-reviewed-live-migrations");
 if (!process.env.DATABASE_URL || process.env.VERCEL_ENV !== "production") {

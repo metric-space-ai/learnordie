@@ -235,7 +235,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           <SceneControls sceneKey={sceneKey} state={state} update={update} />
         </div>
       ) : null}
-      {block.caption ? <figcaption className="lb-scene3d-caption">{block.caption}</figcaption> : null}
+      {block.caption ? <figcaption className="lb-scene3d-caption lb-scene3d-accessible-description">{block.caption}</figcaption> : null}
     </figure>
   );
 }

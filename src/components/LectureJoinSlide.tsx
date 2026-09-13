@@ -22,11 +22,9 @@ export function LectureJoinSlide({ url, title, onStart, action }: {
   return (
     <section className="lecture-join-slide" aria-label="Vorlesung beitreten">
       <div className="lecture-join-copy">
-        <p className="eyebrow">Gemeinsam lernen</p>
         <h1>{title}</h1>
-        <p>QR-Code scannen oder diesen Link öffnen.</p>
+        <p>Teilnehmen</p>
         <a className="lecture-join-url" href={url}>{url}</a>
-        <p className="lecture-join-hint">Direkt dabei. Kein Konto nötig. Dein Pseudonym kannst du später wählen.</p>
         {action ?? (onStart && <button className="primary-button" type="button" onClick={onStart}>Präsentation starten</button>)}
       </div>
       <div className="lecture-join-qr">

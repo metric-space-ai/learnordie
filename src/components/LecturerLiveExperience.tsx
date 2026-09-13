@@ -429,6 +429,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     >
       <SlideEngineCanvas
         lectureToken={lecture.publicToken}
+        participationPath={lecture.participationPath}
         lectureTitle={lecture.title}
         showJoinIntro={showJoinIntro}
         joinAction={liveStatus === "ended" ? <div>
@@ -539,10 +540,11 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       {(!live.connected || live.error || live.state?.status !== "active") && <aside className="presentation-connection-notice" role="status">
         {live.error || (!live.connected ? "Live-Verbindung wird hergestellt …" : live.state?.status === "ended" ? "Live-Sitzung beendet." : "Live-Sitzung wird vorbereitet …")}
         {live.connected && live.state?.status !== "active" && live.state?.status !== "ended" && <button type="button" disabled={live.busy} onClick={() => void live.send({ action: "start" })}>Neue Live-Sitzung starten</button>}
+        {!live.connected && <button type="button" onClick={live.refresh}>Erneut verbinden</button>}
       </aside>}
       <nav className="presentation-navigation" aria-label="Foliennavigation">
         <button type="button" disabled={live.busy || !live.connected || live.state?.status !== "active"} onClick={previous} aria-label="Vorherige Folie">‹</button>
-        <span>{showJoinIntro ? "Beitreten" : `${slide + 1} / ${lecture.slides.length}`}</span>
+        <span>{showJoinIntro ? "Start" : `${slide + 1} / ${lecture.slides.length}`}</span>
         <button type="button" disabled={live.busy || !live.connected || live.state?.status !== "active"} onClick={next} aria-label="Nächste Folie">›</button>
         <ThemeToggle />
       </nav>
@@ -553,7 +555,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         <button className="live-back-link" type="button" disabled={live.busy} onClick={async () => {
           if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }
         }}>Beenden</button>
-        {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" onClick={() => setLeaderboardOpen(true)}>Rangliste</button>}
+        {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" aria-expanded={leaderboardOpen} onClick={() => setLeaderboardOpen(current => !current)}>Rangliste</button>}
         {!showJoinIntro && families.length > 0 && <>
           <label>Frage<select aria-label="Fragenfamilie" value={Math.min(familyIndex, Math.max(0, families.length - 1))} onChange={(event) => setFamilyIndex(Number(event.target.value))}>
             {families.map((family, index) => <option key={family[0]?.familyId ?? index} value={index}>Frage {index + 1}</option>)}

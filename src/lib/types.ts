@@ -400,6 +400,8 @@ export type QuestionReviewItem = {
 export type Lecture = {
   id: string;
   publicToken: string;
+  /** Public, enabled participation path resolved from the configured join code. */
+  participationPath?: string;
   ownerEmail?: string;
   title: string;
   /** Canonical lecture_series UUID in Postgres; absent in legacy local data. */

@@ -1,0 +1,44 @@
+/* Participation is a small overlay, never a header that shrinks the slide. */
+.slide-screen .slide-lecture-link,
+.lecture-qr-overlay .qr-url-toggle {
+  position: absolute; z-index: 15; top: max(8px, env(safe-area-inset-top)); left: 12px;
+  width: auto; height: auto; min-height: 32px; max-width: calc(100% - 72px);
+  margin: 0; padding: 4px 6px; border: 0; background: transparent; box-shadow: none;
+  color: var(--app-text); font: 400 clamp(13px, 1.15vw, 18px)/1.4 "Learnordie Sketch", cursive;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; cursor: pointer;
+  opacity: .85;
+}
+.slide-lecture-link:hover { text-decoration: underline; opacity: 1; }
+.slide-lecture-link:focus-visible, .qr-url-toggle:focus-visible { outline: 2px dashed var(--app-accent); outline-offset: 2px; }
+.lecture-qr-overlay {
+  position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
+  margin: 0; padding: 0; border: 0; overflow: auto; color: var(--app-text); background: var(--app-background);
+}
+.lecture-qr-overlay::backdrop { background: var(--app-background); }
+.lecture-join-slide {
+  background: var(--app-background); color: var(--app-text);
+  font-family: "Learnordie Sketch", cursive;
+  padding: clamp(64px, 6vh, 100px) 7% 48px;
+}
+.lecture-join-copy h1 { font: inherit; font-size: clamp(28px, 4vw, 60px); line-height: 1.15; }
+.lecture-join-copy p { font: inherit; font-size: clamp(18px, 2vw, 28px); }
+.lecture-join-url { font: inherit; font-size: clamp(22px, 3vw, 46px); line-height: 1.3; }
+.lecture-join-copy :is(.primary-button, .lecture-qr-close) {
+  display: inline-flex; align-items: center; width: auto; min-height: 44px;
+  padding: 8px 2px; border: 0; border-bottom: 2px solid var(--app-accent); border-radius: 0;
+  background: transparent; color: var(--app-text); box-shadow: none; cursor: pointer;
+  font: inherit; font-size: clamp(18px, 2vw, 26px);
+}
+.lecture-join-qr { max-width: min(64vh, 680px); }
+/* Duplicate captions remain available to assistive technology, not on the canvas. */
+.lb-scene3d-accessible-description, .lb-scene3d-explain {
+  position: absolute !important; width: 1px !important; height: 1px !important;
+  overflow: hidden !important; clip-path: inset(50%); white-space: nowrap;
+  padding: 0 !important; margin: -1px !important; border: 0 !important;
+}
+.learnordie-canvas-scene .lb-scene3d-controls { font-size: 28px; }
+.learnordie-canvas-scene .lb-scene3d-tool { font-size: 26px; }
+@media (max-width: 700px) {
+  .lecture-join-slide { padding: 64px 20px 28px; gap: 12px; }
+  .lecture-join-qr { max-width: min(40vh, 340px); }
+}

@@ -67,14 +67,30 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     await expect(teacher.locator(".slide-lecture-link")).toHaveAttribute("href", new RegExp(`/l/${lecture.publicToken}$`));
     await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     for (const page of [teacher, first, second]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[0].id);
+    // Opening the participation URL is a local QR overlay, never navigation
+    // into the student role or a broadcast slide change.
+    const presenterUrl = teacher.url();
+    await teacher.locator(".slide-lecture-link").click();
+    const qr = teacher.getByRole("dialog", { name: "Teilnahme-Link und QR-Code", exact: true });
+    await expect(qr).toBeVisible();
+    await expect(qr.locator("canvas")).toBeVisible();
+    await expect(qr.locator(".lecture-join-url")).toHaveAttribute("href", new RegExp(`/l/${lecture.publicToken}$`));
+    await teacher.getByRole("button", { name: "QR-Code schließen", exact: true }).click();
+    await expect(qr).not.toBeVisible();
+    await teacher.locator(".slide-lecture-link").click();
+    await teacher.keyboard.press("Escape");
+    await expect(qr).not.toBeVisible();
+    expect(teacher.url()).toBe(presenterUrl);
+    expect((await state()).slideIndex).toBe(0);
+    expect((await state()).showIntro).toBe(false);
     await first.keyboard.press("ArrowRight");
-    await expect(first.locator(".slide-nav .slide-count")).toHaveText(`1 / ${lecture.slides.length}`);
+    await expect(first.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[0].id);
     await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
     await teacher.getByRole("button", { name: "Nächste Folie", exact: true }).click();
     for (const page of [first, second]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[1].id);
     await teacher.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
     await teacher.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
-    for (const page of [first, second]) await expect(page.locator(".slide-nav .slide-count")).toHaveText("Beitreten");
+    for (const page of [first, second]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", "lecture-join");
     await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     await teacher.getByRole("button", { name: "Vorbereitete Frage", exact: true }).click();
     for (const page of [first, second]) await expect(page.getByLabel("Quizfrage", { exact: true })).toBeVisible();
@@ -172,7 +188,7 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     const restart = teacher.getByRole("region", { name: "Vorlesung beitreten", exact: true }).getByRole("button", { name: "Neue Live-Sitzung starten", exact: true });
     await expect(restart).toBeVisible();
     await restart.click();
-    await expect(first.locator(".slide-nav .slide-count")).toHaveText("Beitreten");
+    await expect(first.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", "lecture-join");
     expect((await state()).sessionId).not.toBe(initial.sessionId);
     expect(problems).toEqual([]);
     await test.info().attach("live-session-evidence", { body: JSON.stringify({ lecture: lecture.publicToken, roundId, participants: 3, duplicateSafe: true, sharedExpiry: true, reconnect: true, endAndRestart: true }), contentType: "application/json" });

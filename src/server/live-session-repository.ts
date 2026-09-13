@@ -63,6 +63,9 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
       const families = groupQuestionFamilies(command.familyId ? lecture.questions : questionsForSlide(lecture.questions, lecture.slides[current.slideIndex]?.id));
       const questions = command.familyId ? families.find((family) => family[0]?.familyId === command.familyId) : families[command.familyIndex];
       if (!questions?.length) throw new LiveSessionError(400, "Fragenfamilie nicht gefunden.");
+      if (questions.length !== 4 || new Set(questions.map(question => question.level)).size !== 4) {
+        throw new LiveSessionError(400, "Die Frage benötigt alle vier Schwierigkeitsstufen.");
+      }
       update.round = { id: randomUUID(), expiresAt: now + command.durationSeconds * 1000, questions };
     } else {
       update.round = null;

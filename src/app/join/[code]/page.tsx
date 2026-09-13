@@ -1,6 +1,8 @@
 import { JoinFlow } from "@/components/student/JoinFlow";
 import { getStudentRepository } from "@/server/student-repository";
 import { getCurrentStudentProfile } from "@/server/student-session";
+import { redirect } from "next/navigation";
+import { activeClassroomForJoin } from "@/server/lecture-participation";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,8 @@ export default async function JoinPage({ params }: { params: Promise<{ code: str
     repository.resolveJoinCode(decoded),
     getCurrentStudentProfile()
   ]);
+  const liveToken = target ? await activeClassroomForJoin(target) : null;
+  if (liveToken) redirect(`/l/${encodeURIComponent(liveToken)}`);
   const claim = profile && target ? await repository.getActiveClaim(profile.id, target.seriesId) : null;
 
   return (
