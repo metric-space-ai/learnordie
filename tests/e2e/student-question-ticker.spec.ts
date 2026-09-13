@@ -145,6 +145,14 @@ test("student question becomes a reviewed live round while presenter and three s
       if (attempt === 0) { firstScore = score; expect(Number(score)).toBeGreaterThan(0); }
       else expect(score).toBe(firstScore);
     }
+    // A level chosen from More must dismiss the menu before answering. On a
+    // phone the stale menu otherwise covers the answers and captures taps.
+    await learner.setViewportSize({ width: 390, height: 844 });
+    await learner.getByRole("button", { name: "Rangliste schließen", exact: true }).click();
+    await learner.getByRole("button", { name: "Frage Niveau 2.0 anzeigen", exact: true }).click();
+    await expect(learner.locator(".learn-more")).not.toHaveAttribute("open", "");
+    await expect(learner.getByRole("region", { name: "Quizfrage", exact: true })).toBeVisible();
+    await expect(learner.locator(".learn-more-panel")).not.toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     await Promise.all(contexts.map(context => context.close()));

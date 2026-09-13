@@ -557,18 +557,21 @@
 }
 
 .lb-scene3d-steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
 
 .lb-scene3d-steps button {
+  flex: 0 0 auto;
+  min-height: 44px;
   padding: 0.65em 0.3em;
   border: 0;
   border-top: 2px solid var(--lb-scene-line);
   background: transparent;
   color: var(--lb-scene-muted);
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .lb-scene3d-steps button[aria-pressed="true"] {

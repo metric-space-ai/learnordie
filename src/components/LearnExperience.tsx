@@ -560,6 +560,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
             aria-pressed={questionOpen && activeHotspotIndex === index}
             aria-label={`Frage Niveau ${level} anzeigen`}
             onClick={() => {
+              closeMore();
               if (questionOpen && activeHotspotIndex === index) {
                 setQuestionOpen(false);
                 setPeekingSlide(false);
