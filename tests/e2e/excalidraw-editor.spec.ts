@@ -329,7 +329,12 @@ test("one presenter synchronizes three independent guests, timed questions and s
       await expect(student.locator(".leader-row.self")).toContainText(`Guest ${lecture.id.slice(0, 6)} ${i + 1}`);
       await expect(student.locator(".leader-row.self")).toContainText("3");
       await expect(student.locator(".leader-row")).toHaveCount(3);
-      await testInfo.attach(`live-guest-${i + 1}-score`, { body: await student.screenshot(), contentType: "image/png" });
+      const scoreboard = student.getByLabel("Rangliste", { exact: true });
+      await expect(scoreboard).toHaveCSS("animation-name", "app-panel-enter");
+      await scoreboard.evaluate(async (element) => { await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)); });
+      await expect(scoreboard).toHaveCSS("opacity", "1");
+      await expect(scoreboard).toHaveCSS("clip-path", "none");
+      await testInfo.attach(`live-guest-${i + 1}-score`, { body: await student.screenshot({ animations: "disabled" }), contentType: "image/png" });
     }
     await page.getByRole("button", { name: "Rangliste", exact: true }).click();
     await expect(page.locator(".leader-row")).toHaveCount(3);

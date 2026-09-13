@@ -224,7 +224,8 @@ body:has(:is(.overlay-panel, .chat-question-panel, .transcript-panel, .question-
   --lb-stagger-panel: 0ms;
 }
 :is(.home-app, .join-screen, .mode-screen, .student-app) :is(.lb-enter-row, .lb-enter-control, .lb-enter-panel, .lb-enter-sheet),
-:is(.overlay-panel, .transcript-panel, .chat-question-panel).lb-enter-panel:not([data-state="exiting"]),
+:is(.overlay-panel, .transcript-panel, .chat-question-panel):is(.lb-enter-panel, .lb-enter-overlay):not([data-state="exiting"]),
+:is(.overlay-panel, .transcript-panel, .chat-question-panel) :is(.lb-enter-row, .overlay-head),
 .question-drawer.lb-enter-sheet:not([data-state="exiting"]),
 .question-drawer .question.lb-enter-row,
 .question-drawer .answers .lb-enter-row,
@@ -245,7 +246,8 @@ body:has(:is(.overlay-panel, .chat-question-panel, .transcript-panel, .question-
   .app-theme-toggle,
   :is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .answer, .hotspot, .question-next-family):not(:where(.native-workspace *, .excalidraw *)) { transition: none; }
   :is(.home-app, .join-screen, .mode-screen, .student-app) :is(.lb-enter-row, .lb-enter-control, .lb-enter-panel, .lb-enter-sheet),
-  :is(.overlay-panel, .transcript-panel, .chat-question-panel).lb-enter-panel,
+  :is(.overlay-panel, .transcript-panel, .chat-question-panel):is(.lb-enter-panel, .lb-enter-overlay),
+  :is(.overlay-panel, .transcript-panel, .chat-question-panel) :is(.lb-enter-row, .overlay-head),
   .question-drawer.lb-enter-sheet,
   .question-drawer .question.lb-enter-row,
   .question-drawer .answers .lb-enter-row,
