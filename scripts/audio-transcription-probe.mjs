@@ -58,10 +58,20 @@ try {
     if (missing.length) throw new Error("audio-content-mismatch");
     phase = "transcript-question-family";
     const { getAIProvider } = await import("@/server/providers/ai");
-    if (getAIProvider().info.model.toLowerCase() !== "minimax-m3") throw new Error("unexpected-model");
+    const ai = getAIProvider();
+    if (ai.info.model.toLowerCase() !== "minimax-m3") throw new Error("unexpected-model");
     const { generateLiveQuestionFamily } = await import("@/server/question-generation");
     const { demoLecture } = await import("@/lib/demo-data");
-    const family = await generateLiveQuestionFamily({ lecture: { ...demoLecture, title: "Audioabnahme", questions: [], transcriptSegments: [] }, slide: { title: "Audioabnahme", lines: [] }, transcript: transcript.text, latestTranscript: transcript.text, scriptContext: "", existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true });
+    report.generationAttempts = [];
+    const observedProvider = Object.create(ai);
+    observedProvider.complete = async input => {
+      const result = await ai.complete(input);
+      let parsed;
+      try { parsed = JSON.parse(result.answer); } catch { /* Keep diagnostics structural, never raw provider errors. */ }
+      report.generationAttempts.push({ answerChars: result.answer.length, validJson: Boolean(parsed), variants: Array.isArray(parsed?.variants) ? parsed.variants.map(variant => ({ level: variant.level, textChars: variant.text?.length, answerCount: variant.answers?.length, explanationChars: variant.explanation?.length })) : null });
+      return result;
+    };
+    const family = await generateLiveQuestionFamily({ lecture: { ...demoLecture, title: "Audioabnahme", seriesTitle: "Synthetische Audioabnahme", questions: [], transcriptSegments: [] }, slide: { title: "Audioabnahme", lines: [] }, transcript: transcript.text, latestTranscript: transcript.text, scriptContext: "", existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true }, observedProvider);
     if (family.length !== 4 || family.some(variant => variant.answers.length !== 4 || variant.answers.filter(answer => answer.correct).length !== 1)) throw new Error("invalid-family");
     report.questions = { model: "MiniMax-M3", variants: family.length, answersPerVariant: family.map(variant => variant.answers.length), httpStatus, endpointOrigin, transcriptOnly: true };
   }
@@ -69,7 +79,8 @@ try {
 } catch (error) {
   const safeErrors = ["fixture-mismatch", "invalid-wav", "unexpected-endpoint", "unexpected-asr-provider", "audio-content-mismatch", "unexpected-model", "invalid-family", "MiniMax ASR request timed out.", "MiniMax ASR response contained no transcript text.", "MiniMax ASR response contained an invalid audio duration."];
   report.status = "fail";
-  report.failure = { phase, httpStatus, endpointOrigin, reason: safeErrors.includes(error?.message) ? error.message : "adapter-failure-see-http-status" };
+  const structuralValidation = /^(Live question generator (must return|returned|omitted)|Draft generator returned)/.test(error?.message ?? "");
+  report.failure = { phase, httpStatus, endpointOrigin, reason: safeErrors.includes(error?.message) || structuralValidation ? error.message : "adapter-failure-see-http-status" };
   process.exitCode = 1;
 } finally {
   globalThis.fetch = originalFetch;
