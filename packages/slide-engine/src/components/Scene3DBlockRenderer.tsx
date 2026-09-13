@@ -293,8 +293,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
           value={state.stiffness}
           onChange={(value) => update((next) => { next.stiffness = value; })}
         />
-        <output aria-label="Kreisfrequenz" className="lb-scene3d-math">ω = {formatModellNumber(Math.sqrt(state.stiffness))} rad/s</output>
-        <span className="lb-scene3d-math">m = 1 kg</span>
+        <output aria-label="Kreisfrequenz" className="lb-scene3d-math lb-scene3d-accessible-description">ω = {formatModellNumber(Math.sqrt(state.stiffness))} rad/s</output>
         <p className="lb-scene3d-accessible-description">Ideale hängende Feder ohne Dämpfung. Die Verlängerung wird ab der unbelasteten Lage nach unten gemessen. Die Ruhelage liegt bei mg/k. Eine Änderung der Steifigkeit führt Arbeit zu oder ab; Position und Geschwindigkeit bleiben dabei stetig.</p>
         </>
       );

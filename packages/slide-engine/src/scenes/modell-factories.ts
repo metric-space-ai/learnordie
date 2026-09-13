@@ -69,7 +69,7 @@ function makeLaw(root,lab,state){
  const body=box(hanger,.65,.6,.6,C.dark,0,0,0);body.name='law-mass';
  const equilibrium=line(hanger,[[-.72,0,0],[.72,0,0]],C.violet,.65);equilibrium.name='law-equilibrium';
  lab(group(hanger,.75,1.1,0),'k','highlight');lab(group(body,.58,0,0),'m = 1 kg','highlight');
- const eqLabel=lab(group(hanger,0,-2.6,0),'Δl₀ = mg/k','dim');
+ const eqLabel=lab(group(hanger,0,-2.15,0),'Δl₀ = mg/k','dim');
  const graph=group(root,.1,0,0),w=3.4;
  for(let i=0;i<5;i++){const y=-1.1+i*.55;line(graph,[[0,y,0],[w,y,0]],C.line,.4);const x=i*w/4;line(graph,[[x,-1.1,0],[x,1.1,0]],C.line,.3);}
  const geom=new T.BufferGeometry();geom.setAttribute('position',new T.BufferAttribute(new Float32Array(512*3),3));
@@ -78,7 +78,7 @@ function makeLaw(root,lab,state){
  lab(group(graph,0,1.5,0),'Δl [m]','dim');lab(group(graph,w+.25,-1.3,0),'t [s]','dim');
  const hi=lab(group(graph,-.4,1.1,0),'','dim'),lo=lab(group(graph,-.4,-1.1,0),'','dim');
  const start=lab(group(graph,0,-1.5,0),'0','dim'),end=lab(group(graph,w,-1.5,0),'8','dim');
- return{width:8.4,height:6.1,camera:[.1,.5,10],top:136,update(t,dt){
+ return{width:8.4,height:4.8,camera:[.1,.5,10],top:136,update(t,dt){
   if(dt>0){state.oscillator=advanceOscillator(state.oscillator,state.stiffness,dt);state.oscillatorTrace.push({time:state.oscillator.time,x:state.oscillator.x});}
   const q=oscillatorQuantities(state.oscillator,state.stiffness),from=Math.max(0,state.oscillator.time-8);
   while(state.oscillatorTrace.length>1&&state.oscillatorTrace[1].time<from)state.oscillatorTrace.shift();
