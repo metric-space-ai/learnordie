@@ -321,6 +321,7 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
   const slides = existing.slides.map((current, index): SlideNode => {
     const authored = candidateBase.slides[index];
     const expectedSource = originalModelSlides[index];
+    const expectedTitle = originalModelText(expectedSource.title);
     const scene = sceneBlock(current)?.sceneId;
     if (!scene || scene !== `modell.${expectedSource.scene}` || !sourceSlides.has(scene)) {
       conflicts.push({ code: "slide_identity", path: `slides.${index}`, slideId: current.id, message: `Slide ${current.id} does not identify original scene ${expectedSource.scene}.` });
@@ -381,7 +382,7 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
         if (authoredScene) mapping.set(authoredScene.id, sourceElement.id);
       }
     }
-    if (normalizedText(current.title) === normalizedText(expectedSource.title)) statuses.title = "preserved";
+    if (normalizedText(current.title) === normalizedText(expectedTitle)) statuses.title = "preserved";
     else if (!baseline) {
       statuses.title = "conflict";
       conflicts.push({ code: "source_edit", path: `slides.${current.id}.title`, slideId: current.id, message: "Existing slide title differs from the original source." });
@@ -402,7 +403,7 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
     const slide: SlideNode = {
       ...current,
       id: current.id,
-      title: normalizedText(current.title) === normalizedText(expectedSource.title) || baseline ? authored.title : current.title,
+      title: normalizedText(current.title) === normalizedText(expectedTitle) || baseline ? authored.title : current.title,
       blocks: mergedBlocks,
       canvas: mergeCanvas(current.canvas, mapped.canvas, conflicts, current.id, preservedCanvasElementIds),
       speakerNotes: mergedNotes,

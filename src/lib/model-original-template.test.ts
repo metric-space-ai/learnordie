@@ -129,7 +129,7 @@ test("a source-import shaped deck gets missing authored fields while retaining e
       canvas: undefined,
       blocks: slide.blocks
         .filter((block) => ["kicker", "lead", "formula", "scene"].some((field) => block.id.endsWith(`-${field}`)))
-        .map((block) => block.id.endsWith("-kicker") ? { ...block, type: "heading" as const } : block.id.endsWith("-formula") ? { ...block, type: "callout" as const } : block.id.endsWith("-scene") && block.type === "scene3d" ? { ...block, altText: `${block.altText}. ${block.caption}`, caption: undefined } : block)
+        .map((block) => block.id.endsWith("-kicker") ? { ...block, type: "heading" as const } : block.id.endsWith("-formula") ? { ...block, type: "callout" as const, tone: "key" as const } : block.id.endsWith("-scene") && block.type === "scene3d" ? { ...block, altText: `${block.altText}. ${block.caption}`, caption: undefined } : block)
     }))
   });
   const plan = planOriginalModelUpgrade(reduced);
