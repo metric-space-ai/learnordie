@@ -68,7 +68,7 @@ jobs:
         run: npm run lint
 
       - name: Atomic question wording migration contracts
-        run: node --test --test-concurrency=1 tests/integration/question-wording-postgres.test.mjs
+        run: node --test --test-concurrency=1 tests/integration/question-wording-postgres.test.mjs tests/integration/private-wording-backup.test.mjs
         env:
           QUESTION_REVIEW_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
 
@@ -101,7 +101,7 @@ jobs:
 
       - name: Student draft race acceptance
         timeout-minutes: 8
-        run: npx playwright test --config=playwright.config.ts --workers=1 tests/e2e/student-draft-postgres-races.spec.ts
+        run: npx playwright test --config=playwright.config.ts --workers=1 tests/e2e/student-draft-postgres-races.spec.ts tests/e2e/student-question-ticker.spec.ts
         env:
           E2E_AI_PROVIDER: learnordie-responses
           E2E_EVIDENCE_SCOPE: student-draft-races

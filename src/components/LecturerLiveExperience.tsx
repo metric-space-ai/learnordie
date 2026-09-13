@@ -13,6 +13,7 @@ import { LeaderboardModal } from "./LeaderboardModal";
 import { Presence } from "./Presence";
 import { PresenterRoundStatus } from "./PresenterRoundStatus";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
+import { StudentQuestionTicker } from "./StudentQuestionTicker";
 import { ThemeToggle } from "./theme/ThemeToggle";
 
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
@@ -173,6 +174,15 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     setFamilyIndex(0);
     void sendLive({ action: "slide", slideIndex: showJoinIntro ? 0 : Math.min(slide + 1, lecture.slides.length - 1), showIntro: false });
   }, [showJoinIntro, slide, lecture.slides.length, sendLive]);
+
+  const publishStudentDraft = useCallback(async (questionId: string) => {
+    const operation = sessionScopeRef.current.capture();
+    if (!operation || showJoinIntro || !live.connected || live.busy || questionOpen || liveGeneratingRef.current) return false;
+    // The command carries the current revision; a concurrent slide/session change
+    // is rejected by the server rather than publishing into a different session.
+    const published = await sendLive({ action: "publishDraft", questionId });
+    return sessionScopeRef.current.isCurrent(operation) && published;
+  }, [showJoinIntro, live.connected, live.busy, questionOpen, sendLive]);
 
   function stopListening() {
     microphoneRequestRef.current += 1;
@@ -636,6 +646,14 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
       <PresenterRoundStatus state={live.state} connected={live.connected} serverOffset={live.serverOffset}
         generating={liveQuestionStatus === "generating"} message={roundMessage || live.error} leaderboardEnabled={lecture.leaderboardEnabled} />
+
+      <StudentQuestionTicker
+        lectureId={lecture.id}
+        csrfToken={csrfToken}
+        placement="bottom-left"
+        canPublish={Boolean(activeSessionId && !showJoinIntro && live.connected && !live.busy && !questionOpen && liveQuestionStatus !== "generating")}
+        onPublishDraft={publishStudentDraft}
+      />
 
       <details className="presentation-controls" ref={controlsRef}>
       <summary aria-label="Präsentationssteuerung" title="Präsentationssteuerung öffnen">⋯</summary>

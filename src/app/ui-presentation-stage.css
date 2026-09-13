@@ -31,3 +31,9 @@ body:has(.presentation-screen) .excalidraw-tooltip { display: none; }
 .presenter-round-toast:not(:empty) { animation: app-panel-enter 160ms ease-out both; }
 .presentation-screen:has(.presentation-controls[open]) .presenter-round-status { bottom: auto; top: 40px; }
 @media (prefers-reduced-motion: reduce) { .presenter-round-toast { animation: none !important; } }
+
+/* A quiet, opt-in inbox, never another toolbar across the slide. */
+.presentation-screen > .student-question-ticker { display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 8px; }
+.presentation-screen > .student-question-ticker .student-question-ticker__toggle { margin: 0; min-height: 44px; padding: 6px 10px; border: 0; background: var(--panel); box-shadow: none; }
+.presentation-screen > .student-question-ticker .student-question-ticker__panel { width: 100%; margin: 0; box-sizing: border-box; animation: app-panel-enter 160ms ease-out both; }
+@media (prefers-reduced-motion: reduce) { .presentation-screen > .student-question-ticker .student-question-ticker__panel { animation: none; } }
