@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { originalModelCompanion } from "../../src/lib/model-original-source";
 
 // These stories run against the real isolated Postgres E2E server. Only its
 // explicitly configured, expiring test account is used; no auth/scene mocks.
@@ -206,6 +208,7 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   } finally {
     try {
       if (liveStarted) {
+        await page.getByLabel("Präsentationssteuerung", { exact: true }).click();
         await page.getByRole("button", { name: "Beenden", exact: true }).click();
         await expect(page).toHaveURL(/\/lecturer$/);
       }
@@ -220,6 +223,108 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   await page.reload();
   await expect(page).toHaveURL(/\/lecturer\/login$/);
   clean();
+});
+
+test("one presenter synchronizes three independent guests, timed questions and session scores", async ({ page, browser }, testInfo) => {
+  test.setTimeout(150_000);
+  const lecture = await createLecture(page, "Three guests");
+  const contexts = [];
+  const students: Page[] = [];
+  const clean = [diagnostics(page)];
+  let presenting = false;
+  const controls = async () => {
+    if (!await page.locator(".presentation-controls").evaluate((node) => (node as HTMLDetailsElement).open)) {
+      await page.getByLabel("Präsentationssteuerung", { exact: true }).click();
+    }
+  };
+  try {
+    for (let i = 0; i < 3; i++) {
+      const context = await browser.newContext();
+      contexts.push(context);
+      const student = await context.newPage();
+      students.push(student);
+      clean.push(diagnostics(student));
+    }
+    await page.getByRole("link", { name: /Präsentieren/ }).click();
+    presenting = true;
+    await expect(page.getByRole("region", { name: "Vorlesung beitreten" })).toBeVisible();
+    for (const student of students) {
+      await student.goto(`/l/${lecture.publicToken}`);
+      await expect(student.getByRole("region", { name: "Vorlesung beitreten" })).toBeVisible();
+      await expect(student.getByRole("dialog", { name: /Pseudonym/ })).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
+    for (const student of students) await viewCanvas(student);
+    await expect(page.locator("header, footer")).toHaveCount(0);
+    const identities = await Promise.all(contexts.map(async (context) => (await context.cookies()).find((cookie) => cookie.name === "lb_student_key")?.value));
+    expect(identities.every(Boolean)).toBe(true);
+    expect(new Set(identities).size).toBe(3);
+
+    await controls();
+    await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
+    for (const student of students) {
+      await expect(student.getByRole("region", { name: "Folieninhalt als Text" })).toContainText("Sommerfeldzahl");
+    }
+    await students[2].reload();
+    await expect(students[2].getByRole("region", { name: "Folieninhalt als Text" })).toContainText("Sommerfeldzahl");
+    await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
+    await page.getByLabel("Fragezeit", { exact: true }).selectOption("30");
+    await page.getByLabel("Quiz (Leertaste)", { exact: true }).click();
+    for (const student of students) {
+      await expect(student.getByLabel("Quizfrage", { exact: true })).toBeVisible();
+      await student.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
+      await expect(student.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
+    }
+    await page.getByLabel("Quiz (Leertaste)", { exact: true }).click();
+    for (const [i, student] of students.entries()) {
+      await expect(student.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
+      await student.getByLabel("Eigenes Pseudonym", { exact: true }).fill(`Guest ${lecture.id.slice(0, 6)} ${i + 1}`);
+      await student.getByRole("button", { name: "Sichern", exact: true }).click();
+      await expect(student.getByText("Pseudonym gesichert", { exact: true })).toBeVisible();
+    }
+    // A fresh, unanswered round must disappear on all clients without a close command.
+    await page.getByLabel("Fragezeit", { exact: true }).selectOption("5");
+    await page.getByLabel("Quiz (Leertaste)", { exact: true }).click();
+    await Promise.all(students.map((student) => expect(student.getByLabel("Quizfrage", { exact: true })).toBeVisible()));
+    await Promise.all(students.map((student) => expect(student.getByLabel("Quizfrage", { exact: true })).toHaveCount(0, { timeout: 7_000 })));
+    for (const [i, student] of students.entries()) {
+      await student.getByRole("button", { name: "Rangliste", exact: true }).click();
+      await expect(student.locator(".leader-row.self")).toContainText(`Guest ${lecture.id.slice(0, 6)} ${i + 1}`);
+      await expect(student.locator(".leader-row.self")).toContainText("3");
+      await expect(student.locator(".leader-row")).toHaveCount(3);
+      await testInfo.attach(`live-guest-${i + 1}-score`, { body: await student.screenshot(), contentType: "image/png" });
+    }
+    await page.getByRole("button", { name: "Rangliste", exact: true }).click();
+    await expect(page.locator(".leader-row")).toHaveCount(3);
+    for (const assertClean of clean) assertClean();
+  } finally {
+    try {
+      if (presenting) {
+        // Close an open scoreboard so it cannot intercept the presenter action.
+        const close = page.getByRole("button", { name: "Rangliste schließen", exact: true });
+        if (await close.isVisible()) await close.click();
+        await controls();
+        await page.getByRole("button", { name: "Beenden", exact: true }).click();
+        await expect(page).toHaveURL(/\/lecturer$/);
+      }
+    } finally {
+      for (const context of contexts) await context.close();
+    }
+  }
+});
+
+test("the original companion downloads through the browser without changing a byte", async ({ page }) => {
+  await login(page);
+  await page.getByLabel("Studio-Menü", { exact: true }).click();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Vorlesungsunterlage herunterladen", exact: true }).click();
+  const download = await downloaded;
+  expect(download.suggestedFilename()).toBe("Modellbegriff-Vorlesungsunterlage.md");
+  expect(await download.failure()).toBeNull();
+  const file = await download.path();
+  expect(file).toBeTruthy();
+  const content = await readFile(file!);
+  expect(createHash("sha256").update(content).digest("hex")).toBe(createHash("sha256").update(originalModelCompanion).digest("hex"));
 });
 
 test("HTML/CSS embeds persist but scripts, parent DOM access, forms and external requests do not", async ({ page, browser }, testInfo) => {
@@ -237,6 +342,7 @@ test("HTML/CSS embeds persist but scripts, parent DOM access, forms and external
     <form action="${sentinel}/form"><button>Verbotenes Formular</button></form>
     <a href="javascript:parent.document.documentElement.dataset.canvasEscape='yes'">Ausbruch</a>
     <iframe src="${sentinel}/frame"></iframe><meta http-equiv="refresh" content="0;url=${sentinel}/navigate">`;
+  await page.getByLabel("Element einfügen", { exact: true }).click();
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "HTML", exact: true }).click();
   await page.getByRole("textbox", { name: "HTML und CSS", exact: true }).fill(html);
   await page.getByRole("button", { name: "HTML einfügen", exact: true }).click();
@@ -286,6 +392,7 @@ test("three.js embeds are real WebGL, independently interactive and survive save
   await page.setViewportSize({ width: 1440, height: 1000 });
   const clean = diagnostics(page);
   const lecture = await createLecture(page, "Three");
+  await page.getByLabel("Element einfügen", { exact: true }).click();
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "3D-Szene", exact: true }).click();
   await page.getByLabel("3D-Szene auswählen", { exact: true }).selectOption("modell.morph");
   await page.getByRole("button", { name: "3D-Szene einfügen", exact: true }).click();

@@ -84,7 +84,7 @@ async function save(page: Page, id: string) {
 async function addNativeText(page: Page, text: string) {
   const editor = page.getByLabel("Excalidraw-Folieneditor", { exact: true });
   await expect(editor).toHaveAttribute("data-canvas-ready", "true");
-  await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "Text", exact: true }).click();
+  await editor.getByRole("radio", { name: "Text", exact: true }).click();
   const canvas = editor.locator("canvas.interactive");
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
@@ -199,6 +199,7 @@ test("Material extraction, question generation and HTML formula/table editing re
 
   // Formulas/tables now use native embedded HTML instead of the retired block
   // inspector; ordinary slide text above was edited with the real Text tool.
+  await page.getByLabel("Element einfügen", { exact: true }).click();
   await page.getByRole("toolbar", { name: "Folienelemente" }).getByRole("button", { name: "HTML", exact: true }).click();
   await page.getByLabel("HTML und CSS", { exact: true }).fill(`<h2>Sommerfeldzahl ${nonce}</h2><p>S = η · n / p</p><table><thead><tr><th>Betriebspunkt</th><th>Reibzustand</th></tr></thead><tbody><tr><td>Anlauf</td><td>Mischreibung ${nonce}</td></tr></tbody></table>`);
   await page.getByRole("button", { name: "HTML einfügen", exact: true }).click();
