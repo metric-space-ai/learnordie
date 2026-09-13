@@ -42,7 +42,7 @@ const choices = [
   ["Die Masse hängt tiefer und schwingt langsamer.", "Die Masse hängt höher und schwingt schneller.", "Die Masse hängt tiefer und schwingt schneller.", "Die Masse hängt höher und schwingt langsamer."],
   ["Die Eigenkreisfrequenz sinkt mit der Wurzel der Steifigkeit.", "Die weichere Feder vergrößert die Masse.", "Die Gewichtskraft verschwindet.", "Die Eigenkreisfrequenz steigt mit kleinerer Steifigkeit."],
   ["Sie halbiert sich.", "Sie verdoppelt sich.", "Sie bleibt gleich.", "Sie vervierfacht sich."],
-  ["Die Steifigkeit erhöhen.", "Die Steifigkeit verringern.", "Nur die Anfangsphase ändern.", "Nur später mit der Messung beginnen."]
+  ["Die Steifigkeit erhöhen.", "Die Steifigkeit verringern.", "Nur die Anfangsauslenkung vergrößern.", "Nur die Anfangsauslenkung verkleinern."]
 ];
 const valid = levels.map((level,i)=>({ level, text:stems[i], answers:choices[i].map((text,j)=>({key:"ABCD"[j],text,correct:j===0})), explanation:"Es gilt omega = sqrt(k/m); die statische Auslenkung ist m*g/k." }));
 const invalid = structuredClone(valid);
