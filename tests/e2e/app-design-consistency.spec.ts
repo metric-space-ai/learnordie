@@ -70,7 +70,7 @@ async function keyboardFocus(control: Locator) {
 
 for (const variant of variants) {
   test.describe(variant.name, () => {
-    test.use({ viewport: variant.viewport, colorScheme: variant.colorScheme, reducedMotion: "reduce" });
+    test.use({ viewport: variant.viewport, colorScheme: variant.colorScheme, contextOptions: { reducedMotion: "reduce" } });
 
     test("entry, unknown join, onboarding and test-login controls share the shell", async ({ page }, testInfo) => {
       const assertClean = diagnostics(page);
