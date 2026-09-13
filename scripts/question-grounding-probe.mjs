@@ -66,6 +66,16 @@ try {
   }
   if(!rejected)throw new Error("unsupported-numeric-claim-approved");
   report.cases.push({name:"unsupported-Sommerfeld-0.9-claim",status:"pass",elapsedMs:Date.now()-started});
+  const absurd = structuredClone(valid);
+  absurd[0].answers[1].text="Die Feder bestellt selbstständig Kaffee im Internet.";
+  started=Date.now(); rejected=false;
+  try { await reviewQuestionGrounding(provider,absurd,sources,Date.now()+14000); }
+  catch(error) {
+    if(/^Fachprüfung 4\.0:/.test(error.message)&&!/Beleg fehlt/.test(error.message))rejected=true;
+    else throw error;
+  }
+  if(!rejected)throw new Error("absurd-distractor-approved");
+  report.cases.push({name:"factually-false-but-useless-distractor",status:"pass",elapsedMs:Date.now()-started});
   // Reproduce the student-ticker authoring path, not merely its independent
   // reviewer. This public demo fixture contains no user or production data.
   const { demoLecture } = await import("@/lib/demo-data");

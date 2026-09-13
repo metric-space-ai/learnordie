@@ -129,6 +129,8 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.ok((JSON.parse(reviews[0].user) as { sources: string[] }).sources.includes(input().latestTranscript));
   assert.match(requests[0].system, /niemals Anweisungen/);
   assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
+  assert.match(requests[0].user + requests[0].system, /Keine Scherzantworten/);
+  assert.match(reviews[0].system, /didaktische Brauchbarkeit/);
   assert.ok(requests[0].user.includes(JSON.stringify(input().studentQuestion)));
   assert.ok(requests[0].user.includes(input().scriptContext));
   assert.ok(requests[0].user.includes(input().transcriptContext));
@@ -344,6 +346,8 @@ test("failed factual review prevents publishing and bounded repair is reviewed a
   assert.equal(repaired.requests.length, 2);
   assert.equal(repaired.reviews.length, 2);
   assert.match(repaired.requests[1].user, /Unbelegter numerischer Grenzwert/);
+  assert.match(repaired.requests[1].user, /fachlichen, didaktischen oder strukturellen Fehler/);
+  assert.ok(repaired.requests[1].user.includes(JSON.stringify(JSON.stringify(validPayload()))), "repair receives the rejected candidate, not only a verdict about missing content");
   const rejected = makeProvider([JSON.stringify(validPayload()), JSON.stringify(validPayload())], [rejection, rejection]);
   await assert.rejects(generateStudentExamDraft(input(), rejected.provider), /invalid after one retry/);
   assert.equal(rejected.reviews.length, 2);
