@@ -1214,6 +1214,61 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
   }
 });
 
+test("OpenAI-kompatible OCR-Aliase bestehen Preflight und pruefen Chat-Completions gegen den Providervertrag", async () => {
+  const ocrEnv = {
+    NEXT_PUBLIC_APP_URL: "https://learnordie.app",
+    LEARNBUDDY_DEPLOYMENT_ENV: "production",
+    LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnbuddy.cloud",
+    LEARNBUDDY_OCR_API_KEY: "ocr-contract-secret"
+  };
+  const aliases = ["openai-compatible", "openai-vision", "vision-chat"];
+
+  for (const provider of aliases) {
+    const preflight = await runAdminCommandAllowFailure(["preflight", "--profile", "production"], {
+      ...ocrEnv,
+      LEARNBUDDY_OCR_PROVIDER: provider
+    });
+    const preflightCheck = preflight.checks?.find((check) => check.id === "ocr_provider");
+    expect(preflightCheck?.status, `admin preflight: ${provider}`).toBe("pass");
+
+    const smoke = await runProviderSmokeAllowFailure([
+      "--profile", "production",
+      "--mock",
+      "--only", "ocr"
+    ], { LEARNBUDDY_OCR_PROVIDER: provider });
+    const smokeCheck = smoke.checks?.find((check) => check.id === "ocr");
+    expect(smoke.ok, `provider contract smoke: ${provider}`).toBe(true);
+    expect(smokeCheck?.status, `provider contract smoke: ${provider}`).toBe("pass");
+    expect(smokeCheck?.details?.provider, `provider contract smoke: ${provider}`).toBe(provider);
+    expect(smokeCheck?.details?.requestFormat, `provider contract smoke: ${provider}`).toBe("openai-compatible-chat-completions");
+  }
+
+  for (const [missingName, overrides] of [
+    ["base URL", { LEARNBUDDY_OCR_BASE_URL: "" }],
+    ["API key", { LEARNBUDDY_OCR_API_KEY: "" }]
+  ] as const) {
+    const preflight = await runAdminCommandAllowFailure(["preflight", "--profile", "production"], {
+      ...ocrEnv,
+      ...overrides,
+      LEARNBUDDY_OCR_PROVIDER: "openai-compatible"
+    });
+    const blocker = preflight.blockers?.find((item) => item.id === "ocr_provider");
+    expect(blocker, `admin preflight must reject missing ${missingName}`).toBeTruthy();
+    expect(JSON.stringify(blocker?.details), `admin preflight must identify missing ${missingName}`).toContain(
+      missingName === "base URL" ? "LEARNBUDDY_OCR_BASE_URL" : "LEARNBUDDY_OCR_API_KEY"
+    );
+
+    const smoke = await runProviderSmokeAllowFailure(["--profile", "production", "--only", "ocr"], {
+      ...ocrEnv,
+      ...overrides,
+      LEARNBUDDY_OCR_PROVIDER: "openai-compatible"
+    });
+    expect(smoke.blockers?.find((item) => item.id === "ocr")?.message, `provider smoke must reject missing ${missingName}`).toContain(
+      missingName === "base URL" ? "LEARNBUDDY_OCR_BASE_URL is missing" : "LEARNBUDDY_OCR_API_KEY is missing"
+    );
+  }
+});
+
 test("Browser-STT-Capture erzeugt providerkompatible WAV-Segmente", async () => {
   const wav = encodePcm16Wav(new Float32Array([0, 1, -1, 0.5, -0.5]), 16_000);
   const bytes = new Uint8Array(await wav.arrayBuffer());
