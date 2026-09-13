@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 
 import { audioFileExtension, recordAudioSnippet, startContinuousWavCapture } from "@/lib/audio-capture";
 import type { RecordedPassage } from "@/lib/audio-capture";
+import { LiveOperationScope, type LiveOperation } from "@/lib/live-operation-scope";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
 import { LeaderboardModal } from "./LeaderboardModal";
@@ -17,6 +18,7 @@ import { ThemeToggle } from "./theme/ThemeToggle";
 type MotionStyle = CSSProperties & Record<"--lb-i", number>;
 type QuestionOrigin = "control" | "hotspot" | "space";
 type TranscriptDraft = {
+  operation: LiveOperation;
   id: string;
   text: string;
   provider: string;
@@ -80,7 +82,27 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const slideRef = useRef(slide);
   const dynamicRoundRef = useRef<((mode?: "transcript-only") => Promise<void>) | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
+  const sessionScopeRef = useRef(new LiveOperationScope());
+  const activeSessionId = liveStatus === "active" ? live.state?.sessionId ?? null : null;
   const [roundMessage, setRoundMessage] = useState("");
+
+  useEffect(() => {
+    if (!sessionScopeRef.current.setSession(activeSessionId)) return;
+    transcriptionAbortRef.current?.abort();
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    liveGeneratingRef.current = false;
+    recentSpeechRef.current = { text: "", endedAt: 0 };
+    pendingTranscriptRef.current = "";
+    lastLiveQuestionAtRef.current = 0;
+    setLastTranscriptAt(0);
+    setTranscriptPending(0);
+    setTranscriptDrafts([]);
+    setLiveQuestionStatus("idle");
+    setLiveQuestionMessage("");
+    setRoundMessage("");
+    if (!activeSessionId) stopListening();
+  }, [activeSessionId]);
 
   // This handler is refreshed without capturing the slide while a provider is
   // in flight. Its result is explicitly bound to the original family/session.
@@ -94,7 +116,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       }
       const slideId = lecture.slides[slide]?.id;
       const sessionId = live.state?.sessionId;
-      if (!slideId || !sessionId) return;
+      const operation = sessionScopeRef.current.capture();
+      if (!slideId || !sessionId || !operation || operation.sessionId !== sessionId) return;
       liveGeneratingRef.current = true;
       setLiveQuestionStatus("generating");
       setRoundMessage("");
@@ -104,14 +127,16 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       try {
         const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
           method: "POST", headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
-          body: JSON.stringify({ slideId, mode, transcript: mode ? recentSpeech.text : pendingTranscriptRef.current, allowSlideContext: !mode }), signal: abort.signal
+          body: JSON.stringify({ slideId, mode, sessionId, transcript: mode ? recentSpeech.text : pendingTranscriptRef.current, allowSlideContext: !mode }), signal: AbortSignal.any([abort.signal, operation.signal])
         });
         const payload = await response.json();
+        if (!sessionScopeRef.current.isCurrent(operation)) return;
         if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
         const familyId = payload.family?.[0]?.familyId as string | undefined;
         if (!familyId) throw new Error("Die erzeugte Frage ist noch nicht verfügbar.");
         setQuestions(payload.questions);
         const sent = await sendLive({ action: "fire", familyIndex: 0, familyId, sessionId, durationSeconds: 60 });
+        if (!sessionScopeRef.current.isCurrent(operation)) return;
         if (!sent) throw new Error("Frage erstellt, aber nicht gesendet. Bitte im Menü erneut starten.");
         setLiveQuestionStatus("idle");
       } catch (error) {
@@ -121,8 +146,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         }
       } finally {
         clearTimeout(timeout);
-        if (generationAbortRef.current === abort) generationAbortRef.current = null;
-        liveGeneratingRef.current = false;
+        if (generationAbortRef.current === abort) {
+          generationAbortRef.current = null;
+          liveGeneratingRef.current = false;
+        }
       }
     };
   });
@@ -159,6 +186,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   }
 
   async function startListening() {
+    if (!sessionScopeRef.current.capture()) {
+      setTranscriptMessage("Zuerst die Live-Sitzung starten.");
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       setTranscriptMessage("Kein Mikrofon verfügbar.");
       setSttStatus("error");
@@ -189,17 +220,19 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     }
   }
 
-  const transcribeAudioBlob = useCallback(async (audio: Blob, startedAt: string, endedAt: string, slideIndex: number, mode: TranscriptDraft["mode"], signal?: AbortSignal) => {
+  const transcribeAudioBlob = useCallback(async (audio: Blob, startedAt: string, endedAt: string, slideIndex: number, mode: TranscriptDraft["mode"], operation: LiveOperation, signal?: AbortSignal) => {
+    if (!sessionScopeRef.current.isCurrent(operation)) throw new DOMException("Session ended", "AbortError");
     const formData = new FormData();
     formData.set("audio", audio, `lecture-audio-${Date.now()}.${audioFileExtension(audio)}`);
     formData.set("slideTopic", lecture.slides[slideIndex]?.topic ?? lecture.title);
     formData.set("startedAt", startedAt);
     formData.set("endedAt", endedAt);
+    formData.set("sessionId", operation.sessionId);
     const response = await fetch(`/api/lectures/${lecture.id}/stt`, {
       method: "POST",
       headers: { "x-learnbuddy-csrf": csrfToken },
       body: formData,
-      signal: AbortSignal.any([AbortSignal.timeout(55_000), ...(signal ? [signal] : [])])
+      signal: AbortSignal.any([AbortSignal.timeout(55_000), operation.signal, ...(signal ? [signal] : [])])
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -207,6 +240,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     }
 
     const draft: TranscriptDraft = {
+      operation,
       id: `transcript-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       text: payload.text,
       provider: payload.provider,
@@ -216,7 +250,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       endedAt: payload.endedAt ?? endedAt,
       mode
     };
-    if (disposedRef.current) throw new DOMException("Cancelled", "AbortError");
+    if (disposedRef.current || !sessionScopeRef.current.isCurrent(operation)) throw new DOMException("Cancelled", "AbortError");
     if (draft.text.trim()) setTranscriptDrafts((current) => [draft, ...current].slice(0, MAX_TRANSCRIPT_DRAFTS));
     setTranscriptMessage("");
     setSttStatus(mediaStreamRef.current ? "transcribing" : "idle");
@@ -237,17 +271,21 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     setTranscriptMessage("");
     setSttStatus("transcribing");
     const startedAt = new Date().toISOString();
+    const operation = sessionScopeRef.current.capture();
+    if (!operation) return;
     try {
       const audio = await recordAudioSnippet(stream, MANUAL_STT_SEGMENT_MS);
       const endedAt = new Date().toISOString();
-      await transcribeAudioBlob(audio, startedAt, endedAt, slideRef.current, "manual");
+      await transcribeAudioBlob(audio, startedAt, endedAt, slideRef.current, "manual", operation);
     } catch (error) {
+      if (!sessionScopeRef.current.isCurrent(operation)) return;
       setTranscriptMessage(error instanceof Error ? error.message : "Aufnahme fehlgeschlagen.");
       setSttStatus("error");
     }
   }
 
   async function persistTranscriptDraft(draft: TranscriptDraft) {
+    if (!sessionScopeRef.current.isCurrent(draft.operation)) throw new DOMException("Session ended", "AbortError");
     const response = await fetch(`/api/lectures/${lecture.id}/transcript-segments`, {
       method: "POST",
       headers: {
@@ -258,13 +296,14 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         text: draft.text,
         provider: draft.provider,
         startedAt: draft.startedAt,
-        endedAt: draft.endedAt
+        endedAt: draft.endedAt,
+        sessionId: draft.operation.sessionId
       }),
-      signal: AbortSignal.timeout(20_000)
+      signal: AbortSignal.any([AbortSignal.timeout(20_000), draft.operation.signal])
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error ?? "Transkript konnte nicht gespeichert werden.");
-    if (disposedRef.current) return payload.segment as TranscriptSegment;
+    if (disposedRef.current || !sessionScopeRef.current.isCurrent(draft.operation)) throw new DOMException("Session ended", "AbortError");
     setTranscriptSegments((current) => [payload.segment, ...current]);
     setTranscriptDrafts((current) => current.filter((item) => item.id !== draft.id));
     if (payload.segment.status === "accepted") {
@@ -279,7 +318,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
   async function generateLiveQuestion(slideIndex: number, transcript: string) {
     const slideId = lecture.slides[slideIndex]?.id;
-    if (!slideId || liveGeneratingRef.current) return;
+    const operation = sessionScopeRef.current.capture();
+    if (!slideId || liveGeneratingRef.current || !operation) return;
+    const abort = new AbortController();
+    generationAbortRef.current = abort;
     liveGeneratingRef.current = true;
     setLiveQuestionStatus("generating");
     setLiveQuestionMessage("");
@@ -287,26 +329,34 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
-        body: JSON.stringify({ slideId, transcript, mode: "transcript-only" }),
-        signal: AbortSignal.timeout(55_000)
+        body: JSON.stringify({ slideId, transcript, sessionId: operation.sessionId, mode: "transcript-only" }),
+        signal: AbortSignal.any([AbortSignal.timeout(55_000), abort.signal, operation.signal])
       });
       const payload = await response.json().catch(() => ({}));
+      if (!sessionScopeRef.current.isCurrent(operation)) return;
       if (!response.ok) throw new Error(payload.error ?? "Frage konnte nicht erzeugt werden.");
       setQuestions(payload.questions);
       // Newly generated STT families become explicitly selectable for broadcast.
       if (slideRef.current === slideIndex) {
         setFamilyIndex(Math.max(0, groupQuestionFamilies(questionsForSlide(payload.questions, slideId)).length - 1));
       }
-      pendingTranscriptRef.current = "";
+      // Keep speech accepted while this request was in flight for the next family.
+      if (pendingTranscriptRef.current.startsWith(transcript)) {
+        pendingTranscriptRef.current = pendingTranscriptRef.current.slice(transcript.length).trim();
+      }
       lastLiveQuestionAtRef.current = Date.now();
       const preview = (payload.family as Array<{ level: string; text: string }> | undefined)?.find((item) => item.level === "2.0");
       setLiveQuestionStatus("collecting");
       setLiveQuestionMessage(`Neue Frage auf Folie ${slideIndex + 1}${preview ? `: ${preview.text}` : ""}`);
     } catch (error) {
+      if (!sessionScopeRef.current.isCurrent(operation)) return;
       setLiveQuestionStatus("error");
       setLiveQuestionMessage(error instanceof Error ? error.message : "Frage konnte nicht erzeugt werden.");
     } finally {
-      liveGeneratingRef.current = false;
+      if (generationAbortRef.current === abort) {
+        generationAbortRef.current = null;
+        liveGeneratingRef.current = false;
+      }
     }
   }
 
@@ -315,7 +365,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   useEffect(() => {
     livePipelineRef.current = async (draft, slideIndex) => {
       const segment = await persistTranscriptDraft(draft);
-      if (segment.status !== "accepted") return;
+      if (segment.status !== "accepted" || !sessionScopeRef.current.isCurrent(draft.operation)) return;
       pendingTranscriptRef.current = `${pendingTranscriptRef.current} ${draft.text}`.trim().slice(-LIVE_QUESTION_MAX_PENDING_CHARS);
       setLiveQuestionStatus((current) => (current === "idle" ? "collecting" : current));
       const enoughText = pendingTranscriptRef.current.length >= LIVE_QUESTION_MIN_CHARS;
@@ -335,6 +385,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     try {
       await livePipelineRef.current?.(draft, slideRef.current);
     } catch (error) {
+      if (!sessionScopeRef.current.isCurrent(draft.operation)) return;
       setTranscriptMessage(error instanceof Error ? error.message : "Transkript konnte nicht gespeichert werden.");
       setSttStatus("error");
     } finally { setTranscriptSavingId(null); }
@@ -374,9 +425,11 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
   useEffect(() => {
     disposedRef.current = false;
+    const sessionScope = sessionScopeRef.current;
     const timer = window.setInterval(() => setStatusClock(Date.now()), 5000);
     return () => {
     disposedRef.current = true;
+    sessionScope.dispose();
     microphoneRequestRef.current += 1;
     window.clearInterval(timer);
     transcriptionAbortRef.current?.abort();
@@ -401,7 +454,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
 
   useEffect(() => {
     const stream = mediaStreamRef.current;
-    if (!autoSegmenting || !listening || !stream) return;
+    const sessionScope = sessionScopeRef.current;
+    const currentOperation = sessionScope.capture();
+    if (!autoSegmenting || !listening || !stream || !currentOperation) return;
+    const operation = currentOperation;
     const abort = new AbortController();
     transcriptionAbortRef.current = abort;
     let closing = false;
@@ -415,8 +471,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       abort.abort();
       queue.length = 0;
       void capture?.stop(false);
+      if (disposedRef.current || !sessionScopeRef.current.isCurrent(operation)) return;
       stream?.getTracks().forEach(track => track.stop());
-      if (disposedRef.current) return;
       setTranscriptPending(0);
       if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
       setListening(false); setAutoSegmenting(false);
@@ -430,18 +486,18 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         while (queue.length && !abort.signal.aborted) {
           const passage = queue.shift()!;
           setSttStatus("transcribing");
-          const draft = await transcribeAudioBlob(passage.audio, passage.startedAt, passage.endedAt, passage.slideIndex, "auto", abort.signal);
+          const draft = await transcribeAudioBlob(passage.audio, passage.startedAt, passage.endedAt, passage.slideIndex, "auto", operation, abort.signal);
           if (draft.text.trim().length >= 8) await livePipelineRef.current?.(draft, passage.slideIndex);
-          if (!disposedRef.current) setTranscriptPending(queue.length);
+          if (!disposedRef.current && sessionScopeRef.current.isCurrent(operation)) setTranscriptPending(queue.length);
         }
       } catch (error) { if (!disposedRef.current && !abort.signal.aborted) fail(error); }
       finally {
         draining = false;
-        if (!disposedRef.current) setTranscriptPending(queue.length);
+        if (!disposedRef.current && sessionScopeRef.current.isCurrent(operation)) setTranscriptPending(queue.length);
       }
     }
     void startContinuousWavCapture(stream, AUTO_STT_SEGMENT_MS, passage => {
-      if (abort.signal.aborted || disposedRef.current) return;
+      if (abort.signal.aborted || disposedRef.current || !sessionScopeRef.current.isCurrent(operation)) return;
       if (queue.length >= MAX_QUEUED_PASSAGES) {
         fail(new Error("Der Transkriptionsdienst verarbeitet die Aufnahme zu langsam."));
         return;
@@ -457,9 +513,9 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     return () => {
       closing = true;
       // User stop flushes the final passage; navigation aborts queued requests.
-      void capture?.stop(!disposedRef.current && !abort.signal.aborted);
+      void capture?.stop(!disposedRef.current && !abort.signal.aborted && sessionScope.isCurrent(operation));
     };
-  }, [autoSegmenting, listening, transcribeAudioBlob]);
+  }, [autoSegmenting, listening, transcribeAudioBlob, activeSessionId]);
 
   const recordingState = sttStatus === "error" ? "error" : !listening ? transcriptPending ? "pending" : "off"
     : lastTranscriptAt > 0 && statusClock - lastTranscriptAt < 30_000 ? "confirmed" : "pending";
