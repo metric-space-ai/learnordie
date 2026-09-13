@@ -14,6 +14,7 @@ import "./ui-studio.css";
 import "./ui-present.css";
 import "./ui-live-session.css";
 import "./ui-app-design.css";
+import "./ui-app-consistency.css";
 import "./ui-excalidraw.css";
 import "./ui-presentation-stage.css";
 
