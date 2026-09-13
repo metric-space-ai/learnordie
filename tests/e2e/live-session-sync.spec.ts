@@ -69,6 +69,7 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     for (const page of [teacher, first, second]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[0].id);
     await first.keyboard.press("ArrowRight");
     await expect(first.locator(".slide-nav .slide-count")).toHaveText(`1 / ${lecture.slides.length}`);
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
     await teacher.getByRole("button", { name: "Nächste Folie", exact: true }).click();
     for (const page of [first, second]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[1].id);
     await teacher.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
@@ -193,6 +194,7 @@ test("Private presenter route rejects another lecturer; DB lock cannot extend an
     await owner.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     await student.goto(`/l/${lecture.publicToken}`);
     await expect.poll(async () => (await studentContext.cookies()).some((cookie) => cookie.name === "lb_student_key")).toBe(true);
+    await owner.getByLabel("Präsentationssteuerung", { exact: true }).click();
     await owner.getByLabel("Fragezeit", { exact: true }).selectOption("5");
     await owner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
     const state = await (await owner.request.get(`/api/lecture/${lecture.publicToken}/live`)).json() as LiveSessionView;

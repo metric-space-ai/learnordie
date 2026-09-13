@@ -21,7 +21,12 @@ function sanitizerModule() {
 test("HTML/CSS sidecar preserves content but blocks scripts, network, forms and parent access", async ({ page }) => {
   await page.route("**/__qa/canvas-html-module.mjs", (route) => route.fulfill({ contentType: "text/javascript", body: sanitizerModule() }));
   const forbiddenRequests: string[] = [];
-  page.on("request", (request) => { if (request.url().includes("embed-denied.invalid")) forbiddenRequests.push(request.url()); });
+  // Chromium emits request events even for CSP-blocked attempts. Only a request
+  // reaching interception is eligible for network dispatch; abort it safely.
+  await page.route("https://embed-denied.invalid/**", async (route) => {
+    forbiddenRequests.push(route.request().url());
+    await route.abort();
+  });
   await page.goto("/");
   await page.evaluate(async () => {
     const helperUrl = "/__qa/canvas-html-module.mjs";

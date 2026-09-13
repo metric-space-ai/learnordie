@@ -25,7 +25,8 @@ const clean = (value) => secrets.reduce((text, secret) => secret ? text.split(se
 const record = (id, status, message, details = {}) => checks.push({ id, status, message: clean(message), details });
 const number = (key, fallback, min, max) => Math.max(min, Math.min(max, Number(args.get(key)) || fallback));
 const deadline = Date.now() + number("timeout-ms", 90000, 5000, 300000);
-const participantsCount = Math.floor(number("participants", 30, 1, 250));
+const DEFAULT_PARTICIPANTS = 30;
+const participantsCount = Math.floor(number("participants", DEFAULT_PARTICIPANTS, 1, 250));
 const concurrency = Math.floor(number("concurrency", 2, 1, 2));
 const anchorRounds = Math.floor(number("anchor-rounds", 3, 1, 20));
 const maxP95 = number("max-p95-ms", 5000, 100, 60000);

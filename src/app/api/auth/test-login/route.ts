@@ -4,13 +4,13 @@ import { z } from "zod";
 import { loginTestAccount, MagicLinkRateLimitError } from "@/server/auth";
 import { readJsonBody } from "@/server/request-json";
 import { configuredTestAccounts } from "@/server/test-accounts";
+import { sameOrigin } from "@/server/request-origin";
 
 const schema = z.object({ email: z.email().max(160), password: z.string().min(1).max(256) });
 
 export async function POST(request: Request) {
   if (!configuredTestAccounts().length) return NextResponse.json({ error: "Testzugang nicht verfügbar." }, { status: 404 });
-  const origin = request.headers.get("origin");
-  if (request.headers.get("sec-fetch-site") === "cross-site" || (origin && origin !== new URL(request.url).origin)) {
+  if (!sameOrigin(request)) {
     return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403 });
   }
   const body = await readJsonBody(request, 4096);

@@ -26,6 +26,7 @@ const child = spawn(
     "src/server/student-claims.test.ts",
     "src/server/test-accounts.test.ts",
     "src/server/request-json.test.ts",
+    "src/server/request-origin.test.ts",
     "packages/slide-engine/src/excalidraw/scene.test.ts",
     "tests/unit/excalidraw-runtime.test.mjs",
     "tests/unit/standalone-native-export.test.ts"

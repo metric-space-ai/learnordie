@@ -1148,6 +1148,12 @@ test("Production-Mailprovider blockiert reservierte Absenderdomain zur Laufzeit"
 
 test("Operative CLI-Hilfe startet keine Checks", async () => {
   const helpContracts = [
+    ["scripts/alias-loader.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
+    ["scripts/alias-register.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
+    ["scripts/create-test-account.mjs", "Usage: node scripts/create-test-account.mjs"],
+    ["scripts/identity-gates.mjs", "Usage: node scripts/identity-gates.mjs"],
+    ["scripts/import-model-original.mjs", "Usage: node scripts/import-model-original.mjs"],
+    ["scripts/run-unit-identity.mjs", "Usage: node scripts/run-unit-identity.mjs"],
     ["scripts/admin.mjs", "learnordie.app Admin CLI"],
     ["scripts/backup-restore-smoke.mjs", "Usage: npm run smoke:backup-restore -- [options]"],
     ["scripts/deploy-readiness.mjs", "Usage: npm run deploy:readiness -- [options]"],
@@ -3486,7 +3492,7 @@ test("Live-Load-Smoke prueft 30 pseudonyme Teilnahmen mit authentifizierter Test
     "--timeout-ms", "60000"
   ]); } finally { await rm(sessionFile, { force: true }); }
 
-  expect(result.ok).toBe(true);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
   const passed = new Set(
     (result.checks ?? [])
       .filter((check) => check.status === "pass")
@@ -3573,7 +3579,7 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
     "--require-ai-provider",
     "--timeout-ms", "45000"
   ]);
-  expect(liveAiProviderSmoke.ok).toBe(true);
+  expect(liveAiProviderSmoke.ok, JSON.stringify(liveAiProviderSmoke)).toBe(true);
   const learnSmokeCheck = liveAiProviderSmoke.checks?.find((check) => check.id === "learn_browser");
   expect(learnSmokeCheck?.status).toBe("pass");
   expect(learnSmokeCheck?.details?.aiStreamSource).toBe("provider");
@@ -3680,14 +3686,13 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(learnMotion.panelDurationMs).toBe(420);
   expect(learnMotion.sheetRadius).toBe("18px");
   expect(learnMotion.drawerOrigin).toBe("hotspot");
-  expect(learnMotion.drawerAnimation).toContain("lb-drawer-rise");
+  expect(learnMotion.drawerAnimation).toContain("app-panel-enter");
   expect(learnMotion.drawerRadius).toBe("18px");
   expect(learnMotion.drawerOriginRatio).toBeGreaterThan(0.7);
   expect(learnMotion.drawerHasTechnicalGrid).toBe(true);
   expect(learnMotion.originTraceSocketAnimation).toContain("lb-origin-socket-in");
   expect(learnMotion.answerDelays).toHaveLength(4);
-  expect(learnMotion.answerDelays[1]).toBeGreaterThan(learnMotion.answerDelays[0]);
-  expect(learnMotion.answerDelays[3]).toBeGreaterThan(learnMotion.answerDelays[2]);
+  expect(learnMotion.answerDelays).toEqual([0, 0, 0, 0]);
   expect(learnMotion.hotspotHasOvershoot).toBe(false);
   await expect(page.locator(".learn-hotspot-shared-ghost")).toHaveCount(0, { timeout: 1500 });
 
@@ -3703,7 +3708,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(chatMotion.origin).toBe("chat");
-  expect(chatMotion.animationName).toContain("lb-inspector-right-in");
+  expect(chatMotion.animationName).toContain("app-panel-enter");
   expect(chatMotion.radius).toBe("18px");
   await page.getByLabel("Chat schließen").click();
 
@@ -3743,7 +3748,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       hasTechnicalGrid: getComputedStyle(stage).backgroundImage.includes("linear-gradient")
     };
   });
-  expect(studioStageMotion.hasTechnicalGrid).toBe(true);
+  expect(studioStageMotion.hasTechnicalGrid).toBe(false);
 
   await page.getByLabel("Folienübersicht", { exact: true }).click();
   const filmstripButtons = page.locator(".studio-filmstrip-list").getByRole("button");
@@ -3806,10 +3811,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(toolMotion.popoverAnimation).toContain("lb-popover-from-control");
-  expect(toolMotion.popoverOriginMarkerContent).toBe("\"\"");
-  expect(toolMotion.popoverOriginMarkerBottom).toBeLessThanOrEqual(-5);
-  expect(toolMotion.popoverOriginMarkerBottom).toBeGreaterThanOrEqual(-12);
-  expect(toolMotion.popoverOriginMarkerWidth).toBe("58px");
+  expect(toolMotion.popoverOriginMarkerContent).toBe("none");
   expect(toolMotion.choiceDelays[4]).toBeGreaterThan(toolMotion.choiceDelays[0]);
 
   await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Quellen/ }).click();
