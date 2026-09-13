@@ -127,6 +127,25 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     if (moreRef.current) moreRef.current.open = false;
   }
 
+  function openLeaderboard() {
+    closeMore();
+    setQuestionOpen(false);
+    setPeekingSlide(false);
+    setChatOpen(false);
+    setEvaluationOpen(false);
+    setLeaderboardOpen(true);
+    void loadLeaderboard();
+  }
+
+  function openEvaluation() {
+    closeMore();
+    setQuestionOpen(false);
+    setPeekingSlide(false);
+    setChatOpen(false);
+    setLeaderboardOpen(false);
+    setEvaluationOpen(true);
+  }
+
   const previous = useCallback(() => setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length), [lecture.slides.length]);
   const next = useCallback(() => setSlide((current) => (current + 1) % lecture.slides.length), [lecture.slides.length]);
 
@@ -541,16 +560,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
               <button
                 className="plain-button small"
                 type="button"
-                onClick={() => {
-                  setLeaderboardOpen(true);
-                  void loadLeaderboard();
-                }}
+                onClick={openLeaderboard}
               >
                 Rangliste
               </button>
             )}
             {evaluationConfig.enabled && (
-              <button className="plain-button small" type="button" onClick={() => setEvaluationOpen(true)}>
+              <button className="plain-button small" type="button" onClick={openEvaluation}>
                 {evaluationConfig.title}
               </button>
             )}
@@ -572,16 +588,13 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
           <button
             className="icon-action action-text desktop-only-action"
             type="button"
-            onClick={() => {
-              setLeaderboardOpen(true);
-              void loadLeaderboard();
-            }}
+            onClick={openLeaderboard}
           >
             Rangliste
           </button>
         )}
         {evaluationConfig.enabled && (
-          <button className="icon-action action-text desktop-only-action" type="button" onClick={() => setEvaluationOpen(true)}>
+          <button className="icon-action action-text desktop-only-action" type="button" onClick={openEvaluation}>
             Feedback
           </button>
         )}

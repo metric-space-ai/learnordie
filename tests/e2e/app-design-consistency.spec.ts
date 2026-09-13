@@ -211,6 +211,7 @@ for (const variant of variants) {
       await (compact ? menu : page.locator(".action-stack")).getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
       const leaderboard = page.getByRole("complementary", { name: "Rangliste", exact: true });
       await panelContract(page, leaderboard);
+      await expect(menu).not.toHaveAttribute("open", "");
       const closeLeaderboard = leaderboard.getByRole("button", { name: "Rangliste schließen" });
       await controlContract(page, closeLeaderboard);
       await closeLeaderboard.click();
@@ -220,6 +221,7 @@ for (const variant of variants) {
       await (compact ? menu.getByRole("button", { name: "Evaluation", exact: true }) : page.getByRole("button", { name: "Feedback", exact: true })).click();
       const evaluation = page.getByRole("complementary", { name: "Evaluation", exact: true });
       await panelContract(page, evaluation);
+      await expect(menu).not.toHaveAttribute("open", "");
       const comment = evaluation.getByLabel("Evaluationskommentar");
       await comment.fill("Lesbare Bedienelemente auf kleinem Bildschirm.");
       await controlContract(page, comment);

@@ -119,13 +119,15 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.getByRole("button", { name: "Weiterlernen", exact: true }).click();
     await openStudentMenu(page);
     await page.getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
+    await expect(page.locator(".learn-more")).not.toHaveAttribute("open", "");
+    await expect(page.locator(".question-drawer")).toHaveCount(0);
     await expect(page.locator(".leader-row.self strong")).toHaveText(String(question!.points));
     const anonymousKey = (await page.context().cookies()).find((cookie) => cookie.name === "lb_student_key")?.value;
     expect(anonymousKey).toBeTruthy();
     const ranking = await page.request.get(`/api/lecture/${token}/leaderboard?anonymousKey=${encodeURIComponent(anonymousKey!)}`);
     expect(ranking.ok()).toBe(true);
     expect((await ranking.json()).entries.find((entry: { self: boolean }) => entry.self).points).toBe(question!.points);
-    await testInfo.attach(`luna-learn-score-${viewport.width}`, { body: await page.screenshot(), contentType: "image/png" });
+    await testInfo.attach(`luna-learn-score-${viewport.width}`, { body: await page.screenshot({ animations: "disabled" }), contentType: "image/png" });
     await page.reload();
     await openStudentMenu(page);
     await page.getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
