@@ -356,7 +356,7 @@ export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModel
             conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks.${currentBlock.id}`, slideId: current.id, message: `Existing authored field ${field} differs from the original source.` });
             statuses[field] = "conflict";
           } else {
-            const canonical = field === "sceneTitle" ? authored.blocks.find((block) => block.type === "scene3d") : authored.blocks.find((block) => block.id.endsWith(`-${field}`));
+            const canonical = authored.blocks.find((block) => block.id.endsWith(`-${field}`));
             if (canonical) mapping.set(canonical.id, currentBlock.id);
             statuses[field] = "preserved";
           }

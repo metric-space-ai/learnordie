@@ -186,7 +186,7 @@ test("already-upgraded documents are idempotent and extra native elements remain
     slides: original.slides.map((slide, index) => index === 0 ? { ...slide, canvas: { ...slide.canvas!, elements: [...slide.canvas!.elements, extra] } } : slide)
   });
   const plan = planOriginalModelUpgrade(edited);
-  assert.equal(plan.status, "ready");
+  assert.equal(plan.status, "noop");
   assert.deepEqual(plan.conflicts, []);
   assert.ok(plan.preserved.canvasElementIds.includes("user-drawing"));
   assert.ok(plan.preserved.assetIds.includes("extra-asset"));
