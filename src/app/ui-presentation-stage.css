@@ -21,7 +21,7 @@ body:has(.presentation-screen) .excalidraw-tooltip { display: none; }
 .presentation-control-panel .live-controls label { display: grid; gap: 3px; font-size: 11px; }
 .presentation-control-panel .live-controls :is(.icon-action, .live-back-link) { min-width: 36px; min-height: 36px; height: 36px; width: auto; padding: 6px 10px; font-size: 13px; }
 .presentation-connection-notice { display: grid; gap: 8px; margin-bottom: 12px; font-size: 13px; }
-.presentation-controls :focus-visible { outline: 2px solid #a8a5ff; outline-offset: 2px; }
+.presentation-controls :focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
 .presenter-round-status { position: absolute; right: 12px; bottom: 58px; z-index: 24; display: grid; justify-items: end; gap: 6px; max-width: min(300px, calc(100% - 24px)); pointer-events: none; color: var(--ink); font: 13px/1.35 var(--app-font), system-ui, sans-serif; }
 .presenter-round-chip, .presenter-round-toast:not(:empty) { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--app-shadow); }
 .presenter-round-chip { display: flex; align-items: center; gap: 8px; }

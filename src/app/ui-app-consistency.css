@@ -15,8 +15,6 @@
 .home-app .home-join-island { width: min(440px, 100%); padding: 28px; gap: 20px; }
 .home-app .home-join-island h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
 .home-app .join-lead { margin: 0; font-size: 16px; font-weight: 400; color: var(--app-text-muted); }
-.home-app .primary-button { background: #6965db; border-color: #6965db; color: #fff; }
-.home-app .primary-button:hover { background: #5753c6; border-color: #5753c6; color: #fff; }
 .home-app .home-island-links { justify-content: space-between; gap: 8px; }
 @media (max-width: 540px) { .home-app .home-join-island { padding: 24px 20px; } }
 :is(.home-app, .join-screen, .student-app) :is(h1, h2) { hyphens: none; text-wrap: balance; }

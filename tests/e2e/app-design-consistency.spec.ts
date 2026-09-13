@@ -112,6 +112,7 @@ for (const variant of variants) {
 
       await page.goto("/lecturer/login");
       await panelContract(page, page.locator(".login-card"));
+      await expect(page.getByRole("button", { name: "Code senden", exact: true })).toHaveCSS("background-color", "rgb(105, 101, 219)");
       const summary = page.locator(".test-account-login > summary");
       await controlContract(page, summary);
       await summary.focus();
@@ -128,6 +129,42 @@ for (const variant of variants) {
       await expect(loginError).toHaveCSS("border-radius", "8px");
       await page.getByRole("link", { name: "Zur Startseite" }).click();
       await expect(page.locator(".home-app")).toBeVisible();
+      assertClean();
+    });
+
+    test("OTP, retry errors and alternate email retain the shared design", async ({ page }, testInfo) => {
+      const assertClean = diagnostics(page);
+      // Synthetic responses isolate visual states. Actual OTP/login/logout is
+      // independently exercised below using the real isolated mail fixture.
+      await page.route("**/api/auth/magic-link", (route) => route.fulfill({ json: { sent: true } }));
+      await page.route("**/api/auth/verify-code", (route) => route.fulfill({
+        status: 400, json: { error: "Code falsch oder abgelaufen. Fordere einen neuen Code an." }
+      }));
+      await page.goto("/lecturer/login");
+      await page.getByLabel("E-Mail", { exact: true }).fill("sehr.lange.adresse.zur.pruefung.der.codeansicht@example.test");
+      await page.getByRole("button", { name: "Code senden", exact: true }).click();
+      const card = page.locator(".login-card");
+      const code = page.getByLabel("Code", { exact: true });
+      await panelContract(page, card);
+      await controlContract(page, code);
+      await fitsViewport(page, card.locator(".login-flow-note"));
+      await expect(card.locator(".login-flow-note")).toHaveCSS("font-weight", "500");
+      const submit = page.getByRole("button", { name: "Anmelden", exact: true });
+      await expect(submit).toBeDisabled();
+      await code.fill("000000");
+      await expect(submit).toHaveCSS("background-color", "rgb(105, 101, 219)");
+      await expect(submit).toHaveCSS("color", "rgb(255, 255, 255)");
+      await submit.click();
+      await expect(card.getByRole("alert")).toContainText("Code falsch oder abgelaufen");
+      await fitsViewport(page, card.getByRole("alert"));
+      await expect(code).toHaveValue("000000");
+      await page.getByRole("button", { name: "Neuen Code senden" }).click();
+      await expect(code).toHaveValue("");
+      await expect(card.getByRole("alert")).toHaveCount(0);
+      await testInfo.attach("otp-retry-design", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+      await page.getByRole("button", { name: "Andere E-Mail" }).click();
+      await expect(page.getByLabel("E-Mail", { exact: true })).toHaveValue("sehr.lange.adresse.zur.pruefung.der.codeansicht@example.test");
+      await panelContract(page, card);
       assertClean();
     });
 

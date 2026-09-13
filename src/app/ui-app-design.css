@@ -42,6 +42,9 @@
   --app-input-border: #868b95;
   --app-accent: #6965db;
   --app-accent-ink: #4f4bb5;
+  --app-primary: #6965db;
+  --app-primary-hover: #5753c6;
+  --app-primary-text: #ffffff;
   --app-success: #287347;
   --app-success-soft: #e8f5ec;
   --app-danger: #b32d3e;
@@ -177,15 +180,21 @@ body:has(:is(.overlay-panel, .chat-question-panel, .transcript-panel, .question-
 :is(.home-app, .join-screen, .student-app, .mode-card, .overlay-panel, .transcript-panel, .chat-question-panel) .primary-button:not(:where(.native-workspace *, .excalidraw *)),
 .learn-shell .question-continue:not(:where(.native-workspace *, .excalidraw *)) {
   min-height: 44px;
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--app-accent-ink);
-  font-weight: 700;
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+  color: var(--app-primary-text);
+  font-weight: 600;
 }
 :is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .question-ai-link, .question-peek, .question-next-family):hover:not(:disabled):not(:where(.native-workspace *, .excalidraw *)) {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--app-accent-ink);
+}
+:is(.home-app, .join-screen, .student-app, .mode-card, .overlay-panel, .transcript-panel, .chat-question-panel) .primary-button:hover:not(:disabled):not(:where(.native-workspace *, .excalidraw *)),
+.learn-shell .question-continue:hover:not(:disabled):not(:where(.native-workspace *, .excalidraw *)) {
+  border-color: var(--app-primary-hover);
+  background: var(--app-primary-hover);
+  color: var(--app-primary-text);
 }
 :is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .answer, .hotspot, .question-next-family):focus-visible:not(:where(.native-workspace *, .excalidraw *)) {
   outline: 2px solid var(--accent);
