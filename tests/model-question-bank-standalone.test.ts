@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createModelQuestionBank } from "../src/lib/model-question-bank.ts";
+import { createModelQuestionBank } from "../src/lib/model-question-bank";
 
 const slideIds = Array.from({ length: 8 }, (_, i) => `original-slide-${i + 1}`);
 test("all eight original slides retain a complete standalone four-level question family", () => {

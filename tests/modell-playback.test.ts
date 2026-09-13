@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createModellSceneState, resetModellLearning, trainModellStep } from "../packages/slide-engine/src/scenes/modell-state.ts";
-import { modellSceneKeys } from "../packages/slide-engine/src/scenes/modell-types.ts";
-import { modellIsPlaying, setModellPlaying, toggleModellPlaying } from "../packages/slide-engine/src/scenes/modell-playback.ts";
+import { createModellSceneState, resetModellLearning, trainModellStep } from "../packages/slide-engine/src/scenes/modell-state";
+import { modellSceneKeys } from "../packages/slide-engine/src/scenes/modell-types";
+import { modellIsPlaying, setModellPlaying, toggleModellPlaying } from "../packages/slide-engine/src/scenes/modell-playback";
 
 for (const key of modellSceneKeys) {
   test(`${key}: play/pause/resume controls the effective simulation state`, () => {
