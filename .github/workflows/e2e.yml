@@ -67,6 +67,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Atomic question wording migration contracts
+        run: node --test --test-concurrency=1 tests/integration/question-wording-postgres.test.mjs
+        env:
+          QUESTION_REVIEW_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
       - name: Audit
         run: npm audit --audit-level=moderate
 
