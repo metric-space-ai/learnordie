@@ -10,6 +10,7 @@ import type {
   StandaloneExportJob,
   StandaloneExportJobStatus,
   StudentChatQuestion,
+  StudentExamDraftStatus,
   TranscriptSegment
 } from "@/lib/types";
 import type { SlideDocument } from "@learnordie/slide-engine";
@@ -76,6 +77,24 @@ export type ModerateChatQuestionInput = {
   chatQuestionId: string;
   status: StudentChatQuestion["status"];
   actor?: string;
+};
+
+export type UpdateStudentExamDraftStatusInput = {
+  lectureId: string;
+  chatQuestionId: string;
+  status: StudentExamDraftStatus;
+  error?: string;
+};
+
+export type SaveStudentExamDraftInput = {
+  lectureId: string;
+  chatQuestionId: string;
+  variants: QuestionVariant[];
+};
+
+export type CountRecentStudentExamDraftAttemptsInput = {
+  lectureId: string;
+  since: Date;
 };
 
 export type SubmitTranscriptSegmentInput = {
@@ -171,6 +190,7 @@ export type UpdateStandaloneExportJobInput = {
 export interface LectureRepository {
   listLectures(ownerEmail?: string): Promise<Lecture[]>;
   getLectureByToken(token: string): Promise<Lecture | null>;
+  getLectureScriptContext(lectureId: string, ownerEmail?: string, focusText?: string): Promise<string>;
   createLecture(input: CreateLectureInput, ownerEmail?: string): Promise<Lecture>;
   updateLecture(id: string, input: UpdateLectureInput, ownerEmail?: string): Promise<Lecture | null>;
   addMaterial(lectureId: string, input: AddMaterialInput, ownerEmail?: string): Promise<LectureMaterial | null>;
@@ -179,6 +199,9 @@ export interface LectureRepository {
   enqueueMaterialProcessingRun?(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
   countRecentStudentChatQuestions(input: CountRecentStudentChatQuestionsInput): Promise<number | null>;
   submitStudentChatQuestion(input: SubmitChatQuestionInput): Promise<StudentChatQuestion | null>;
+  updateStudentExamDraftStatus(input: UpdateStudentExamDraftStatusInput, ownerEmail?: string): Promise<Lecture | null>;
+  saveStudentExamDraft(input: SaveStudentExamDraftInput, ownerEmail?: string): Promise<Lecture | null>;
+  countRecentStudentExamDraftAttempts(input: CountRecentStudentExamDraftAttemptsInput, ownerEmail?: string): Promise<number | null>;
   moderateStudentChatQuestion(input: ModerateChatQuestionInput, ownerEmail?: string): Promise<Lecture | null>;
   submitTranscriptSegment(input: SubmitTranscriptSegmentInput, ownerEmail?: string): Promise<TranscriptSegment | null>;
   submitLecturerAssistantMessage(input: SubmitLecturerAssistantMessageInput, ownerEmail?: string): Promise<Lecture | null>;
@@ -209,6 +232,10 @@ class LocalJsonLectureRepository implements LectureRepository {
     return this.store.getLectureByToken(token);
   }
 
+  async getLectureScriptContext(lectureId: string, ownerEmail?: string, focusText?: string) {
+    return this.store.getLectureScriptContext(lectureId, ownerEmail, focusText);
+  }
+
   async createLecture(input: CreateLectureInput, ownerEmail?: string) {
     return this.store.createLecture(input, ownerEmail);
   }
@@ -235,6 +262,18 @@ class LocalJsonLectureRepository implements LectureRepository {
 
   async submitStudentChatQuestion(input: SubmitChatQuestionInput) {
     return this.store.submitStudentChatQuestion(input);
+  }
+
+  async updateStudentExamDraftStatus(input: UpdateStudentExamDraftStatusInput, ownerEmail?: string) {
+    return this.store.updateStudentExamDraftStatus(input, ownerEmail);
+  }
+
+  async saveStudentExamDraft(input: SaveStudentExamDraftInput, ownerEmail?: string) {
+    return this.store.saveStudentExamDraft(input, ownerEmail);
+  }
+
+  async countRecentStudentExamDraftAttempts(input: CountRecentStudentExamDraftAttemptsInput, ownerEmail?: string) {
+    return this.store.countRecentStudentExamDraftAttempts(input, ownerEmail);
   }
 
   async moderateStudentChatQuestion(input: ModerateChatQuestionInput, ownerEmail?: string) {

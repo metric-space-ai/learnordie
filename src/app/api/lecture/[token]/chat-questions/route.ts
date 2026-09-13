@@ -3,6 +3,9 @@ import { z } from "zod";
 
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
+import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
+
+export const maxDuration = 60;
 
 const MAX_CHAT_QUESTION_BYTES = 4096;
 const CHAT_QUESTION_WINDOW_MS = 15 * 60 * 1000;
@@ -80,8 +83,56 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
   }
 
+  let examDraftStatus = chatQuestion.examDraftStatus ?? "not_applicable";
+  if (chatQuestion.status === "accepted") {
+    await repository.updateStudentExamDraftStatus({
+      lectureId: chatQuestion.lectureId,
+      chatQuestionId: chatQuestion.id,
+      status: "generating"
+    });
+    try {
+      const lecture = await repository.getLectureByToken(token);
+      if (!lecture) throw new Error("Lecture no longer exists.");
+      const generated = await generateStudentQuestionExamDraft(lecture, chatQuestion);
+      if (!generated.supported) {
+        examDraftStatus = "unsupported";
+        await repository.updateStudentExamDraftStatus({
+          lectureId: chatQuestion.lectureId,
+          chatQuestionId: chatQuestion.id,
+          status: examDraftStatus,
+          error: "Die Frage ließ sich aus dem aktuellen Vorlesungskontext nicht ableiten."
+        });
+      } else {
+        const saved = await repository.saveStudentExamDraft({
+          lectureId: chatQuestion.lectureId,
+          chatQuestionId: chatQuestion.id,
+          variants: generated.variants
+        });
+        if (!saved) throw new Error("Draft could not be persisted.");
+        examDraftStatus = "draft";
+      }
+    } catch {
+      console.warn("student exam draft generation failed");
+      examDraftStatus = "failed";
+      await repository.updateStudentExamDraftStatus({
+        lectureId: chatQuestion.lectureId,
+        chatQuestionId: chatQuestion.id,
+        status: examDraftStatus,
+        error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
+      });
+    }
+  }
+
   return NextResponse.json({
-    chatQuestion,
+    chatQuestion: {
+      id: chatQuestion.id,
+      lectureId: chatQuestion.lectureId,
+      pseudonym: chatQuestion.pseudonym,
+      text: chatQuestion.text,
+      status: chatQuestion.status,
+      createdAt: chatQuestion.createdAt,
+      examDraftStatus
+    },
     accepted: chatQuestion.status === "accepted",
     message: chatQuestion.status === "accepted"
       ? "Frage wurde an den Referenten weitergeleitet."

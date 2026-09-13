@@ -28,6 +28,7 @@ import type {
   StandaloneExportJob,
   StandaloneExportJobStatus,
   StudentChatQuestion,
+  StudentExamDraftStatus,
   TranscriptSegment
 } from "@/lib/types";
 import { applySlideDocumentEdits, type SlideDocument, type SlideDocumentEditOperation } from "@learnordie/slide-engine";
@@ -348,6 +349,38 @@ export class LocalLectureStore {
   async getLectureByToken(token: string) {
     const store = await readStore();
     return store.lectures.find((lecture) => lecture.publicToken === token) ?? null;
+  }
+
+  async getLectureScriptContext(lectureId: string, ownerEmail?: string, _focusText?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return "";
+    const materials = (lecture.materials ?? []).filter((material) => material.status === "ready").slice(0, 8);
+    const sources = await Promise.all(materials.map(async (material) => {
+      const sourceText = await readStoredText(material.storageUrl);
+      const text = sourceText.trim() || material.extractedTextPreview?.trim() || "";
+      return { source: material.originalName, text };
+    }));
+    const blocks = sources.flatMap(({ source, text }) => text
+      .split(/\n{2,}|(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9])/u)
+      .map((content) => ({ source, content: content.trim() }))
+      .filter((block) => block.content.length > 0));
+    const totalLength = blocks.reduce((total, block) => total + block.source.length + block.content.length, 0);
+    if (totalLength <= 12_000) return blocks.map((block) => `${block.source}: ${block.content}`).join("\n");
+    const focusTerms = [...new Set((_focusText?.toLocaleLowerCase("de-DE").match(/[\p{L}\p{N}]{4,}/gu) ?? []))];
+    const ranked = blocks.map((block, index) => {
+      const content = block.content.toLocaleLowerCase("de-DE");
+      return { ...block, index, score: focusTerms.reduce((score, term) => score + (content.includes(term) ? 1 : 0), 0) };
+    }).sort((left, right) => right.score - left.score || left.index - right.index);
+    const selected: typeof ranked = [];
+    let packedLength = 0;
+    for (const block of ranked) {
+      const blockLength = block.source.length + block.content.length + 2;
+      if (packedLength + blockLength > 12_000) continue;
+      selected.push(block);
+      packedLength += blockLength;
+    }
+    return selected.sort((left, right) => left.index - right.index).map((block) => `${block.source}: ${block.content}`).join("\n");
   }
 
   async createLecture(input: CreateLectureInput, ownerEmail?: string) {
@@ -688,17 +721,60 @@ export class LocalLectureStore {
       moderationModel: moderation.model,
       moderationConfidence: moderation.confidence,
       moderationSignals: moderation.signals,
+      examDraftStatus: moderation.status === "accepted" ? "pending" : "not_applicable",
       createdAt: new Date().toISOString()
     };
 
     lecture.studentChatQuestions = [chatQuestion, ...(lecture.studentChatQuestions ?? [])];
-    if (chatQuestion.status === "accepted") {
-      lecture.questionReviews = [createReviewItemFromChatQuestion(lecture, chatQuestion), ...(lecture.questionReviews ?? [])];
-      if (lecture.status === "draft" || lecture.status === "material_processing") lecture.status = "question_review";
-    }
-
     await writeStore(store);
     return chatQuestion;
+  }
+
+  async updateStudentExamDraftStatus(input: { lectureId: string; chatQuestionId: string; status: StudentExamDraftStatus; error?: string }, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+    const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
+    if (!lecture || !question) return null;
+    question.examDraftStatus = input.status;
+    question.examDraftError = input.error;
+    if (input.status === "generating") question.examDraftAttemptAt = new Date().toISOString();
+    if (input.status === "rejected") {
+      const review = lecture.questionReviews?.find((item) => item.sourceStudentQuestionId === question.id);
+      if (review) {
+        review.status = "rejected";
+        review.reviewedAt = new Date().toISOString();
+      }
+    }
+    await writeStore(store);
+    return lecture;
+  }
+
+  async saveStudentExamDraft(input: { lectureId: string; chatQuestionId: string; variants: QuestionVariant[] }, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+    const question = lecture?.studentChatQuestions?.find((item) => item.id === input.chatQuestionId);
+    if (!lecture || !question || question.status !== "accepted") return null;
+    const review = lecture.questionReviews?.find((item) => item.sourceStudentQuestionId === question.id)
+      ?? createReviewItemFromChatQuestion(lecture, question);
+    review.sourceStudentQuestionId = question.id;
+    review.variants = clone(input.variants);
+    review.status = "draft";
+    review.reviewedAt = undefined;
+    lecture.questionReviews ??= [];
+    if (!lecture.questionReviews.some((item) => item.id === review.id)) lecture.questionReviews.unshift(review);
+    question.examDraftStatus = "draft";
+    question.examDraftError = undefined;
+    await writeStore(store);
+    return lecture;
+  }
+
+  async countRecentStudentExamDraftAttempts(input: { lectureId: string; since: Date }, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === input.lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    return (lecture.studentChatQuestions ?? []).filter((question) => (
+      question.examDraftAttemptAt && Date.parse(question.examDraftAttemptAt) >= input.since.getTime()
+    )).length;
   }
 
   async countRecentStudentChatQuestions(input: { lectureToken: string; anonymousKey: string; since: Date }) {
@@ -720,6 +796,10 @@ export class LocalLectureStore {
     if (!lecture || !chatQuestion) return null;
 
     chatQuestion.status = input.status;
+    chatQuestion.examDraftStatus = input.status === "ignored"
+      ? "not_applicable"
+      : chatQuestion.examDraftStatus === "not_applicable" ? "pending" : chatQuestion.examDraftStatus;
+    chatQuestion.examDraftError = undefined;
     chatQuestion.relevanceReason = input.status === "accepted"
       ? `Vom Referenten als Fragequelle übernommen${input.actor ? ` (${input.actor})` : ""}.`
       : `Vom Referenten ignoriert${input.actor ? ` (${input.actor})` : ""}.`;
@@ -1172,6 +1252,13 @@ export class LocalLectureStore {
 
     review.status = decision;
     review.reviewedAt = new Date().toISOString();
+    if (decision === "rejected" && review.sourceStudentQuestionId) {
+      const question = lecture.studentChatQuestions?.find((item) => item.id === review.sourceStudentQuestionId);
+      if (question) {
+        question.examDraftStatus = "rejected";
+        question.examDraftError = undefined;
+      }
+    }
     review.variants = applyQualityDecision({
       variants: review.variants,
       decision,

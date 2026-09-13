@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { LiveAnswerReceipt } from "@/lib/live-session";
+import type { StudentExamDraftStatus } from "@/lib/types";
 import type { StoredLiveRound } from "../live-session-repository";
 import {
   boolean,
@@ -193,12 +194,13 @@ export const questionReviewItems = pgTable("question_review_items", {
   id: uuid("id").defaultRandom().primaryKey(),
   lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
   sourceMaterialId: uuid("source_material_id").references(() => lectureAssets.id),
+  sourceStudentQuestionId: text("source_student_question_id"),
   sourceTitle: text("source_title").notNull(),
   status: questionReviewStatus("status").notNull().default("draft"),
   variantsJson: jsonb("variants_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true })
-});
+}, (table) => [uniqueIndex("question_review_items_student_question_idx").on(table.lectureId, table.sourceStudentQuestionId)]);
 
 export const participantSessions = pgTable(
   "participant_sessions",
@@ -230,6 +232,10 @@ export const studentChatQuestions = pgTable("student_chat_questions", {
   moderationModel: text("moderation_model"),
   moderationConfidence: integer("moderation_confidence"),
   moderationSignals: jsonb("moderation_signals"),
+  examDraftStatus: text("exam_draft_status").$type<StudentExamDraftStatus>().notNull().default("not_applicable"),
+  examDraftError: text("exam_draft_error"),
+  examDraftRoundId: text("exam_draft_round_id"),
+  examDraftAttemptAt: timestamp("exam_draft_attempt_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 
@@ -430,6 +436,7 @@ export const liveSessions = pgTable("live_sessions", {
   slideIndex: integer("slide_index").notNull().default(0),
   showIntro: boolean("show_intro").notNull().default(true),
   round: jsonb("round").$type<StoredLiveRound | null>(),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
 

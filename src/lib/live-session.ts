@@ -12,6 +12,7 @@ export type LiveSessionView = {
   slideIndex: number;
   showIntro: boolean;
   serverNow: number;
+  sessionStartedAt: number | null;
   round: null | { id: string; expiresAt: number; questions: LiveQuestion[] };
   receipt: LiveAnswerReceipt | null;
   leaderboard?: LeaderboardEntry[];
@@ -20,4 +21,5 @@ export type LiveCommand =
   | { action: "start"; revision: number }
   | { action: "slide"; revision: number; slideIndex: number; showIntro: boolean }
   | { action: "fire"; revision: number; familyIndex: number; durationSeconds: number; familyId?: string; sessionId?: string }
+  | { action: "publishDraft"; revision: number; questionId: string }
   | { action: "close" | "end"; revision: number };
