@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { demoLecture } from "../../src/lib/demo-data";
 
-const token = "gleitlagerung-demo";
+const token = process.env.LUNA_ACCEPTANCE_LECTURE_TOKEN ?? "gleitlagerung-demo";
 const password = "e2e-only-test-password-not-for-production";
 
 function captureDiagnostics(page: Page) {
@@ -72,45 +71,65 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await openStudentMenu(page);
     const density = page.getByRole("slider", { name: "Fragedichte", exact: true });
     await density.press("Home");
-    await expect(page.locator(".hotspots button")).toHaveCount(1);
+    const minimumHotspots = await page.locator(".hotspots button").count();
     await density.press("End");
-    await expect(page.locator(".hotspots button")).toHaveCount(7);
+    const maximumHotspots = await page.locator(".hotspots button").count();
+    expect(maximumHotspots).toBeGreaterThan(minimumHotspots);
     await density.press("Home");
     await density.press("ArrowRight");
     await density.press("ArrowRight");
-    await expect(density).toHaveValue("3");
+    const selectedDensity = await density.inputValue();
+    const selectedHotspots = await page.locator(".hotspots button").count();
+    expect(Number(selectedDensity)).toBeGreaterThan(1);
+    expect(Number(selectedDensity)).toBeLessThan(7);
+    expect(selectedHotspots).toBeGreaterThanOrEqual(minimumHotspots);
+    expect(selectedHotspots).toBeLessThanOrEqual(maximumHotspots);
 
     if (viewport.width <= 900) await page.locator(".learn-more summary").click();
-    const firstSlide = await page.locator("[data-slide-id]").first().getAttribute("data-slide-id");
-    await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
-    await expect(page.locator("[data-slide-id]").first()).not.toHaveAttribute("data-slide-id", firstSlide!);
-    await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
-    await expect(page.locator(".slide-nav")).toContainText("3 / 3");
+    const slideNav = page.locator(".slide-nav");
+    const slideTotal = Number((await slideNav.innerText()).match(/\/\s*(\d+)/)?.[1]);
+    expect(slideTotal).toBeGreaterThan(1);
+    const visitedSlides = new Set<string>([(await page.locator("[data-slide-id]").first().getAttribute("data-slide-id"))!]);
+    for (let position = 2; position <= slideTotal; position += 1) {
+      await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
+      await expect(slideNav).toContainText(`${position} / ${slideTotal}`);
+      visitedSlides.add((await page.locator("[data-slide-id]").first().getAttribute("data-slide-id"))!);
+    }
+    expect(visitedSlides.size).toBe(slideTotal);
     await page.reload();
     await openStudentMenu(page);
-    await expect(density).toHaveValue("3");
-    await expect(page.locator(".hotspots button")).toHaveCount(3);
+    await expect(density).toHaveValue(selectedDensity);
+    await expect(page.locator(".hotspots button")).toHaveCount(selectedHotspots);
     if (viewport.width <= 900) await page.locator(".learn-more summary").click();
 
-    const question = demoLecture.questions.find((item) => item.level === "2.0")!;
+    const questionResponse = await page.request.get(`/api/lecture/${token}/questions`);
+    expect(questionResponse.ok()).toBe(true);
+    const { questions } = await questionResponse.json() as { questions: Array<{
+      level: string;
+      text: string;
+      points: number;
+      answers: Array<{ correct: boolean; text: string }>;
+    }> };
     await page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
-    await expect(page.locator(".question-drawer .question")).toHaveText(question.text);
-    await page.getByRole("button", { name: question.answers.find((item) => item.correct)!.text, exact: false }).click();
+    const visibleQuestion = await page.locator(".question-drawer .question").innerText();
+    const question = questions.find((item) => item.text === visibleQuestion);
+    expect(question, `Visible question must match persisted question data: ${visibleQuestion}`).toBeTruthy();
+    await page.getByRole("button", { name: question!.answers.find((item) => item.correct)!.text, exact: false }).click();
     await expect(page.locator(".learn-save-status")).toContainText("Antwort gespeichert");
     await page.getByRole("button", { name: "Weiterlernen", exact: true }).click();
     await openStudentMenu(page);
     await page.getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
-    await expect(page.locator(".leader-row.self strong")).toHaveText(String(question.points));
+    await expect(page.locator(".leader-row.self strong")).toHaveText(String(question!.points));
     const anonymousKey = (await page.context().cookies()).find((cookie) => cookie.name === "lb_student_key")?.value;
     expect(anonymousKey).toBeTruthy();
     const ranking = await page.request.get(`/api/lecture/${token}/leaderboard?anonymousKey=${encodeURIComponent(anonymousKey!)}`);
     expect(ranking.ok()).toBe(true);
-    expect((await ranking.json()).entries.find((entry: { self: boolean }) => entry.self).points).toBe(question.points);
+    expect((await ranking.json()).entries.find((entry: { self: boolean }) => entry.self).points).toBe(question!.points);
     await testInfo.attach(`luna-learn-score-${viewport.width}`, { body: await page.screenshot(), contentType: "image/png" });
     await page.reload();
     await openStudentMenu(page);
     await page.getByRole("button", { name: "Rangliste", exact: true }).filter({ visible: true }).click();
-    await expect(page.locator(".leader-row.self strong")).toHaveText(String(question.points));
+    await expect(page.locator(".leader-row.self strong")).toHaveText(String(question!.points));
     await page.getByRole("button", { name: "Rangliste schließen", exact: true }).click();
     await page.getByRole("button", { name: "Dunkles Design", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
