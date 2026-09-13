@@ -86,15 +86,31 @@ try {
     const variant = variants.find(item => item.level === level);
     if (!variant?.text?.trim() || !variant.explanation?.trim() || variant.answers?.length !== 4 || variant.answers.some(answer => !answer.text?.trim()) || variant.answers.filter(answer => answer.correct === true).length !== 1) throw new Error("invalid-question");
   }
+  // Use the same prompt builders, output validation and retry path as Space,
+  // L and the student ticker. Synthetic input only; no production corpus read.
+  phase = "strict-live-generators";
+  const { generateLiveQuestionFamily, generateStudentExamDraft } = await import("@/server/question-generation");
+  const { demoLecture } = await import("@/lib/demo-data");
+  const lecture = { ...demoLecture, title: "Synthetischer Feder-Test", seriesTitle: "Abnahme", questions: [], transcriptSegments: [] };
+  const scriptContext = "Ein idealer ungedämpfter Feder-Masse-Oszillator hat Masse m und Steifigkeit k. Die Auslenkung x wird relativ zur statischen Gleichgewichtslage gemessen. Die Rückstellkraft ist F=-kx, die Kreisfrequenz sqrt(k/m). Die Schwingungsenergie ist mv²/2+kx²/2 und bleibt bei konstantem k ohne Dämpfung konstant. Bei einer vertikalen Feder ist die statische Verlängerung mg/k.";
+  const slide = { title: "Feder-Masse-Oszillator", lines: [scriptContext] };
+  const recent = "Wir betrachten jetzt ausschließlich die vertikale Feder im statischen Gleichgewicht. Die Gewichtskraft mg wird durch die Federkraft ausgeglichen. Die Verlängerung beträgt mg geteilt durch k. Bei gleicher Masse halbiert eine Verdopplung der Steifigkeit diese statische Verlängerung.";
+  const liveFamily = await generateLiveQuestionFamily({ lecture, slide, transcript: scriptContext, scriptContext, existingQuestionTexts: [], contextSource: "slide" });
+  if (liveFamily.some(variant => !variant.promptVersion.startsWith("live-slide-v1"))) throw new Error("invalid-live-generator");
+  phase = "strict-transcript-generator";
+  const transcriptFamily = await generateLiveQuestionFamily({ lecture, slide, transcript: `${scriptContext} ${recent}`, latestTranscript: recent, scriptContext, existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true });
+  phase = "strict-student-draft-generator";
+  const studentDraft = await generateStudentExamDraft({ lecture, slide, slideId: "synthetic-slide", sourceQuestionId: "synthetic-question", studentQuestion: "Warum hängt dieselbe Masse an einer weicheren Feder weiter nach unten?", transcriptContext: scriptContext, latestTranscript: recent, scriptContext, deadlineAt: Date.now() + 45_000 });
+  if (!studentDraft.supported || liveFamily.length !== 4 || transcriptFamily.length !== 4 || studentDraft.variants.length !== 4) throw new Error("invalid-live-generator");
   phase = "stream";
   const stream = await provider.streamComplete({ system: "Reply exactly: ok", user: "Return ok.", maxOutputTokens: 32, timeoutMs: 15000 });
   let streamedText = "";
   const completion = stream.completed.catch(() => null);
   for await (const chunk of stream.chunks) streamedText += chunk;
   if (!streamedText.trim() || !(await completion)?.answer?.trim()) throw new Error("invalid-stream");
-  report.ai = { status: "pass", provider: provider.info, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, levels: variants.map(item => item.level), stream: true, syntheticInputOnly: true };
+  report.ai = { status: "pass", provider: provider.info, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, levels: variants.map(item => item.level), stream: true, strictGenerators: ["slide", "transcript-only", "student-draft"], syntheticInputOnly: true };
 } catch (error) {
-  const knownFailures = ["unexpected-model", "invalid-variants", "invalid-question", "invalid-stream", "Responses proxy returned no answer text.", "Responses proxy request timed out."];
+  const knownFailures = ["unexpected-model", "invalid-variants", "invalid-question", "invalid-stream", "invalid-live-generator", "Responses proxy returned no answer text.", "Responses proxy request timed out.", "Student exam draft was invalid after one retry.", "Student exam draft generation timed out."];
   const failure = knownFailures.includes(error?.message) ? error.message : error instanceof SyntaxError ? "invalid-json" : "unclassified-adapter-error";
   report.ai = { status: "fail", phase, failure, diagnostics, httpStatus: responseStatus, endpointOrigin, elapsedMs: Date.now() - started, message: "Configured MiniMax adapter failed its synthetic check; no provider response or credentials logged." };
   process.exitCode = 1;
