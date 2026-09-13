@@ -14,7 +14,13 @@ if (provider.info.model.toLowerCase() !== "minimax-m3") throw new Error("MiniMax
 const reviewVerdicts = [];
 const complete = provider.complete.bind(provider);
 provider.complete = async (input) => {
-  const result = await complete(input);
+  const requestStarted=Date.now();
+  let result;
+  try { result=await complete(input); }
+  catch(error) {
+    reviewVerdicts.push({providerFailure:/timed out|abort/i.test(String(error?.message??""))?"timeout":"transport",elapsedMs:Date.now()-requestStarted});
+    throw error;
+  }
   try {
     const parsed = parseGroundingJson(result.answer);
     reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
@@ -63,10 +69,10 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
 const report = {model:provider.info.model,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 try {
   let started=Date.now();
-  await reviewQuestionGrounding(provider,valid,sources,Date.now()+14000);
+  await reviewQuestionGrounding(provider,valid,sources,Date.now()+40000);
   report.cases.push({name:"grounded-spring-family",status:"pass",elapsedMs:Date.now()-started});
   started=Date.now();let rejected=false;
-  try { await reviewQuestionGrounding(provider,invalid,sources,Date.now()+14000); }
+  try { await reviewQuestionGrounding(provider,invalid,sources,Date.now()+40000); }
   catch(error) {
     // Timeout/malformed/transport errors are not proof of factual rejection.
     if (/^Fachprüfung 2\.0:/.test(error.message) && !/Beleg fehlt/.test(error.message)) rejected=true;
@@ -77,7 +83,7 @@ try {
   const absurd = structuredClone(valid);
   absurd[0].answers[1].text="Die Feder bestellt selbstständig Kaffee im Internet.";
   started=Date.now(); rejected=false;
-  try { await reviewQuestionGrounding(provider,absurd,sources,Date.now()+14000); }
+  try { await reviewQuestionGrounding(provider,absurd,sources,Date.now()+40000); }
   catch(error) {
     if(/^Fachprüfung 4\.0:/.test(error.message)&&!/Beleg fehlt/.test(error.message))rejected=true;
     else throw error;
