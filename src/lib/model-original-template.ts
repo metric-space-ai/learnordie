@@ -1,11 +1,13 @@
-import { parseSlideDocument, type SlideDocument, type SlideNode, type CanvasElement } from "@learnordie/slide-engine/schema";
+import { parseSlideDocument, type SlideBlock, type SlideDocument, type SlideNode, type CanvasElement } from "@learnordie/slide-engine/schema";
 import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
 import { originalModelSlides, originalModelCompanion, originalModelSourcesHtml, originalModelProvenance } from "./model-original-source";
+import { createModelDemoDocument, MODEL_DEMO_KEY } from "./model-demo-template";
 
 export const MODEL_ORIGINAL_KEY = "learnordie:model-original:clean-v1";
 export const MODEL_ORIGINAL_TITLE = "Der Begriff „Modell“ im Wandel der Zeit";
 export const MODEL_ORIGINAL_SERIES_TITLE = "Modellbegriff · Originalvorlesung";
 export const MODEL_ORIGINAL_SLIDE_COUNT = originalModelSlides.length;
+const MODEL_ORIGINAL_LEGACY_IMPORT_KEY = "modellbegriff-threejs-html-import-v1";
 
 // Static labels from extra()/updateUI() in the original HTML. Dynamic values
 // and controls remain owned by the existing scene renderer/state port.
@@ -109,4 +111,323 @@ export function createOriginalModelDocument(lectureId: string, slideIds: readonl
         structuredData: { format: "text/markdown", text: originalModelCompanion, provenance: originalModelProvenance.companion } }
     ]
   });
+}
+
+export type OriginalModelSourceField = "nav" | "kicker" | "title" | "lead" | "formula" | "takeaway" | "question" | "scene" | "sceneTitle" | "sceneSub" | "accent" | "source" | "notes";
+export type OriginalModelCoverageStatus = "preserved" | "added" | "conflict";
+export type OriginalModelFieldEvidence = {
+  slideId: string;
+  sourceIndex: number;
+  scene: string;
+  field: OriginalModelSourceField;
+  target: string;
+  status: OriginalModelCoverageStatus;
+};
+export type OriginalModelUpgradeConflict = {
+  code: "source_edit" | "slide_identity" | "block_id" | "asset_collision" | "capacity";
+  path: string;
+  slideId?: string;
+  message: string;
+};
+export type OriginalModelUpgradePlan = {
+  status: "ready" | "noop" | "conflict";
+  document: SlideDocument;
+  conflicts: OriginalModelUpgradeConflict[];
+  coverage: OriginalModelFieldEvidence[];
+  preserved: {
+    slideIds: string[];
+    quizAnchorIds: string[];
+    assetIds: string[];
+    canvasElementIds: string[];
+  };
+  source: {
+    key: typeof MODEL_ORIGINAL_KEY;
+    html: string;
+    companion: string;
+    slideCount: number;
+    fieldsPerSlide: readonly string[];
+  };
+};
+
+const originalSourceFields = ["nav", "kicker", "title", "lead", "formula", "takeaway", "question", "scene", "sceneTitle", "sceneSub", "accent", "source", "notes"] as const;
+const nativeBlockFields = ["kicker", "lead", "formula", "takeaway", "question", "sceneTitle", "sceneSub", "source"] as const;
+
+function jsonEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== typeof right || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => jsonEqual(value, right[index]));
+  }
+  if (typeof left !== "object" || typeof right !== "object") return false;
+  const leftRecord = left as Record<string, unknown>, rightRecord = right as Record<string, unknown>;
+  const keys = Object.keys(leftRecord);
+  return keys.length === Object.keys(rightRecord).length && keys.every((key) => Object.hasOwn(rightRecord, key) && jsonEqual(leftRecord[key], rightRecord[key]));
+}
+
+function normalizedText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function blockText(block: SlideBlock): string | undefined {
+  return "text" in block && typeof block.text === "string" ? block.text : undefined;
+}
+
+function sceneBlock(slide: SlideNode) {
+  return slide.blocks.find((block) => block.type === "scene3d");
+}
+
+function fieldBlockIds(slide: SlideNode, scene: string): Partial<Record<(typeof nativeBlockFields)[number], string>> {
+  const result: Partial<Record<(typeof nativeBlockFields)[number], string>> = {};
+  const canonicalPrefix = `original-${scene}-`;
+  for (const field of nativeBlockFields) {
+    const canonical = slide.blocks.find((block) => block.id === `${canonicalPrefix}${field}`);
+    if (canonical) result[field] = canonical.id;
+  }
+  const legacyText = slide.blocks.find((block) => block.id === `${scene}-text`);
+  const legacyTask = slide.blocks.find((block) => block.id === `${scene}-task`);
+  if (legacyText && !result.lead) result.lead = legacyText.id;
+  if (legacyTask && !result.question) result.question = legacyTask.id;
+  if (Object.keys(result).length) return result;
+  const heading = slide.blocks.find((block) => block.type === "heading");
+  const paragraph = slide.blocks.find((block) => block.type === "paragraph");
+  const callout = slide.blocks.find((block) => block.type === "callout");
+  if (heading) result.kicker = heading.id;
+  if (paragraph) result.lead = paragraph.id;
+  if (callout) result.formula = callout.id;
+  return result;
+}
+
+function expectedBlockText(source: (typeof originalModelSlides)[number], field: (typeof nativeBlockFields)[number]): string {
+  return originalModelText(source[field]);
+}
+
+function replaceSourceBlockIds(slide: SlideNode, mapping: Map<string, string>): SlideNode {
+  const remap = (id: string) => mapping.get(id) ?? id;
+  const blocks = slide.blocks.map((block) => ({ ...block, id: remap(block.id) })) as SlideBlock[];
+  const speakerNotes = slide.speakerNotes?.map((note) => note.blockId ? { ...note, blockId: remap(note.blockId) } : note);
+  const quizAnchors = slide.quizAnchors?.map((anchor) => ({ ...anchor, blockId: remap(anchor.blockId) }));
+  const canvas = slide.canvas && {
+    ...slide.canvas,
+    elements: slide.canvas.elements.map((element) => element.customData?.sourceBlockId && mapping.has(element.customData.sourceBlockId)
+      ? { ...element, customData: { ...element.customData, sourceBlockId: remap(element.customData.sourceBlockId) } }
+      : element)
+  };
+  return { ...slide, blocks, speakerNotes, quizAnchors, canvas };
+}
+
+function mergeById<T extends { id: string }>(existing: T[] | undefined, additions: T[], conflicts: OriginalModelUpgradeConflict[], path: string): T[] {
+  const result = [...(existing ?? [])];
+  const byId = new Map(result.map((item) => [item.id, item]));
+  for (const addition of additions) {
+    const prior = byId.get(addition.id);
+    if (!prior) {
+      result.push(addition);
+      byId.set(addition.id, addition);
+    } else if (!jsonEqual(prior, addition)) {
+      conflicts.push({ code: "source_edit", path: `${path}.${addition.id}`, message: `Existing authored item ${addition.id} differs from the original source.` });
+    }
+  }
+  return result;
+}
+
+function mergeAssets(existing: SlideDocument["assets"], additions: SlideDocument["assets"], conflicts: OriginalModelUpgradeConflict[]): SlideDocument["assets"] {
+  const result = [...existing];
+  const byId = new Map(result.map((asset) => [asset.id, asset]));
+  const structuredText = (value: unknown) => typeof value === "string" ? value : value && typeof value === "object" && "text" in value && typeof value.text === "string" ? value.text : undefined;
+  for (const addition of additions) {
+    const prior = byId.get(addition.id);
+    if (!prior) {
+      result.push(addition);
+      byId.set(addition.id, addition);
+    } else if (addition.id === "model-original-companion" && structuredText(prior.structuredData) === structuredText(addition.structuredData) && structuredText(addition.structuredData)) {
+      // Preserve surrounding metadata while verifying that the attached manuscript is unchanged.
+    } else if (!jsonEqual(prior, addition)) {
+      conflicts.push({ code: "asset_collision", path: `assets.${addition.id}`, message: `Attached asset ${addition.id} differs from the original source.` });
+    }
+  }
+  return result;
+}
+
+function mergeCanvas(existing: SlideNode["canvas"], authored: SlideNode["canvas"], conflicts: OriginalModelUpgradeConflict[], slideId: string, preserved: string[]): SlideNode["canvas"] {
+  if (!authored) return existing;
+  if (!existing) return authored;
+  const authoredById = new Map(authored.elements.map((element) => [element.id, element]));
+  for (const element of authored.elements) {
+    const current = existing.elements.find((candidate) => candidate.id === element.id);
+    if (!current) conflicts.push({ code: "source_edit", path: `slides.${slideId}.canvas.elements.${element.id}`, slideId, message: `Original canvas element ${element.id} is missing.` });
+    else if (!jsonEqual(current, element)) conflicts.push({ code: "source_edit", path: `slides.${slideId}.canvas.elements.${element.id}`, slideId, message: `Original canvas element ${element.id} was edited.` });
+  }
+  const extras = existing.elements.filter((element) => !authoredById.has(element.id));
+  preserved.push(...extras.map((element) => element.id));
+  const files = { ...authored.files };
+  for (const [id, file] of Object.entries(existing.files)) {
+    if (files[id] && !jsonEqual(files[id], file)) conflicts.push({ code: "asset_collision", path: `slides.${slideId}.canvas.files.${id}`, slideId, message: `Attached canvas file ${id} was edited.` });
+    else files[id] = file;
+  }
+  return { ...authored, elements: [...authored.elements, ...extras], files };
+}
+
+function originalCoverage(sourceIndex: number, slide: SlideNode, blockIds: Partial<Record<(typeof nativeBlockFields)[number], string>>, statuses: Partial<Record<OriginalModelSourceField, OriginalModelCoverageStatus>>): OriginalModelFieldEvidence[] {
+  const source = originalModelSlides[sourceIndex];
+  const target = (field: OriginalModelSourceField) => {
+    if (field === "nav" || field === "accent") return `asset:model-original-html.structuredData.slides[${sourceIndex}].${field}`;
+    if (field === "title") return `slides.${slide.id}.title`;
+    if (field === "scene") return `slides.${slide.id}.blocks[scene3d].sceneId`;
+    if (field === "notes") return `slides.${slide.id}.speakerNotes`;
+    return `slides.${slide.id}.blocks.${blockIds[field as (typeof nativeBlockFields)[number]] ?? `original-${source.scene}-${field}`}`;
+  };
+  return originalSourceFields.map((field) => ({ slideId: slide.id, sourceIndex, scene: source.scene, field, target: target(field), status: statuses[field] ?? "added" }));
+}
+
+/**
+ * Build a non-mutating, auditable upgrade from an existing native lecture.
+ * The returned candidate is only safe to persist when `conflicts` is empty.
+ * Existing user content, quiz anchors, assets and canvas extras are retained;
+ * changed known source content is reported instead of being overwritten.
+ */
+export function planOriginalModelUpgrade(existing: SlideDocument): OriginalModelUpgradePlan {
+  const conflicts: OriginalModelUpgradeConflict[] = [];
+  const coverage: OriginalModelFieldEvidence[] = [];
+  const preservedCanvasElementIds: string[] = [];
+  const preservedQuizAnchorIds: string[] = [];
+  const source = {
+    key: MODEL_ORIGINAL_KEY,
+    html: originalModelProvenance.html.file,
+    companion: originalModelProvenance.companion.file,
+    slideCount: MODEL_ORIGINAL_SLIDE_COUNT,
+    fieldsPerSlide: originalModelProvenance.fieldsPerSlide
+  };
+  const finalize = (document: SlideDocument, status: OriginalModelUpgradePlan["status"]): OriginalModelUpgradePlan => ({
+    status,
+    document,
+    conflicts,
+    coverage,
+    preserved: {
+      slideIds: existing.slides.map((slide) => slide.id),
+      quizAnchorIds: preservedQuizAnchorIds,
+      assetIds: existing.assets.map((asset) => asset.id),
+      canvasElementIds: preservedCanvasElementIds
+    },
+    source
+  });
+  const sourceSlides = new Map(originalModelSlides.map((source) => [`modell.${source.scene}`, source]));
+  const legacyIds = existing.slides.map((slide) => slide.id);
+  if (existing.slides.length !== MODEL_ORIGINAL_SLIDE_COUNT) {
+    conflicts.push({ code: "slide_identity", path: "slides", message: `Expected ${MODEL_ORIGINAL_SLIDE_COUNT} original slides, received ${existing.slides.length}.` });
+    return finalize(existing, "conflict");
+  }
+  const legacyBaseline = existing.createdBy.promptVersion === MODEL_DEMO_KEY ? createModelDemoDocument("legacy", legacyIds) : undefined;
+  const candidateBase = createOriginalModelDocument("upgrade", legacyIds.length === MODEL_ORIGINAL_SLIDE_COUNT ? legacyIds : originalModelSlides.map((_, index) => `upgrade-slide-${index}`));
+  const slides = existing.slides.map((current, index): SlideNode => {
+    const authored = candidateBase.slides[index];
+    const expectedSource = originalModelSlides[index];
+    const scene = sceneBlock(current)?.sceneId;
+    if (!scene || scene !== `modell.${expectedSource.scene}` || !sourceSlides.has(scene)) {
+      conflicts.push({ code: "slide_identity", path: `slides.${index}`, slideId: current.id, message: `Slide ${current.id} does not identify original scene ${expectedSource.scene}.` });
+    }
+    const baseline = legacyBaseline?.slides[index];
+    const mapping = new Map<string, string>();
+    const statuses: Partial<Record<OriginalModelSourceField, OriginalModelCoverageStatus>> = {};
+    const fieldIds = fieldBlockIds(current, expectedSource.scene);
+    if (baseline) {
+      for (const block of baseline.blocks) {
+        const actual = current.blocks.find((candidate) => candidate.id === block.id);
+        if (actual && !jsonEqual(actual, block)) conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks.${block.id}`, slideId: current.id, message: `Existing generated block ${block.id} was edited.` });
+      }
+      const baselineNotes = new Map((baseline.speakerNotes ?? []).map((note) => [note.id, note]));
+      for (const note of current.speakerNotes ?? []) if (baselineNotes.has(note.id) && !jsonEqual(note, baselineNotes.get(note.id))) conflicts.push({ code: "source_edit", path: `slides.${current.id}.speakerNotes.${note.id}`, slideId: current.id, message: `Existing generated note ${note.id} was edited.` });
+      if (normalizedText(current.title) !== normalizedText(baseline.title)) conflicts.push({ code: "source_edit", path: `slides.${current.id}.title`, slideId: current.id, message: "Existing generated slide title was edited." });
+      const oldText = current.blocks.find((block) => block.id === `${expectedSource.scene}-text`);
+      const oldTask = current.blocks.find((block) => block.id === `${expectedSource.scene}-task`);
+      if (oldText) mapping.set(authored.blocks.find((block) => block.id.endsWith("-lead"))!.id, oldText.id);
+      if (oldTask) mapping.set(authored.blocks.find((block) => block.id.endsWith("-question"))!.id, oldTask.id);
+      const oldScene = current.blocks.find((block) => block.id === `${expectedSource.scene}-scene`);
+      if (oldScene) mapping.set(authored.blocks.find((block) => block.id.endsWith("-scene"))!.id, oldScene.id);
+      statuses.lead = oldText ? "preserved" : "added";
+      statuses.question = oldTask ? "preserved" : "added";
+      statuses.scene = oldScene ? "preserved" : "added";
+    } else {
+      for (const field of nativeBlockFields) {
+        const existingId = fieldIds[field];
+        const currentBlock = existingId ? current.blocks.find((block) => block.id === existingId) : undefined;
+        if (currentBlock) {
+          const matches = blockText(currentBlock) === expectedBlockText(expectedSource, field);
+          if (!matches) {
+            conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks.${currentBlock.id}`, slideId: current.id, message: `Existing authored field ${field} differs from the original source.` });
+            statuses[field] = "conflict";
+          } else {
+            const canonical = field === "sceneTitle" ? authored.blocks.find((block) => block.type === "scene3d") : authored.blocks.find((block) => block.id.endsWith(`-${field}`));
+            if (canonical) mapping.set(canonical.id, currentBlock.id);
+            statuses[field] = "preserved";
+          }
+        } else statuses[field] = "added";
+      }
+      const sourceElement = sceneBlock(current);
+      const legacySceneMetadata = existing.createdBy.promptVersion === MODEL_ORIGINAL_LEGACY_IMPORT_KEY
+        && sourceElement?.altText === `${originalModelText(expectedSource.sceneTitle)}. ${originalModelText(expectedSource.sceneSub)}`
+        && sourceElement.caption === undefined
+        && sourceElement.accent === expectedSource.accent;
+      if (sourceElement && !legacySceneMetadata && (sourceElement.altText !== originalModelText(expectedSource.sceneTitle) || sourceElement.caption !== originalModelText(expectedSource.sceneSub) || sourceElement.accent !== expectedSource.accent)) {
+        conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks.${sourceElement.id}`, slideId: current.id, message: "Existing scene metadata differs from the original source." });
+        statuses.sceneTitle = "conflict";
+        statuses.sceneSub = "conflict";
+        statuses.accent = "conflict";
+      } else if (sourceElement) {
+        statuses.scene = "preserved";
+        statuses.sceneTitle = "preserved";
+        statuses.sceneSub = "preserved";
+        statuses.accent = "preserved";
+        const authoredScene = sceneBlock(authored);
+        if (authoredScene) mapping.set(authoredScene.id, sourceElement.id);
+      }
+    }
+    if (normalizedText(current.title) === normalizedText(expectedSource.title)) statuses.title = "preserved";
+    else if (!baseline) {
+      statuses.title = "conflict";
+      conflicts.push({ code: "source_edit", path: `slides.${current.id}.title`, slideId: current.id, message: "Existing slide title differs from the original source." });
+    }
+    for (const field of nativeBlockFields) if (fieldIds[field] && !statuses[field]) statuses[field] = "preserved";
+    const mapped = replaceSourceBlockIds(authored, mapping);
+    const mappedBlockIds = new Set(mapped.blocks.map((block) => block.id));
+    const extras = current.blocks.filter((block) => !mappedBlockIds.has(block.id));
+    const mergedBlocks = [...mapped.blocks, ...extras];
+    if (!current.canvas && extras.length) conflicts.push({ code: "source_edit", path: `slides.${current.id}.blocks`, slideId: current.id, message: "Existing semantic blocks have no saved native canvas and require review before upgrade." });
+    const mergedNotes = mergeById(current.speakerNotes, authored.speakerNotes ?? [], conflicts, `slides.${current.id}.speakerNotes`);
+    const mergedRefs = mergeById(current.sourceRefs, authored.sourceRefs, conflicts, `slides.${current.id}.sourceRefs`);
+    const quizAnchors = current.quizAnchors?.map((anchor) => {
+      preservedQuizAnchorIds.push(anchor.id);
+      return anchor;
+    });
+    if (mergedNotes.length > 12 || mergedRefs.length > 20 || mergedBlocks.length > 24) conflicts.push({ code: "capacity", path: `slides.${current.id}`, slideId: current.id, message: "Preserving existing authored content exceeds the native slide limits." });
+    const slide: SlideNode = {
+      ...current,
+      id: current.id,
+      title: normalizedText(current.title) === normalizedText(expectedSource.title) || baseline ? authored.title : current.title,
+      blocks: mergedBlocks,
+      canvas: mergeCanvas(current.canvas, mapped.canvas, conflicts, current.id, preservedCanvasElementIds),
+      speakerNotes: mergedNotes,
+      quizAnchors,
+      sourceRefs: mergedRefs
+    };
+    coverage.push(...originalCoverage(index, slide, fieldBlockIds(slide, expectedSource.scene), statuses));
+    return slide;
+  });
+  const assets = mergeAssets(existing.assets, candidateBase.assets, conflicts);
+  if (conflicts.length) return finalize(existing, "conflict");
+  const candidate = parseSlideDocument({
+    ...candidateBase,
+    ...existing,
+    id: existing.id,
+    title: MODEL_ORIGINAL_TITLE,
+    slides,
+    assets,
+    createdBy: { mode: "import", promptVersion: MODEL_ORIGINAL_KEY }
+  });
+  const status = conflicts.length ? "conflict" : jsonEqual(candidate, existing) ? "noop" : "ready";
+  return finalize(candidate, status);
+}
+
+export function applyOriginalModelUpgrade(plan: OriginalModelUpgradePlan): SlideDocument {
+  if (plan.conflicts.length) throw new Error(`Original model upgrade has ${plan.conflicts.length} unresolved conflict(s).`);
+  return plan.document;
 }
