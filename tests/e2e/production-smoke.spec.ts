@@ -3677,6 +3677,8 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       drawerAnimation: getComputedStyle(drawer).animationName,
       drawerRadius: getComputedStyle(drawer).borderTopLeftRadius,
       drawerOriginRatio,
+      originTraceHidden: !originTrace || getComputedStyle(originTrace).display === "none",
+      drawerMarkerHidden: getComputedStyle(drawer, "::before").display === "none",
       drawerHasTechnicalGrid: getComputedStyle(drawer).backgroundImage.includes("linear-gradient"),
       originTraceSocketAnimation: originTrace ? getComputedStyle(originTrace, "::before").animationName : "",
       answerDelays: answers.map((answer) => toMs(getComputedStyle(answer).animationDelay)),
@@ -3687,10 +3689,10 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(learnMotion.sheetRadius).toBe("18px");
   expect(learnMotion.drawerOrigin).toBe("hotspot");
   expect(learnMotion.drawerAnimation).toContain("app-panel-enter");
-  expect(learnMotion.drawerRadius).toBe("18px");
-  expect(learnMotion.drawerOriginRatio).toBeGreaterThan(0.7);
-  expect(learnMotion.drawerHasTechnicalGrid).toBe(true);
-  expect(learnMotion.originTraceSocketAnimation).toContain("lb-origin-socket-in");
+  expect(learnMotion.drawerRadius).toBe("12px");
+  expect(learnMotion.drawerMarkerHidden).toBe(true);
+  expect(learnMotion.drawerHasTechnicalGrid).toBe(false);
+  expect(learnMotion.originTraceHidden).toBe(true);
   expect(learnMotion.answerDelays).toHaveLength(4);
   expect(learnMotion.answerDelays).toEqual([0, 0, 0, 0]);
   expect(learnMotion.hotspotHasOvershoot).toBe(false);

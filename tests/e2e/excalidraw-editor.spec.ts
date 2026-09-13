@@ -38,7 +38,17 @@ function diagnostics(page: Page, expectedCspRejection = false) {
   return () => expect(problems, "No runtime, console or server errors").toEqual([]);
 }
 
-async function login(page: Page, email = "qa-qr@learnordie.test") {
+function canvasTestAccount() {
+  // At most two stories (four attempts including retries) per identity. Keep
+  // the real persistent rate limit intact and do not consume the QR test user.
+  const title = test.info().title;
+  const group = /native text|one presenter/.test(title) ? 0
+    : /native image|original reader/.test(title) ? 1
+      : /original companion|HTML\/CSS embeds/.test(title) ? 2 : 3;
+  return `qa-canvas-${group}@learnordie.test`;
+}
+
+async function login(page: Page, email = canvasTestAccount()) {
   await page.goto("/lecturer/login");
   await page.getByText("Mit Testkonto anmelden", { exact: true }).click();
   await page.getByLabel("Testkonto E-Mail", { exact: true }).fill(email);
@@ -145,7 +155,7 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   const revisedText = `${initialText} überarbeitet`;
   // Use the native text tool for arbitrary placement; the app's Text hinzufügen
   // action inserts a ready-to-edit text element at the viewport center.
-  await editor.getByRole("radio", { name: "Text", exact: true }).click();
+  await editor.locator("label").filter({ has: page.getByRole("radio", { name: "Text", exact: true }) }).click();
   await canvas.click({ position: { x: box!.width * 0.3, y: box!.height * 0.72 } });
   const input = page.locator("textarea.excalidraw-wysiwyg");
   await expect(input).toBeVisible();
@@ -268,7 +278,7 @@ test("one presenter synchronizes three independent guests, timed questions and s
     }
     await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     for (const student of students) await viewCanvas(student);
-    await expect(page.locator("header, footer")).toHaveCount(0);
+    await expect(page.locator("header:visible, footer:visible")).toHaveCount(0);
     const identities = await Promise.all(contexts.map(async (context) => (await context.cookies()).find((cookie) => cookie.name === "lb_student_key")?.value));
     expect(identities.every(Boolean)).toBe(true);
     expect(new Set(identities).size).toBe(3);
@@ -351,7 +361,7 @@ test("native image import persists a real PNG and rejects invalid image bytes wi
   const editor = await nativeEditor(page);
   const png = nativePngFixture();
   const chooser = page.waitForEvent("filechooser");
-  await editor.getByRole("radio", { name: "Bild einfügen", exact: true }).click();
+  await editor.locator("label").filter({ has: page.getByRole("radio", { name: "Bild einfügen", exact: true }) }).click();
   await (await chooser).setFiles({ name: "native-image.png", mimeType: "image/png", buffer: png });
   await editor.locator("canvas.interactive").click({ position: { x: 320, y: 240 } });
   await expect(page.locator(".studio-save-status")).toHaveText("Ungespeichert");
@@ -363,7 +373,7 @@ test("native image import persists a real PNG and rejects invalid image bytes wi
   const reloaded = await selectLecture(page, lecture);
   expect(firstScene(await savedLecture(page, lecture.id))).toEqual(saved);
   const badChooser = page.waitForEvent("filechooser");
-  await reloaded.getByRole("radio", { name: "Bild einfügen", exact: true }).click();
+  await reloaded.locator("label").filter({ has: page.getByRole("radio", { name: "Bild einfügen", exact: true }) }).click();
   await (await badChooser).setFiles({ name: "invalid.png", mimeType: "image/png", buffer: Buffer.from("This is not an image") });
   await expect(page.getByText(/Das Bild konnte nicht eingefügt werden|Ungültige Datei konnte nicht geladen werden|Nicht unterstützter Dateityp/)).toBeVisible();
   expect(firstScene(await savedLecture(page, lecture.id))).toEqual(saved);

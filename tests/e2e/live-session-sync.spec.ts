@@ -165,6 +165,7 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     for (const page of [first, second, third]) await expect(page.getByText("Die Live-Sitzung ist beendet.", { exact: false })).toBeVisible();
     await teacher.goto(`/lecturer/live/${lecture.publicToken}`);
     await expect(teacher.locator("main")).toHaveAttribute("data-live-status", "ended");
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
     await teacher.getByRole("button", { name: "Neue Live-Sitzung starten", exact: true }).click();
     await expect(first.locator(".slide-nav .slide-count")).toHaveText("Beitreten");
     expect((await state()).sessionId).not.toBe(initial.sessionId);

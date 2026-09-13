@@ -13,6 +13,17 @@ function fixture() {
 }
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
 
+test("empty editor draft text does not crash legacy-to-native conversion", () => {
+  const source = { id: "empty-draft", title: "", eyebrow: "", topic: " ", copy: ["", " ", "Kept text"], diagram: "bearing" as const };
+  const document = legacySlidesToSlideDocument([source], { title: "" });
+  assert.equal(document.slides[0].title, "Folie 1");
+  assert.deepEqual(document.slides[0].blocks.filter((block) => block.type === "paragraph"), [{ id: "empty-draft-copy-3", type: "paragraph", text: "Kept text" }]);
+  assert.equal(document.slides[0].blocks.find((block) => block.type === "figure")?.caption, undefined);
+  assert.ok(canvasSceneSchema.safeParse(canvasSceneForSlide(document.slides[0], document.assets)).success);
+  assert.equal(source.title, "");
+  assert.deepEqual(source.copy, ["", " ", "Kept text"]);
+});
+
 test("legacy conversion produces deterministic native editable text and vector diagrams", () => {
   const document = fixture();
   const slide = document.slides[0];

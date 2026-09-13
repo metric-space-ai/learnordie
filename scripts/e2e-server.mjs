@@ -18,7 +18,7 @@ const ownerEmail = process.env.E2E_OWNER_EMAIL || "e2e@example.test";
 const testAccountPassword = "e2e-only-test-password-not-for-production";
 const testAccountSalt = "f05d29175788acd8a4a8e4d65544f00f";
 const testAccountHash = `scrypt$${testAccountSalt}$${scryptSync(testAccountPassword, testAccountSalt, 64).toString("hex")}`;
-const testAccounts = ["qa-qr", "qa-other", "qa-rate", "qa-rate-retry"].map((name) => ({
+const testAccounts = ["qa-qr", "qa-other", "qa-rate", "qa-rate-retry", "qa-canvas-0", "qa-canvas-1", "qa-canvas-2", "qa-canvas-3"].map((name) => ({
   email: `${name}@learnordie.test`, passwordHash: testAccountHash,
   expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
 }));

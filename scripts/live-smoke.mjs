@@ -478,6 +478,10 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   }
   await page.getByLabel("Chat schließen").click();
   await page.getByLabel("KI Chat").waitFor({ state: "hidden", timeout: timeoutMs });
+  // Closing chat restores the answered question. Dismiss it before operating
+  // the underlying slide toolbar; do not force-click through the question.
+  await page.keyboard.press("Escape");
+  await page.locator(".question-drawer").waitFor({ state: "hidden", timeout: timeoutMs });
 
   const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
   const leaderboardAvailable = await visible(leaderboardButton, 2000);

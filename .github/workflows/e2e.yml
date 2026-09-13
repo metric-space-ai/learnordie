@@ -88,6 +88,8 @@ jobs:
           LEARNBUDDY_AI_PROVIDER: learnordie-responses
 
       - name: Production smoke
+        # Leave time for failure evidence to upload before the job deadline.
+        timeout-minutes: 16
         run: npm run test:e2e
 
       - name: Retain browser evidence
