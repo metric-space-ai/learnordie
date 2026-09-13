@@ -1,5 +1,6 @@
 import type { ModellSceneKey, ModellSceneState } from "./modell-types";
 import { modellTheme } from "./modell-theme";
+import { GRAVITY, INITIAL_DISPLACEMENT } from "./oscillator-physics";
 
 // Didaktische Zustandslogik aus Modellbegriff_ThreeJS_clean.html, getrennt von der Darstellung.
 
@@ -43,6 +44,9 @@ export function createModellSceneState(playing: boolean): ModellSceneState {
     morph: 0,
     abstraction: 0,
     stiffness: 4,
+    sceneTime: 0,
+    oscillator: { x: GRAVITY / 4 + INITIAL_DISPLACEMENT, v: 0, time: 0 },
+    oscillatorTrace: [{ x: GRAVITY / 4 + INITIAL_DISPLACEMENT, time: 0 }],
     description: "force",
     executing: true,
     inputX: 0.4,
@@ -83,7 +87,7 @@ export function modellPredict(state: ModellSceneState, x: number) {
 
 // Echte Parameteranpassung per Gradientenabstieg, wie in der Vorlage.
 export function trainModellStep(state: ModellSceneState, dt: number) {
-  if (!state.trainingRunning) return;
+  if (!state.trainingRunning || !Number.isFinite(dt) || dt <= 0) return;
   state.accumulator += dt * 95;
   const count = Math.min(20, Math.floor(state.accumulator));
   state.accumulator -= count;
@@ -141,7 +145,7 @@ export function modellFallbackSvg(key: ModellSceneKey, state: ModellSceneState, 
     });
     inner += svgText(300, 248, "Schematisch. Kein LLM im Browser.", 13);
   } else if (key === "runtime") {
-    const angle = (state.outputAngle * Math.PI) / 180;
+    const angle = (state.servoAngle * Math.PI) / 180;
     inner = `<circle cx="85" cy="150" r="35" fill="${theme.fill}" stroke="${theme.ink}"/><rect x="230" y="100" width="115" height="100" rx="8" fill="${theme.fill}" stroke="${theme.ink}"/><circle cx="485" cy="150" r="63" fill="${theme.fill}" stroke="${theme.ink}"/><path d="M125 150H228M350 150H418" stroke="${accent}" stroke-width="2"/>`;
     inner += `<path d="M485 150L${485 + 47 * Math.sin(angle)} ${150 - 47 * Math.cos(angle)}" stroke="${accent}" stroke-width="4"/>${svgText(85, 157, "x", 23)}${svgText(287, 157, "f", 28)}${svgText(485, 255, `y = ${formatModellNumber(state.outputAngle, 1)}°`, 17)}`;
   } else if (key === "morph" || key === "transfer") {

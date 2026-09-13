@@ -115,11 +115,10 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
         });
         if (host.failed) return;
         host.set(sceneKey);
-        host.render(0, 0);
+        host.render(state.sceneTime, 0);
         hostRef.current = host;
         setMode("live");
 
-        let sceneTime = 0;
         let lastFrame = 0;
         let lastUi = 0;
         const frame = (now: number) => {
@@ -132,12 +131,12 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
           let dt = lastFrame ? Math.min((now - lastFrame) / 1000, 0.065) : 0.033;
           lastFrame = now;
           if (!state.playing) dt = 0;
-          sceneTime += dt;
+          state.sceneTime += dt;
           if (sceneKey === "learning") trainModellStep(state, dt);
           if (sceneKey === "language" && !state.tokenAdded && state.playing) {
-            state.langStep = Math.floor(sceneTime * 0.65) % 4;
+            state.langStep = Math.floor(state.sceneTime * 0.65) % 5;
           }
-          host?.render(sceneTime, dt);
+          host?.render(state.sceneTime, dt);
           if ((sceneKey === "learning" || sceneKey === "language") && now - lastUi > 120) {
             lastUi = now;
             rerender();
@@ -216,7 +215,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
                 next.playing = !next.playing;
               })}
             >
-              {state.playing ? "Pause" : "Abspielen"}
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={state.playing ? "M8 5v14M16 5v14" : "m7 4 13 8-13 8Z"} /></svg>
             </button>
             <button
               aria-label="3D-Blick zurücksetzen"
@@ -224,7 +223,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
               type="button"
               onClick={() => hostRef.current?.reset()}
             >
-              Blick zurücksetzen
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6" /></svg>
             </button>
           </div>
         ) : null}
@@ -295,6 +294,8 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
           onChange={(value) => update((next) => { next.stiffness = value; })}
         />
         <output aria-label="Kreisfrequenz" className="lb-scene3d-math">ω = {formatModellNumber(Math.sqrt(state.stiffness))} rad/s</output>
+        <span className="lb-scene3d-math">m = 1 kg</span>
+        <p className="lb-scene3d-accessible-description">Ideale hängende Feder ohne Dämpfung. Die Verlängerung wird ab der unbelasteten Lage nach unten gemessen. Die Ruhelage liegt bei mg/k. Eine Änderung der Steifigkeit führt Arbeit zu oder ab; Position und Geschwindigkeit bleiben dabei stetig.</p>
         </>
       );
     case "limits":

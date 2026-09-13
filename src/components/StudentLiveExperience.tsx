@@ -86,7 +86,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   }
 
   return <main className={`slide-screen learn-shell lb-motion-root ${round ? "question-open" : ""}`} data-live-status={live.state?.status ?? "connecting"}>
-    <SlideEngineCanvas lectureToken={lecture.publicToken} lectureTitle={lecture.title} showJoinIntro={live.state?.showIntro ?? true}
+    <SlideEngineCanvas lectureToken={lecture.publicToken} participationPath={lecture.participationPath} lectureTitle={lecture.title} showJoinIntro={live.state?.showIntro ?? true}
       current={Math.min(live.state?.slideIndex ?? 0, Math.max(0, lecture.slides.length - 1))} navigationDisabled
       onNext={followPresenter} onPrevious={followPresenter} slideDocument={lecture.slideDocument} slides={lecture.slides} />
     {(!live.connected || live.state?.status !== "active") && <aside className="student-connection-notice" role="status">

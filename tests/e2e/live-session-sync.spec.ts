@@ -44,7 +44,7 @@ test("Configured participation code opens the active classroom and QR overlay pr
   await page.goto(`/lecturer/live/${lecture.publicToken}`);
   await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
   const participation = page.locator(".slide-lecture-link");
-  const joinUrl = new URL(`/join/${code}`, page.url()).href;
+  const joinUrl = new URL(`/l/${code}`, page.url()).href;
   await expect(participation).toHaveAttribute("href", joinUrl);
   await participation.click();
   const dialog = page.getByRole("dialog", { name: "Teilnahme-Link und QR-Code", exact: true });
@@ -56,7 +56,7 @@ test("Configured participation code opens the active classroom and QR overlay pr
   try {
     const guest = await guestContext.newPage();
     await guest.goto(joinUrl);
-    await expect(guest).toHaveURL(new RegExp(`/l/${lecture.publicToken}$`));
+    await expect(guest).toHaveURL(joinUrl);
     await expect(guest.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[0].id);
     await expect(guest.locator(".slide-lecture-link")).toHaveAttribute("href", joinUrl);
     await page.keyboard.press("ArrowRight");

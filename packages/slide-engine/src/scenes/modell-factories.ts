@@ -14,6 +14,8 @@ import type * as ThreeNamespace from "three";
 
 import type { ModellSceneFactories } from "./modell-types";
 import { modellTheme, type ModellTheme } from "./modell-theme";
+import { advanceOscillator, oscillatorQuantities, wireDiameterRatio } from "./oscillator-physics";
+import { modellLanguageContexts } from "./modell-state";
 
 export function createModellSceneFactories(T: typeof ThreeNamespace, theme: ModellTheme = modellTheme()): ModellSceneFactories {
 const C = {cream:theme.accent, teal:theme.ink, blue:theme.accent, violet:theme.secondary, white:theme.ink, dark:theme.fill, line:theme.line};
@@ -58,26 +60,66 @@ function hero(root,lab,state,transfer=false){
 }
 function makeMini(root,lab,state){const o=oscillator(root,lab);o.g.rotation.y=-.18;const label=group(root,0,-2.03,.1);lab(label,'AUSWÄHLEN · VEREINFACHEN · WEGLASSEN','dim');return{width:4.9,height:4.75,camera:[4.1,1.8,10],top:77,update(t){o.update(.36*Math.cos(t*1.2),state.abstraction);}};}
 function makeLaw(root,lab,state){
- const o=oscillator(root,lab);o.g.position.x=-2.25;o.g.scale.setScalar(.82);const graph=group(root,.2,0,0);const w=3.3;for(let i=0;i<5;i++){const y=-1.1+i*.55;line(graph,[[0,y,0],[w,y,0]],C.line,.43);}for(let i=0;i<5;i++){let x=i*w/4;line(graph,[[x,-1.1,0],[x,1.1,0]],C.line,.3);}line(graph,[[0,-1.3,0],[0,1.3,0]],C.teal,.8);line(graph,[[0,0,0],[w+.15,0,0]],C.teal,.6);
- const pts=[];for(let i=0;i<=180;i++){let a=i/180;pts.push(V(a*w,1.06*Math.cos(a*Math.PI*2),.035));}path(graph,pts,C.teal,.023);const dot=ball(graph,.08,C.cream,0,1.06,.08,true);
- lab(group(graph,-.05,1.52,0),'x [m]','dim');lab(group(graph,w+.25,-.12,0),'t [s]','dim');lab(group(graph,-.44,1.08,0),'+0,65','dim');lab(group(graph,-.44,-1.08,0),'−0,65','dim');lab(group(graph,0,-1.53,0),'0','dim');const tl=lab(group(graph,w,-1.53,0),'T','dim');lab(group(graph,1.7,-1.92,0),'EINE VOLLSTÄNDIGE PERIODE','dim');
- let phase=0,lastK=state.stiffness;
- return{width:8.4,height:4.6,camera:[.1,1.1,10],top:136,update(t,dt){if(lastK!==state.stiffness){phase=0;lastK=state.stiffness;}phase+=dt*Math.sqrt(state.stiffness);let theta=phase%(Math.PI*2);o.update(.5*Math.cos(theta),.36);dot.position.set(theta/(Math.PI*2)*w,1.06*Math.cos(theta),.08);tl.textContent=(2*Math.PI/Math.sqrt(state.stiffness)).toFixed(2).replace('.',',');}};
+ // One physical state drives both the hanging mass and a real, fixed-duration
+ // time trace. Never restart the phase or rewrite past motion when k changes.
+ const hanger=group(root,-2.3,0,0);
+ box(hanger,1.65,.12,.5,C.dark,0,1.75,0);
+ const sp=spring(hanger);sp.position.y=1.69;sp.name='law-spring';
+ let geometryLength=-1,geometryK=-1;
+ const body=box(hanger,.65,.6,.6,C.dark,0,0,0);body.name='law-mass';
+ const equilibrium=line(hanger,[[-.72,0,0],[.72,0,0]],C.violet,.65);equilibrium.name='law-equilibrium';
+ lab(group(hanger,.75,1.1,0),'k','highlight');lab(group(body,.58,0,0),'m = 1 kg','highlight');
+ const eqLabel=lab(group(hanger,0,-2.6,0),'Δl₀ = mg/k','dim');
+ const graph=group(root,.1,0,0),w=3.4;
+ for(let i=0;i<5;i++){const y=-1.1+i*.55;line(graph,[[0,y,0],[w,y,0]],C.line,.4);const x=i*w/4;line(graph,[[x,-1.1,0],[x,1.1,0]],C.line,.3);}
+ const geom=new T.BufferGeometry();geom.setAttribute('position',new T.BufferAttribute(new Float32Array(512*3),3));
+ const trace=new T.Line(geom,new T.LineBasicMaterial({color:C.teal,toneMapped:false}));trace.name='law-time-trace';trace.frustumCulled=false;graph.add(trace);
+ const dot=ball(graph,.075,C.cream,0,0,.08,true);dot.name='law-trace-marker';
+ lab(group(graph,0,1.5,0),'Δl [m]','dim');lab(group(graph,w+.25,-1.3,0),'t [s]','dim');
+ const hi=lab(group(graph,-.4,1.1,0),'','dim'),lo=lab(group(graph,-.4,-1.1,0),'','dim');
+ const start=lab(group(graph,0,-1.5,0),'0','dim'),end=lab(group(graph,w,-1.5,0),'8','dim');
+ return{width:8.4,height:6.1,camera:[.1,.5,10],top:136,update(t,dt){
+  if(dt>0){state.oscillator=advanceOscillator(state.oscillator,state.stiffness,dt);state.oscillatorTrace.push({time:state.oscillator.time,x:state.oscillator.x});}
+  const q=oscillatorQuantities(state.oscillator,state.stiffness),from=Math.max(0,state.oscillator.time-8);
+  while(state.oscillatorTrace.length>1&&state.oscillatorTrace[1].time<from)state.oscillatorTrace.shift();
+  const samples=state.oscillatorTrace.slice(-512),max=Math.max(10,q.equilibrium,...samples.map(p=>p.x)),min=Math.min(0,...samples.map(p=>p.x));
+  // A single length scale for spring, mass and equilibrium marker. The assembly
+  // has no invented floor or stops that the ideal model could pass through.
+  const lengthScale=2.8/Math.max(14,max-min+4),restLength=(4-min)*lengthScale;
+  const springLength=restLength+state.oscillator.x*lengthScale;
+  // Rebuild the helix, not scale.y: axial mesh scaling would also flatten the
+  // wire cross-section. The circular wire follows the fourth-root k relation.
+  if(Math.abs(springLength-geometryLength)>1e-6||geometryK!==state.stiffness){
+   const pts=Array.from({length:241},(_,i)=>{const a=i/240;return V(.22*Math.sin(a*14*Math.PI),-a*springLength,.22*Math.cos(a*14*Math.PI));});
+   sp.geometry.dispose();sp.geometry=new T.TubeGeometry(new T.CatmullRomCurve3(pts),240,.012*wireDiameterRatio(state.stiffness),8,false);
+   geometryLength=springLength;geometryK=state.stiffness;
+  }
+  body.position.y=sp.position.y-springLength-.3;
+  equilibrium.position.y=sp.position.y-restLength-q.equilibrium*lengthScale-.3;
+  eqLabel.textContent=`Δl₀ = ${q.equilibrium.toFixed(2).replace('.',',')} m`;
+  const xy=p=>[(p.time-from)/8*w,-1.1+(p.x-min)/(max-min)*2.2];
+  samples.forEach((p,i)=>{const [x,y]=xy(p);geom.attributes.position.setXYZ(i,x,y,.04);});
+  geom.setDrawRange(0,samples.length);geom.attributes.position.needsUpdate=true;
+  const [x,y]=xy(state.oscillator);dot.position.set(x,y,.08);
+  hi.textContent=max.toFixed(1).replace('.',',');lo.textContent=min.toFixed(1).replace('.',',');
+  start.textContent=from.toFixed(1).replace('.',',');end.textContent=(from+8).toFixed(1).replace('.',',');
+  root.userData.physics={...state.oscillator,...q};
+ }};
 }
 function makeLimits(root,lab,state){
  const o=oscillator(root,lab);o.g.position.x=-2.15;o.g.scale.setScalar(.84);const force=group(root,1.75,0,0);const energy=group(root,1.75,0,0);const arrow=new T.ArrowHelper(V(0,1,0),V(-2.15,0,.35),.7,C.teal,.18,.1);root.add(arrow);
  for(let i=-2;i<=2;i++){line(force,[[-1.15,i*.5,0],[1.15,i*.5,0]],C.line,.35);line(force,[[i*.5,-1.15,0],[i*.5,1.15,0]],C.line,.35);}line(force,[[-1.3,0,0],[1.3,0,0]],C.teal,.7);line(force,[[0,-1.3,0],[0,1.3,0]],C.teal,.7);path(force,[[-1,1,0],[1,-1,0]],C.teal,.024);const fd=ball(force,.075,C.cream,0,0,.1,true);lab(group(force,1.5,0,0),'x','dim');lab(group(force,0,1.5,0),'F','dim');lab(group(force,0,-1.65,0),'KRAFTBILANZ','dim');
  const kinetic=box(energy,.64,1, .52,C.violet,-.62,-.8,0,{emissive:C.violet,emissiveIntensity:.12});const potential=box(energy,.64,1,.52,C.cream,.62,-.8,0,{emissive:C.cream,emissiveIntensity:.12});box(energy,2,.07,1,0x284757,0,-1.34,0);line(energy,[[-1.1,1.3,0],[1.1,1.3,0]],C.teal,.5);
  lab(group(energy,-.64,-1.7,0),'Ekin','highlight');lab(group(energy,.64,-1.7,0),'EFeder','highlight');lab(group(energy,0,1.58,0),'Egesamt = konstant','dim');
- return {width:8,height:4.75,camera:[1.4,1.1,10],top:143,update(t){const theta=t*1.6,x=.65*Math.cos(theta),u=Math.cos(theta)**2,v=Math.sin(theta)**2;o.update(x*.72,.36);const isEnergy=state.description==='energy';energy.visible=isEnergy;force.visible=!isEnergy;arrow.visible=!isEnergy;arrow.position.y=(-.4+x*.72)*.84;arrow.setDirection(V(0,x>0?-1:1,0));arrow.setLength(.1+Math.abs(x)*1.3,.15,.085);fd.position.set(x/.65,-x/.65,.1);kinetic.scale.y=Math.max(.006,2.55*v);kinetic.position.y=-1.3+1.275*v;potential.scale.y=Math.max(.006,2.55*u);potential.position.y=-1.3+1.275*u;}};
+ return {width:8,height:4.75,camera:[1.4,1.1,10],top:143,update(t){const theta=t*1.6,x=.65*Math.cos(theta),u=Math.cos(theta)**2,v=Math.sin(theta)**2;o.update(x*.72,.36);const isEnergy=state.description==='energy';energy.visible=isEnergy;force.visible=!isEnergy;arrow.visible=!isEnergy&&Math.abs(x)>1e-8;arrow.position.y=(-.4+x*.72)*.84;arrow.setDirection(V(0,x>0?-1:1,0));const length=Math.abs(x)*1.3;arrow.setLength(length,Math.min(.15,length*.35),Math.min(.085,length*.2));fd.position.set(x/.65,-x/.65,.1);kinetic.scale.y=2.55*v;kinetic.visible=v>1e-12;kinetic.position.y=-1.3+1.275*v;potential.scale.y=2.55*u;potential.visible=u>1e-12;potential.position.y=-1.3+1.275*u;root.userData.physics={x,v:-.65*1.6*Math.sin(theta),force:-(1.6**2)*x,kinetic:v,potential:u};}};
 }
 function makeRuntime(root,lab,state){
  grid(root,9,5,-1.8);const left=group(root,-3.3,0,0);const inp=ball(left,.32,C.blue,0,0,0,true);const rings=[];for(let i=0;i<3;i++){const r=mesh(new T.TorusGeometry(.47+i*.12,.012,6,60),new T.MeshBasicMaterial({color:C.blue,transparent:true,opacity:.5-i*.12}),left);r.rotation.y=.4; rings.push(r);}lab(group(left,0,-.92,0),'EINGANG x','highlight');const c=chip(root,-.42,0,0);lab(group(c,0,0,.4),'f','large');lab(group(c,0,-1.36,0),'MODELL + INTERFACE','dim');
  const servo=group(root,2.7,0,0);box(servo,1.5,1.5,.48,0x1d3a48,0,0,-.18);const disk=mesh(new T.CylinderGeometry(.64,.64,.11,64),material(0x6c8995,{metalness:.7}),servo,0,0,.15);disk.rotation.x=Math.PI/2;const ring=mesh(new T.TorusGeometry(.72,.018,8,70),material(C.blue,{emissive:C.blue,emissiveIntensity:.25}),servo,0,0,.18);
  const pointer=group(servo,0,0,.31);box(pointer,.065,.62,.045,C.cream,0,.27,0,{emissive:C.cream,emissiveIntensity:.5});ball(pointer,.085,C.cream,0,0,.03,true);for(let i=-4;i<=4;i++){let a=i*Math.PI/6;const k=box(servo,.025,.09,.02,0xb1c4c8,Math.sin(a)*.8,Math.cos(a)*.8,.1);k.rotation.z=-a;}
  lab(group(servo,0,-1.22,0),'STELLWINKEL y','highlight');const p1=path(root,[[-2.75,0,0],[-2.05,0,0],[-1.55,0,0]],C.blue,.021),p2=path(root,[[.8,0,0],[1.4,0,0],[1.82,0,0]],C.blue,.021);const pulses=[ball(root,.055,C.cream,0,0,.05,true),ball(root,.055,C.cream,0,0,.05,true)];
- line(root,[[-1.75,-1.68,0],[.94,-1.68,0]],C.blue,.7);lab(group(root,-.4,-2.0,0),'LAUFZEITUMGEBUNG','dim');let angle=0;
- return {width:8.8,height:4.75,camera:[1.2,1.6,10],top:144,update(t,dt){if(state.executing){angle+=(state.outputAngle-angle)*(dt===0?1:Math.min(1,dt*8));}pointer.rotation.z=-T.MathUtils.degToRad(angle);state.servoAngle=angle;pulses.forEach((o,i)=>{o.visible=state.executing;o.position.copy((i?p2:p1).curve.getPoint((t*.58+i*.2)%1));o.position.z+=.04;});rings.forEach((r,i)=>r.rotation.y=.4+Math.sin(t*.7+i)*.1);}};
+ line(root,[[-1.75,-1.68,0],[.94,-1.68,0]],C.blue,.7);lab(group(root,-.4,-2.0,0),'LAUFZEITUMGEBUNG','dim');
+ return {width:8.8,height:4.75,camera:[1.2,1.6,10],top:144,update(t,dt){if(state.executing&&dt>0){state.servoAngle+=(state.outputAngle-state.servoAngle)*(1-Math.exp(-dt*8));}pointer.rotation.z=-T.MathUtils.degToRad(state.servoAngle);pulses.forEach((o,i)=>{o.visible=state.executing;o.position.copy((i?p2:p1).curve.getPoint((t*.58+i*.2)%1));o.position.z+=.04;});rings.forEach((r,i)=>r.rotation.y=.4+Math.sin(t*.7+i)*.1);}};
 }
 function makeLearning(root,lab,state){
  const g=group(root,0,-.2,0),W=5.7,H=2.7,x0=-2.85,y0=-1.15;const toX=x=>x0+(x+1)*W/2,toY=y=>y0+y*H/1.85;
@@ -97,7 +139,7 @@ function makeLanguage(root,lab,state){
  const xs=[-3.65,-2.05,-.28,1.45,3],names=['Tokens','Repräsentation','Attention','FFN','pθ'];xs.forEach((x,i)=>lab(group(root,x,-1.51,0),names[i],i===2?'highlight':'dim'));lab(group(root,.55,1.57,0),'WIEDERHOLTE VERARBEITUNG · × N','dim');
  for(let i=0;i<4;i++)line(root,[[xs[i]+.45,0,-.35],[xs[i+1]-.45,0,-.35]],C.blue,.55);
  const pulse=ball(root,.07,C.cream,0,0,.55,true);const feedback=path(root,[[3.3,-.4,-.1],[3,-1.9,-.7],[-3.2,-1.9,-.7],[-3.7,-.5,-.1]],C.line,.01);
- return {width:9.1,height:4.8,camera:[1.0,1.3,10],top:170,update(t){const vals=state.context===0?[.47,.31,.22]:[.51,.29,.2];bars.forEach((b,i)=>{b.scale.x=vals[i]*2.6;b.position.x=-.5+(.9*vals[i]*2.6)/2;});const active=state.langStep===4?0:Math.min(4,state.langStep);groups.forEach((g,i)=>{g.scale.setScalar(i===active?1.07:1);});pulse.position.set(-3.4+(t*.7%1)*6.3,.08,.65);pulse.visible=state.langStep<4;feedback.mesh.material.color.set(state.langStep===4?C.cream:C.line);}};
+ return {width:9.1,height:4.8,camera:[1.0,1.3,10],top:170,update(t){const vals=modellLanguageContexts[state.context].candidates.map(([,share])=>Number(share)/100);bars.forEach((b,i)=>{b.scale.x=vals[i]*2.6;b.position.x=-.5+(.9*vals[i]*2.6)/2;});const active=state.tokenAdded?0:Math.min(4,state.langStep);groups.forEach((g,i)=>{g.scale.setScalar(i===active?1.07:1);});pulse.position.set(-3.4+(t*.7%1)*6.3,.08,.65);pulse.visible=!state.tokenAdded;feedback.mesh.material.color.set(state.tokenAdded?C.cream:C.line);}};
 }
 function makeTransfer(root,lab,state){
  grid(root,9,4,-1.4);const gs=[],colors=[C.cream,C.teal,C.violet,C.blue,C.cream];const words=['Aufgabe','Daten','Lernen','Prüfen','Einsetzen'];
