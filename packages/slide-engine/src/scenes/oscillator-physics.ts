@@ -36,3 +36,20 @@ export function oscillatorQuantities(state: OscillatorState, k: number, mass = O
   return { omega, period: 2 * Math.PI / omega, equilibrium: mass * gravity / k,
     force: mass * gravity - k * state.x, kinetic, potential, gravitational, energy: kinetic + potential + gravitational };
 }
+
+/** Fixed-k comparison scene. Gravitational potential is zero at the lower
+ * turning point, a fixed reference, so all three energy bars are non-negative.
+ * The spring energy uses absolute extension, NOT displacement from equilibrium.
+ */
+export function hangingSpringEnergy(time: number) {
+  const k = 4, mass = OSCILLATOR_MASS, amplitude = INITIAL_DISPLACEMENT;
+  const equilibrium = mass * GRAVITY / k;
+  const bottom = equilibrium + amplitude;
+  const state = advanceOscillator({ x: bottom, v: 0, time: 0 }, k, time);
+  const q = oscillatorQuantities(state, k);
+  const gravitational = q.gravitational + mass * GRAVITY * bottom;
+  return { ...state, k, mass, amplitude, displacement: state.x - equilibrium,
+    equilibrium, force: q.force, kinetic: q.kinetic, elastic: q.potential,
+    gravitational, total: q.kinetic + q.potential + gravitational,
+    totalAtStart: k * bottom ** 2 / 2 };
+}

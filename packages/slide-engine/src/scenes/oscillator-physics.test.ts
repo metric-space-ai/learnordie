@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as T from "three";
-import { advanceOscillator, oscillatorQuantities, wireDiameterRatio, GRAVITY } from "./oscillator-physics";
+import { advanceOscillator, oscillatorQuantities, wireDiameterRatio, hangingSpringEnergy, GRAVITY } from "./oscillator-physics";
 import { createModellSceneState, trainModellStep, modellLoss, modellLanguageContexts } from "./modell-state";
 import { createModellSceneFactories } from "./modell-factories";
 
@@ -71,15 +71,32 @@ test("law mesh, trace and theme reconstruction share one persistent state", () =
   close(root.getObjectByName("law-mass")!.position.y,y);
 });
 
-test("force vanishes at equilibrium; energy exchanges without a fabricated floor", () => {
+test("three physical energies share one scale and conserve their sum", () => {
+  const bottom=hangingSpringEnergy(0),top=hangingSpringEnergy(Math.PI/2);
+  close(bottom.kinetic,0);close(bottom.gravitational,0);
+  close(top.kinetic,0);assert.ok(top.gravitational>0);
+  assert.ok(bottom.elastic>top.elastic); // Unlike the old cos² 'spring energy'.
+  for(let i=0;i<1000;i++){
+    const q=hangingSpringEnergy(i*.017);
+    close(q.kinetic+q.elastic+q.gravitational,q.totalAtStart);
+    close(q.elastic,.5*q.k*q.x**2);
+    close(q.gravitational,q.mass*GRAVITY*(bottom.x-q.x));
+    assert.ok(q.kinetic>=0&&q.elastic>=0&&q.gravitational>=-1e-12);
+  }
+});
+
+test("force vanishes at equilibrium; all three rendered energy bars use physical joules", () => {
   const {root,instance}=scene("limits");
   for(let i=0;i<=24;i++) {
-    instance.update(i*Math.PI/12/1.6,0);
+    instance.update(i*Math.PI/24,0);
     const q=root.userData.physics;
-    close(q.kinetic+q.potential,1);
-    assert.ok(q.force*q.x<=0);
+    close(q.kinetic+q.elastic+q.gravitational,q.totalAtStart);
+    assert.ok(q.force*q.displacement<=1e-12);
+    for(const key of ["kinetic","elastic","gravitational"]){
+      close(root.getObjectByName(`energy-${key}`)!.scale.y,2.4*q[key]/q.totalAtStart);
+    }
   }
-  instance.update(Math.PI/2/1.6,0);
+  instance.update(Math.PI/4,0);
   assert.equal(root.children.find(o=>o.type==="ArrowHelper")!.visible,false);
 });
 

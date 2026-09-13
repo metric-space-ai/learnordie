@@ -14,7 +14,7 @@ import type * as ThreeNamespace from "three";
 
 import type { ModellSceneFactories } from "./modell-types";
 import { modellTheme, type ModellTheme } from "./modell-theme";
-import { advanceOscillator, oscillatorQuantities, wireDiameterRatio } from "./oscillator-physics";
+import { advanceOscillator, oscillatorQuantities, wireDiameterRatio, hangingSpringEnergy } from "./oscillator-physics";
 import { modellLanguageContexts } from "./modell-state";
 
 export function createModellSceneFactories(T: typeof ThreeNamespace, theme: ModellTheme = modellTheme()): ModellSceneFactories {
@@ -35,11 +35,19 @@ function oscillator(p,lab){
  const g=group(p);const detail=group(g);box(detail,2.6,.18,1.35,0x254452,0,-1.65,0);box(detail,2.55,.12,.8,0x43606a,0,1.75,0);
  for(const x of [-1.07,1.07]){mesh(new T.CylinderGeometry(.045,.045,3.4,14),material(0x78979f),detail,x,0,-.28);for(const z of [-.48,.48])ball(detail,.052,0xa8bfbd,x,-1.52,z);}
  const body=box(detail,.78,.65,.73,0xc7d8d3,0,-.4,0,{metalness:.65,roughness:.27});const trim=box(body,.79,.06,.74,C.cream,0,-.2,0);
- const sp=spring(g);sp.position.y=1.52;
+ const sp=spring(g);sp.position.y=1.52;let previousLength=-1;
  const abstract=group(g);const massPoint=ball(abstract,.18,C.cream,0,-.4,0,true);const anchor=ball(abstract,.065,C.teal,0,1.52,0,true);line(abstract,[[-.55,1.59,0],[.55,1.59,0]],C.teal,.8);
  const a=group(g,1.35,.55,0);lab(a,'k','highlight');const b=group(g,.85,-.4,.3);lab(b,'m','highlight');
  grid(g,4,3,-1.76);
- return {g,detail,sp,body,massPoint,abstract,b,update(x,abstraction=0){body.position.y=-.4+x;massPoint.position.y=-.4+x;b.position.y=-.4+x;sp.scale.y=1.52-(-.4+x+.32);opacityTree(detail,1-abstraction);opacityTree(abstract,.15+.85*abstraction);}};
+ return {g,detail,sp,body,massPoint,abstract,b,update(x,abstraction=0){
+  body.position.y=-.4+x;massPoint.position.y=-.4+x;b.position.y=-.4+x;
+  const length=1.52-(-.4+x+.32);
+  if(Math.abs(length-previousLength)>1e-6){
+   const pts=Array.from({length:241},(_,i)=>{const u=i/240;return V(.22*Math.sin(u*14*Math.PI),-u*length,.22*Math.cos(u*14*Math.PI));});
+   sp.geometry.dispose();sp.geometry=new T.TubeGeometry(new T.CatmullRomCurve3(pts),240,.032,8,false);previousLength=length;
+  }
+  opacityTree(detail,1-abstraction);opacityTree(abstract,.15+.85*abstraction);
+ }};
 }
 function chip(p,x=0,y=0,z=0){const g=group(p,x,y,z);box(g,1.7,1.45,.2,0x1d4052,0,0,0,{metalness:.5});box(g,1.26,1.04,.16,0x142a3a,0,0,.19);edges(g,new T.BoxGeometry(1.73,1.48,.24),C.blue,.7);for(let i=0;i<7;i++){const v=(i-3)*.2;for(const sign of [-1,1]){box(g,.22,.055,.07,0x86a8b0,sign*.98,v,.03);box(g,.055,.22,.07,0x86a8b0,v,sign*.85,.03);}}return g;}
 function glowTexture(){const c=document.createElement('canvas');c.width=c.height=32;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(16,16,11,0,Math.PI*2);ctx.fill();return new T.CanvasTexture(c);}
@@ -109,11 +117,37 @@ function makeLaw(root,lab,state){
  }};
 }
 function makeLimits(root,lab,state){
- const o=oscillator(root,lab);o.g.position.x=-2.15;o.g.scale.setScalar(.84);const force=group(root,1.75,0,0);const energy=group(root,1.75,0,0);const arrow=new T.ArrowHelper(V(0,1,0),V(-2.15,0,.35),.7,C.teal,.18,.1);root.add(arrow);
- for(let i=-2;i<=2;i++){line(force,[[-1.15,i*.5,0],[1.15,i*.5,0]],C.line,.35);line(force,[[i*.5,-1.15,0],[i*.5,1.15,0]],C.line,.35);}line(force,[[-1.3,0,0],[1.3,0,0]],C.teal,.7);line(force,[[0,-1.3,0],[0,1.3,0]],C.teal,.7);path(force,[[-1,1,0],[1,-1,0]],C.teal,.024);const fd=ball(force,.075,C.cream,0,0,.1,true);lab(group(force,1.5,0,0),'x','dim');lab(group(force,0,1.5,0),'F','dim');lab(group(force,0,-1.65,0),'KRAFTBILANZ','dim');
- const kinetic=box(energy,.64,1, .52,C.violet,-.62,-.8,0,{emissive:C.violet,emissiveIntensity:.12});const potential=box(energy,.64,1,.52,C.cream,.62,-.8,0,{emissive:C.cream,emissiveIntensity:.12});box(energy,2,.07,1,0x284757,0,-1.34,0);line(energy,[[-1.1,1.3,0],[1.1,1.3,0]],C.teal,.5);
- lab(group(energy,-.64,-1.7,0),'Ekin','highlight');lab(group(energy,.64,-1.7,0),'EFeder','highlight');lab(group(energy,0,1.58,0),'Egesamt = konstant','dim');
- return {width:8,height:4.75,camera:[1.4,1.1,10],top:143,update(t){const theta=t*1.6,x=.65*Math.cos(theta),u=Math.cos(theta)**2,v=Math.sin(theta)**2;o.update(x*.72,.36);const isEnergy=state.description==='energy';energy.visible=isEnergy;force.visible=!isEnergy;arrow.visible=!isEnergy&&Math.abs(x)>1e-8;arrow.position.y=(-.4+x*.72)*.84;arrow.setDirection(V(0,x>0?-1:1,0));const length=Math.abs(x)*1.3;arrow.setLength(length,Math.min(.15,length*.35),Math.min(.085,length*.2));fd.position.set(x/.65,-x/.65,.1);kinetic.scale.y=2.55*v;kinetic.visible=v>1e-12;kinetic.position.y=-1.3+1.275*v;potential.scale.y=2.55*u;potential.visible=u>1e-12;potential.position.y=-1.3+1.275*u;root.userData.physics={x,v:-.65*1.6*Math.sin(theta),force:-(1.6**2)*x,kinetic:v,potential:u};}};
+ const o=oscillator(root,lab);o.g.position.x=-2.15;o.g.scale.setScalar(.84);
+ const force=group(root,1.65,0,0),energy=group(root,1.65,0,0);
+ const arrow=new T.ArrowHelper(V(0,1,0),V(-2.15,0,.35),.7,C.teal,.18,.1);root.add(arrow);
+ for(let i=-2;i<=2;i++){line(force,[[-1.15,i*.5,0],[1.15,i*.5,0]],C.line,.35);line(force,[[i*.5,-1.15,0],[i*.5,1.15,0]],C.line,.35);}
+ line(force,[[-1.3,0,0],[1.3,0,0]],C.teal,.7);line(force,[[0,-1.3,0],[0,1.3,0]],C.teal,.7);
+ path(force,[[-1,1,0],[1,-1,0]],C.teal,.024);const fd=ball(force,.075,C.cream,0,0,.1,true);
+ lab(group(force,1.5,0,0),'x − x₀','dim');lab(group(force,0,1.5,0),'F [N]','dim');
+ const bars=[['kinetic','Eₖ',C.violet],['elastic','E_f',C.cream],['gravitational','E_g',C.teal]].map(([key,title,color],i)=>{
+  const x=(i-1)*1.05,bar=box(energy,.56,1,.4,color,x,0,0);bar.name=`energy-${key}`;
+  lab(group(energy,x,-1.65,0),title,'highlight');return {key,bar};
+ });
+ line(energy,[[-1.5,-1.3,0],[1.5,-1.3,0]],C.teal,.7);
+ const totalLabel=lab(group(energy,0,1.55,0),'','dim');
+ return {width:7.7,height:4.35,camera:[.3,.6,10],top:80,update(t){
+  const q=hangingSpringEnergy(t),relative=q.displacement/q.amplitude;
+  // World y points up; physical extension x points down.
+  o.update(-q.displacement*.72,.36);
+  const isEnergy=state.description==='energy';energy.visible=isEnergy;force.visible=!isEnergy;
+  arrow.visible=!isEnergy&&Math.abs(q.force)>1e-8;
+  arrow.position.y=(-.4-q.displacement*.72)*.84;
+  arrow.setDirection(V(0,q.force>0?-1:1,0));
+  const length=Math.abs(relative)*.85;
+  arrow.setLength(length,Math.min(.15,length*.35),Math.min(.085,length*.2));
+  fd.position.set(relative,-relative,.1);
+  for(const {key,bar} of bars){
+   const height=2.4*q[key]/q.totalAtStart;
+   bar.visible=q[key]>1e-12;bar.scale.y=height;bar.position.y=-1.3+height/2;
+  }
+  totalLabel.textContent=`E = ${q.total.toFixed(2).replace('.',',')} J`;
+  root.userData.physics=q;
+ }};
 }
 function makeRuntime(root,lab,state){
  grid(root,9,5,-1.8);const left=group(root,-3.3,0,0);const inp=ball(left,.32,C.blue,0,0,0,true);const rings=[];for(let i=0;i<3;i++){const r=mesh(new T.TorusGeometry(.47+i*.12,.012,6,60),new T.MeshBasicMaterial({color:C.blue,transparent:true,opacity:.5-i*.12}),left);r.rotation.y=.4; rings.push(r);}lab(group(left,0,-.92,0),'EINGANG x','highlight');const c=chip(root,-.42,0,0);lab(group(c,0,0,.4),'f','large');lab(group(c,0,-1.36,0),'MODELL + INTERFACE','dim');

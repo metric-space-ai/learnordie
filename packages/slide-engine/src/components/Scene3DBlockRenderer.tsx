@@ -137,7 +137,7 @@ export function Scene3DBlockRenderer({ block }: { block: Scene3DBlock }) {
             state.langStep = Math.floor(state.sceneTime * 0.65) % 5;
           }
           host?.render(state.sceneTime, dt);
-          if ((sceneKey === "learning" || sceneKey === "language") && now - lastUi > 120) {
+          if ((sceneKey === "learning" || sceneKey === "language" || sceneKey === "runtime") && now - lastUi > 120) {
             lastUi = now;
             rerender();
           }
@@ -260,7 +260,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
             value={state.morph}
             onChange={(value) => update((next) => { next.morph = value; })}
           />
-          <div className="lb-scene3d-stops">
+          <div className="lb-scene3d-stops lb-scene3d-accessible-description">
             {modellConcepts.map((concept, index) => (
               <span data-active={index === Math.round(state.morph) ? "true" : undefined} key={concept}>{concept}</span>
             ))}
@@ -307,15 +307,15 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
               value={state.description}
               onChange={(value) => update((next) => { next.description = value; })}
             />
-            <span className="lb-scene3d-math">{state.description === "energy" ? "E = ½mv² + ½kx²" : "F = −k · x"}</span>
           </div>
-          <p className="lb-scene3d-explain">{state.description === "energy" ? "Die Energie wechselt ihre Form; die Summe bleibt konstant." : "Die Rückstellkraft wirkt der Auslenkung entgegen."}</p>
-          {state.description === "energy" && <div className="lb-scene3d-row" aria-label="Energielegende"><span><span style={{ color: "var(--lb-scene-secondary)" }} aria-hidden="true">●</span> Bewegungsenergie</span><span><span style={{ color: "var(--lb-scene-accent)" }} aria-hidden="true">●</span> Federenergie</span></div>}
+          <p className="lb-scene3d-accessible-description">{state.description === "energy"
+            ? "Eₖ: Bewegungsenergie ½mv². E_f: Federenergie ½kx² mit x als Verlängerung ab der unbelasteten Lage. E_g: Lageenergie mg(x_max − x), mit festem Nullpunkt am unteren Umkehrpunkt. Die drei Balken haben dieselbe Energieskala; ihre Summe bleibt konstant."
+            : "Resultierende Kraft F = mg − kx = −k(x − x₀), mit x₀ = mg/k. x wird ab der unbelasteten Feder nach unten gemessen."}</p>
         </>
       );
     case "runtime":
       return (
-        <>
+        <div className="lb-scene3d-inline-controls">
           <RangeRow
             id="inputX"
             label="Eingang x"
@@ -331,6 +331,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
           />
           <div className="lb-scene3d-row">
             <button
+              aria-label={state.executing ? "Ausführung anhalten" : "Ausführung starten"}
               aria-pressed={state.executing}
               className="lb-scene3d-button"
               data-primary="true"
@@ -340,18 +341,19 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
                 if (next.executing) next.outputAngle = next.inputX * 60;
               })}
             >
-              {state.executing ? "Ausführung anhalten" : "Ausführung starten"}
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2v10M6 5a9 9 0 1 0 12 0" /></svg>
             </button>
-            <Stats items={[["Ausgang", `${formatModellNumber(state.outputAngle, 1)}°`], ["Status", state.executing ? "aktiv" : "halten"]]} />
+            <div className="lb-scene3d-accessible-description"><Stats items={[["Sollwinkel", `${formatModellNumber(state.outputAngle, 1)}°`], ["Istwinkel", `${formatModellNumber(state.servoAngle, 1)}°`], ["Status", state.executing ? "aktiv" : "halten"]]} /></div>
           </div>
-        </>
+        </div>
       );
     case "learning":
       return (
-        <>
-          <div className="lb-scene3d-row" aria-label="Diagrammlegende"><span><span style={{ color: "var(--lb-scene-ink)" }} aria-hidden="true">●</span> Beispieldaten</span><span><span style={{ color: "var(--lb-scene-secondary)" }} aria-hidden="true">━</span> Modell</span><span><span style={{ color: "var(--lb-scene-accent)" }} aria-hidden="true">●</span> Auswertung</span></div>
+        <div className="lb-scene3d-inline-controls">
+          <div className="lb-scene3d-accessible-description" aria-label="Diagrammlegende">Punkte: Beispieldaten. Kurve: Modell. Markierter Punkt: Auswertung.</div>
           <div className="lb-scene3d-row">
             <button
+              aria-label={state.trainingRunning ? "Lernen anhalten" : state.steps ? "Weiterlernen" : "Lernen starten"}
               className="lb-scene3d-button"
               data-primary="true"
               type="button"
@@ -365,12 +367,12 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
                 }
               })}
             >
-              {state.trainingRunning ? "Lernen anhalten" : state.steps ? "Weiterlernen" : "Lernen starten"}
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d={state.trainingRunning ? "M8 5v14M16 5v14" : "m7 4 13 8-13 8Z"} /></svg>
             </button>
-            <button className="lb-scene3d-button" type="button" onClick={() => update(resetModellLearning)}>
-              Zurücksetzen
+            <button aria-label="Lernen zurücksetzen" className="lb-scene3d-button" type="button" onClick={() => update(resetModellLearning)}>
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6" /></svg>
             </button>
-            <Stats items={[["Schritte", String(state.steps)], ["Fehler", formatModellNumber(modellLoss(state), 4)]]} />
+            <div className="lb-scene3d-accessible-description"><Stats items={[["Schritte", String(state.steps)], ["Fehler", formatModellNumber(modellLoss(state), 4)]]} /></div>
           </div>
           <RangeRow
             id="inferX"
@@ -382,11 +384,11 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
             value={state.inferX}
             onChange={(value) => update((next) => { next.inferX = value; })}
           />
-          <div className="lb-scene3d-row">
+          <div className="lb-scene3d-accessible-description">
             <span className="lb-scene3d-math">{modellFitEquation(state)}</span>
             <Stats items={[["Auswertung", formatModellNumber(modellPredict(state, state.inferX), 3)]]} />
           </div>
-        </>
+        </div>
       );
     case "language": {
       const context = modellLanguageContexts[state.context];
