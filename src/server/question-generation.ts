@@ -6,6 +6,16 @@ import { getAIProvider } from "./providers/ai";
 const LEVELS: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 const ANSWER_KEYS: AnswerOption["key"][] = ["A", "B", "C", "D"];
 
+// Shared authoring guidance for material-based and live question generation.
+// This guides new wording; it does not truncate source texts or stored fixtures.
+const QUESTION_READABILITY_GUIDANCE = [
+  "Formuliere kurze, direkte Fragesätze. Stelle pro Frage genau eine Aufgabe; nutze für nötigen Kontext einen eigenen kurzen Satz.",
+  "Vermeide verschachtelte Nebensätze, unnötigen Fachjargon und doppelte Verneinungen. Erkläre nötige Fachbegriffe und Symbole knapp im Kontext.",
+  "Die Schwierigkeit entsteht durch Verstehen, Anwenden und Übertragen, nicht durch seltene Wörter oder komplizierte Sprache.",
+  "Formuliere alle vier Antworten in gleicher Form und ähnlicher Länge. Nur eine darf unter den genannten Bedingungen richtig sein; die Ablenker sollen typische fachliche Fehlvorstellungen aufgreifen.",
+  "Erkläre die Lösung in ein bis zwei kurzen Sätzen und kläre dabei die wichtigste Fehlvorstellung."
+].join(" ");
+
 type GeneratedQuestionPayload = {
   variants?: unknown;
 };
@@ -157,6 +167,7 @@ function questionSystemPrompt() {
     "Erzeuge Multiple-Choice-Fragen auf vier klar unterschiedlichen Schwierigkeitsstufen.",
     "Nutze ausschließlich die bereitgestellte Folie und die Quellen.",
     "Verwende korrektes Deutsch mit Umlauten.",
+    QUESTION_READABILITY_GUIDANCE,
     "Gib ausschließlich valides JSON zurück. Keine Markdown-Umrandung, keine Erklärung außerhalb des JSON."
   ].join(" ");
 }
@@ -256,6 +267,7 @@ function liveQuestionSystemPrompt(contextSource: "transcript" | "slide" = "trans
     contextSource === "slide" ? "Erzeuge eine Frage zur sichtbaren Folie, ohne zusätzliche Fakten oder Aussagen der Lehrperson zu erfinden." : "Der Folieninhalt dient nur zur Einordnung und nur, soweit er zum Transkript passt; Folienthemen, die im Transkript nicht vorkommen, sind tabu.",
     "Erfinde keine Fakten. Rechne Zahlen selbst nach.",
     "Verwende korrektes Deutsch mit Umlauten und Unicode-Formelzeichen, kein LaTeX.",
+    QUESTION_READABILITY_GUIDANCE,
     "Gib ausschließlich valides JSON zurück. Keine Markdown-Umrandung, keine Erklärung außerhalb des JSON."
   ].join(" ");
 }
