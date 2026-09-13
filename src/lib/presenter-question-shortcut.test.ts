@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { presenterQuestionShortcut } from "./presenter-question-shortcut.ts";
+import { presenterQuestionShortcut } from "@/lib/presenter-question-shortcut";
 
 const space = {
   code: "Space", shiftKey: false, metaKey: false, ctrlKey: false,
