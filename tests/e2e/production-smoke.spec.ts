@@ -3711,7 +3711,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   });
   expect(chatMotion.origin).toBe("chat");
   expect(chatMotion.animationName).toContain("app-panel-enter");
-  expect(chatMotion.radius).toBe("18px");
+  expect(chatMotion.radius).toBe("12px");
   await page.getByLabel("Chat schließen").click();
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -3922,7 +3922,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(lecturerLiveSttMotion.panelOrigin).toBe("transcript");
-  expect(lecturerLiveSttMotion.animationName).toContain("lb-inspector-right-in");
+  expect(lecturerLiveSttMotion.animationName).toContain("app-panel-enter");
   expect(lecturerLiveSttMotion.autoDisabled).toBe(true);
   expect(lecturerLiveSttMotion.actionColumns).toBe(2);
   expect(lecturerLiveSttMotion.overflowX).toBeLessThanOrEqual(1);
