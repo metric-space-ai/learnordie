@@ -385,3 +385,15 @@ test("failed factual review prevents publishing and bounded repair is reviewed a
   await assert.rejects(generateStudentExamDraft(input(), rejected.provider), /invalid after one retry/);
   assert.equal(rejected.reviews.length, 2);
 });
+
+test("one author repair receives every independently rejected level, not only the first", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  const reasons = ["Undefinierter Bezug in 4.0", "Unbelegter Mechanismus in 3.0", "Fehlende Randbedingung in 2.0", "Zwei richtige Antworten in 1.0"];
+  const rejection = JSON.stringify({reviews:levels.map((level,index)=>({level,approved:false,reason:reasons[index]}))});
+  const run=makeProvider([JSON.stringify(validPayload()),JSON.stringify(validPayload())],[rejection]);
+  assert.equal((await generateStudentExamDraft(input(),run.provider)).supported,true);
+  assert.equal(run.requests.length,2);
+  assert.equal(run.reviews.length,2);
+  for(const reason of reasons)assert.ok(run.requests[1].user.includes(reason),"repair must address "+reason);
+});

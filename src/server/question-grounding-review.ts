@@ -55,10 +55,13 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
   }
   // Inspect every verdict before citations: an early malformed quote must not
   // hide a later factual refusal and trigger a repair of that refusal.
+  const failures: string[] = [];
+  let factualRefusal = false;
   for (const entry of parsed.reviews) {
     if (entry.approved !== true) {
+      factualRefusal = true;
       const reason = typeof entry.reason === "string" ? entry.reason.slice(0, 400) : "nicht belegt";
-      throw new GroundingReviewError("factual-review", `Fachprüfung ${entry.level}: ${reason}`);
+      failures.push(`Fachprüfung ${entry.level}: ${reason}`);
     }
   }
   if (variants?.length) {
@@ -68,11 +71,17 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
       if (Array.isArray(entry.distractors)) {
         for (const check of entry.distractors) {
           if (check && ["unrelated", "joke", "not_false"].includes(check.kind)) {
-            throw new GroundingReviewError("distractor-quality", `Fachprüfung ${entry.level}: Unbrauchbarer Ablenker ${String(check.key).slice(0, 1)} (${check.kind}). ${typeof check.reason === "string" ? check.reason.slice(0, 300) : ""}`);
+            failures.push(`Fachprüfung ${entry.level}: Unbrauchbarer Ablenker ${String(check.key).slice(0, 1)} (${check.kind}). ${typeof check.reason === "string" ? check.reason.slice(0, 300) : ""}`);
           }
         }
       }
     }
+  }
+  // The author repairs the entire family once. Returning only the first
+  // refusal hides other independently rejected levels from that attempt.
+  // Negative findings always take precedence over a citation/format repair.
+  if (failures.length) throw new GroundingReviewError(factualRefusal ? "factual-review" : "distractor-quality", failures.join("\n").slice(0, 6000));
+  if (variants?.length) {
     for (const entry of parsed.reviews) {
       const expected = variants.find(variant => variant.level === entry.level)?.answers.filter(answer => !answer.correct).map(answer => answer.key);
       if (!expected || expected.length !== 3 || !Array.isArray(entry.distractors) || entry.distractors.length !== 3
