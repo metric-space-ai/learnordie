@@ -8,7 +8,9 @@ export function canvasFingerprint(value: unknown): string {
   });
 }
 export function isCanvasGestureActive(state: Record<string, unknown>): boolean {
-  return state.cursorButton === "down" || Boolean(state.newElement || state.editingTextElement || state.resizingElement || state.isResizing || state.isRotating);
+  // Image selection first inserts a placeholder, then asynchronously attaches
+  // decoded bytes. Until placement finishes, it is not a persistable image.
+  return state.cursorButton === "down" || Boolean(state.pendingImageElementId || state.newElement || state.editingTextElement || state.resizingElement || state.isResizing || state.isRotating);
 }
 
 /** Native fit rounds down in 10% steps, wasting much of a narrow viewport.

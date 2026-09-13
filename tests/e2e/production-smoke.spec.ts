@@ -3586,6 +3586,8 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
   expect(learnSmokeCheck?.details?.aiProvider).toBe("openai-compatible");
   await page.getByLabel("Chat schließen").click();
 
+  await page.getByRole("button", { name: "Folie ansehen", exact: true }).click();
+  await page.getByLabel("Weitere Aktionen", { exact: true }).filter({ hasText: "Mehr" }).click();
   await page.getByRole("button", { name: "Rangliste" }).click();
   await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
 

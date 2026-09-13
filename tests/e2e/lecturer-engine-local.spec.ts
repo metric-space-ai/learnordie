@@ -21,10 +21,15 @@ type LectureApi = {
   questionReviews?: Array<{ id: string }>;
 };
 
-function diagnostics(page: Page) {
+function diagnostics(page: Page, expectsSandboxedHtml = false) {
   const problems: string[] = [];
   page.on("pageerror", (error) => problems.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") problems.push(message.text()); });
+  page.on("console", (message) => {
+    // Chromium also reports its own injected instrumentation being blocked by
+    // scripts-off srcdoc frames. Keep all application and other CSP errors.
+    const expected = expectsSandboxedHtml && message.text() === "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.";
+    if (message.type() === "error" && !expected) problems.push(message.text());
+  });
   page.on("response", (response) => { if (response.status() >= 500) problems.push(`${response.status()} ${response.url()}`); });
   return () => expect(problems).toEqual([]);
 }
@@ -160,20 +165,20 @@ test("Pi block edits fail clearly on a canonical canvas; the surrounding plannin
   await assistant.getByRole("textbox", { name: "Nachricht an den Planungsassistenten", exact: true }).fill("Erkläre die Mischreibung beim Anlauf und schlage eine Frage zur Gleitlagerung vor.");
   await assistant.getByRole("button", { name: "Senden", exact: true }).click();
   await expect(assistant.locator('.assistant-message.assistant[data-ai-provider-used="true"]')).toBeVisible();
-  await expect(assistant.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier/i);
+  await expect(assistant.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier|Stribeck/i);
   await assistant.getByRole("button", { name: /Als Quelle speichern/ }).click();
   await expect(page.getByLabel("Quellen direkt an der Folie", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Hinterlegte Quellen", { exact: true })).toContainText("Assistent");
   expect((await readLecture(page, lecture.id)).slideDocument.slides[0].canvas).toEqual(before.slideDocument.slides[0].canvas);
   await page.reload();
   await openStudioTool(page, "Assistent");
-  await expect(page.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier/i);
+  await expect(page.locator(".assistant-message.assistant")).toContainText(/Gleitlager|Mischreibung|Schmier|Stribeck/i);
   clean();
 });
 
 test("Material extraction, question generation and HTML formula/table editing remain usable beside the native canvas", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
-  const clean = diagnostics(page);
+  const clean = diagnostics(page, true);
   const { lecture } = await fixture(page);
   const nonce = randomUUID().slice(0, 8);
   await addNativeText(page, `Eigene Erklärung ${nonce}`);

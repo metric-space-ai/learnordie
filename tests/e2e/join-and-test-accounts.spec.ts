@@ -62,7 +62,7 @@ test("temporary lecturer login, QR intro, persistent student link and tenant iso
   // Normal clicks must work: a visible link must not intercept slide controls.
   await page.getByLabel("Präsentationssteuerung", { exact: true }).click();
   await page.getByRole("button", { name: "Nächste Folie", exact: true }).click();
-  await expect(page.locator(".slide-nav .slide-count")).toHaveText(`2 / ${lecture.slides.length}`);
+  await expect(page.getByRole("navigation", { name: "Foliennavigation", exact: true })).toContainText(`2 / ${lecture.slides.length}`);
   await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
   await page.getByRole("button", { name: "Vorherige Folie", exact: true }).click();
   await expect(intro).toBeVisible();

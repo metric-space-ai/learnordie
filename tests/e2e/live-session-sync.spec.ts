@@ -197,21 +197,31 @@ test("Private presenter route rejects another lecturer; DB lock cannot extend an
     await expect.poll(async () => (await studentContext.cookies()).some((cookie) => cookie.name === "lb_student_key")).toBe(true);
     await owner.getByLabel("Präsentationssteuerung", { exact: true }).click();
     await owner.getByLabel("Fragezeit", { exact: true }).selectOption("5");
+    const roundStarted = owner.waitForResponse((response) => new URL(response.url()).pathname === `/api/lectures/${lecture.id}/live-session`
+      && response.request().method() === "POST" && response.request().postDataJSON()?.action === "fire");
     await owner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
-    const state = await (await owner.request.get(`/api/lecture/${lecture.publicToken}/live`)).json() as LiveSessionView;
+    const roundResponse = await roundStarted;
+    expect(roundResponse.status()).toBe(200);
+    const state = await roundResponse.json() as LiveSessionView;
+    expect(state.round).not.toBeNull();
+    const round = state.round!;
     let release!: () => void;
     let locked!: () => void;
     const acquired = new Promise<void>((resolve) => { locked = resolve; });
     const hold = new Promise<void>((resolve) => { release = resolve; });
     const lock = sql.begin(async (tx) => { await tx`select lecture_id from live_sessions where lecture_id = ${lecture.id} for update`; locked(); await hold; });
-    await acquired;
-    const pendingAnswer = student.request.post(`/api/lecture/${lecture.publicToken}/live`, { data: { sessionId: state.sessionId, roundId: state.round!.id, level: "2.0", selected: "A" } });
+    let pendingAnswer: ReturnType<typeof student.request.post> | undefined;
     try {
+      // A failed acquisition must propagate instead of leaving the hold promise
+      // and database shutdown waiting forever. Release on every failure path.
+      await Promise.race([acquired, lock]);
+      pendingAnswer = student.request.post(`/api/lecture/${lecture.publicToken}/live`, { data: { sessionId: state.sessionId, roundId: round.id, level: "2.0", selected: "A" } });
       // Real database wall time, not a mocked browser clock or altered production state.
-      await expect.poll(async () => Number((await sql`select extract(epoch from clock_timestamp())*1000 as now`)[0].now), { timeout: 10000 }).toBeGreaterThan(state.round!.expiresAt + 100);
+      await expect.poll(async () => Number((await sql`select extract(epoch from clock_timestamp())*1000 as now`)[0].now), { timeout: 10000 }).toBeGreaterThan(round.expiresAt + 100);
     } finally { release(); await lock; }
-    expect((await pendingAnswer).status()).toBe(409);
-    expect(Number((await sql`select count(*) from live_answers where round_id = ${state.round!.id}`)[0].count)).toBe(0);
+    expect(pendingAnswer).toBeDefined();
+    expect((await pendingAnswer!).status()).toBe(409);
+    expect(Number((await sql`select count(*) from live_answers where round_id = ${round.id}`)[0].count)).toBe(0);
     const fired = await owner.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "fire", familyIndex: 0, durationSeconds: 60, revision: state.revision } });
     expect(fired.status()).toBe(200);
     const fresh = await fired.json() as LiveSessionView;

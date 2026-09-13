@@ -11,10 +11,10 @@ test("schema property normalization must not echo a native edit back into its ge
 });
 
 test("intermediate drawing, text input and resize states remain owned by native editor", () => {
-  for (const state of [{ cursorButton: "down" }, { newElement: {} }, { editingTextElement: {} }, { resizingElement: {} }, { isResizing: true }, { isRotating: true }]) {
+  for (const state of [{ cursorButton: "down" }, { pendingImageElementId: "image-awaiting-bytes" }, { newElement: {} }, { editingTextElement: {} }, { resizingElement: {} }, { isResizing: true }, { isRotating: true }]) {
     assert.equal(isCanvasGestureActive(state), true);
   }
-  assert.equal(isCanvasGestureActive({ cursorButton: "up", newElement: null, editingTextElement: null, isResizing: false }), false);
+  assert.equal(isCanvasGestureActive({ cursorButton: "up", pendingImageElementId: null, newElement: null, editingTextElement: null, isResizing: false }), false);
 });
 
 test("mobile fit uses available width without rounding down to a tiny slide", () => {
