@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 
 import { MAX_LEARN_QUESTION_DENSITY, MIN_LEARN_QUESTION_DENSITY, learnQuestionFamilies, normalizeLearnQuestionDensity, visibleLearnQuestionFamilies } from "@/lib/learn-settings";
 import { seriesIdForLecture } from "@/lib/series";
+import { savedLearnSlideIndex } from "@/lib/learn-position";
 import { ensureStudentEnrollment, getOrCreateStudentKey } from "@/lib/student-client";
 import { animateHotspotToDrawerSharedElement } from "@/lib/motion";
 import type { LeaderboardEntry, Lecture, QuestionLevel } from "@/lib/types";
@@ -70,6 +71,18 @@ function formatChatBudget(remaining: number, limit: number) {
 export function LearnExperience({ lecture }: { lecture: Lecture }) {
   const evaluationConfig = lecture.evaluationConfig;
   const [slide, setSlide] = useState(0);
+  const [positionLoadedFor, setPositionLoadedFor] = useState<string | null>(null);
+  useEffect(() => {
+    let savedId: string | null = null;
+    try { savedId = window.localStorage.getItem(`lb_learn_slide_${lecture.id}`); } catch { /* Storage is optional. */ }
+    setSlide(savedLearnSlideIndex(savedId, lecture.slides));
+    setPositionLoadedFor(lecture.id);
+  }, [lecture.id, lecture.slides]);
+  useEffect(() => {
+    // Do not overwrite the saved position with the server's initial slide 0.
+    if (positionLoadedFor !== lecture.id || !lecture.slides[slide]) return;
+    try { window.localStorage.setItem(`lb_learn_slide_${lecture.id}`, lecture.slides[slide].id); } catch { /* Storage is optional. */ }
+  }, [lecture.id, lecture.slides, positionLoadedFor, slide]);
   const [density, setDensity] = useState(() => normalizeLearnQuestionDensity(lecture.learnQuestionDensity));
   const slideFamilies = useMemo(() => learnQuestionFamilies(lecture.questions, lecture.slides[slide]?.id), [lecture.questions, lecture.slides, slide]);
   const visibleSpots = visibleLearnQuestionFamilies(slideFamilies, density);
