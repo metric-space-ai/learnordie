@@ -85,7 +85,9 @@ function makeLaw(root,lab,state){
   const samples=state.oscillatorTrace.slice(-512),max=Math.max(10,q.equilibrium,...samples.map(p=>p.x)),min=Math.min(0,...samples.map(p=>p.x));
   // A single length scale for spring, mass and equilibrium marker. The assembly
   // has no invented floor or stops that the ideal model could pass through.
-  const lengthScale=2.8/Math.max(14,max-min+4),restLength=(4-min)*lengthScale;
+  // Fixed reference length and drawing scale: changing k must never secretly
+  // resize the unloaded spring, the mass, or the spatial coordinate system.
+  const lengthScale=.07,restLength=1.4;
   const springLength=restLength+state.oscillator.x*lengthScale;
   // Rebuild the helix, not scale.y: axial mesh scaling would also flatten the
   // wire cross-section. The circular wire follows the fourth-root k relation.

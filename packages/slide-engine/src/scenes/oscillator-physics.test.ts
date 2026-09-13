@@ -66,6 +66,9 @@ test("law mesh, trace and theme reconstruction share one persistent state", () =
   close(replacement.getObjectByName("law-mass")!.position.y,y);
   close(root.userData.physics.x,state.oscillator.x);
   assert.equal(root.getObjectByName("law-time-trace")!.type,"Line");
+  state.oscillatorTrace.push({x:25,time:state.oscillator.time});
+  instance.update(.5,0);
+  close(root.getObjectByName("law-mass")!.position.y,y);
 });
 
 test("force vanishes at equilibrium; energy exchanges without a fabricated floor", () => {
