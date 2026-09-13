@@ -124,6 +124,7 @@ type ProviderErrorResponse = {
 
 type OpenAICompatibleResponse = ProviderErrorResponse & {
   choices?: Array<{
+    finish_reason?: string;
     message?: {
       content?: unknown;
     };
@@ -315,6 +316,15 @@ class OpenAICompatibleProvider implements AIProvider {
   private readonly endpoint: string;
   private readonly apiKey?: string;
 
+  private generationOptions() {
+    // M3 defaults to thinking, which otherwise consumes the live question's
+    // bounded output budget and puts <think> text in the answer channel.
+    // https://platform.minimax.io/docs/api-reference/text-openai-api
+    return /^MiniMax-M3(?:$|[-/])/i.test(this.info.model)
+      ? { thinking: { type: "disabled" }, reasoning_split: true }
+      : {};
+  }
+
   constructor(input: { endpoint: string; apiKey?: string; model: string }) {
     this.endpoint = input.endpoint;
     this.apiKey = input.apiKey?.trim() || undefined;
@@ -339,6 +349,7 @@ class OpenAICompatibleProvider implements AIProvider {
           model: this.info.model,
           temperature: input.temperature ?? 0.2,
           max_tokens: input.maxOutputTokens ?? 520,
+          ...this.generationOptions(),
           ...(input.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
           messages: [
             {
@@ -360,6 +371,9 @@ class OpenAICompatibleProvider implements AIProvider {
         throw new Error(`AI provider request failed: ${message}`);
       }
 
+      if (payload?.choices?.[0]?.finish_reason === "length") {
+        throw new Error("AI provider answer exceeded its output limit. No incomplete answer was accepted.");
+      }
       const content = normalizeProviderContent(payload?.choices?.[0]?.message?.content ?? payload?.choices?.[0]?.text ?? payload?.output_text);
       if (!content) {
         throw new Error("AI provider returned no answer text.");
@@ -393,6 +407,7 @@ class OpenAICompatibleProvider implements AIProvider {
         model: this.info.model,
         temperature: input.temperature ?? 0.2,
         max_tokens: input.maxOutputTokens ?? 520,
+        ...this.generationOptions(),
         stream: true,
         stream_options: { include_usage: true },
         ...(input.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
@@ -424,6 +439,9 @@ class OpenAICompatibleProvider implements AIProvider {
         for await (const data of stream) {
           if (data === "[DONE]") break;
           const payload = JSON.parse(data) as OpenAICompatibleResponse;
+          if (payload.choices?.[0]?.finish_reason === "length") {
+            throw new Error("AI provider answer exceeded its output limit. No incomplete answer was accepted.");
+          }
           usage = normalizeUsage(payload.usage) ?? usage;
           const token = chatCompletionStreamToken(payload);
           if (!token) continue;
