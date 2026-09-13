@@ -344,7 +344,7 @@ function SceneControls({ sceneKey, state, update }: ControlsProps) {
             >
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2v10M6 5a9 9 0 1 0 12 0" /></svg>
             </button>
-            <div className="lb-scene3d-accessible-description"><Stats items={[["Sollwinkel", `${formatModellNumber(state.outputAngle, 1)}°`], ["Istwinkel", `${formatModellNumber(state.servoAngle, 1)}°`], ["Status", state.executing ? "aktiv" : "halten"]]} /></div>
+            <div className="lb-scene3d-accessible-description"><Stats items={[["Sollwinkel", `${formatModellNumber(state.outputAngle, 1)}°`], ["Istwinkel", `${formatModellNumber(state.servoAngle, 1)}°`], ["Status", modellIsPlaying(sceneKey, state) ? "aktiv" : "halten"]]} /></div>
           </div>
         </div>
       );

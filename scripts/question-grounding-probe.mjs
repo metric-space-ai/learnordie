@@ -94,6 +94,25 @@ try {
   }
   if(!rejected)throw new Error("unsupported-numeric-claim-approved");
   report.cases.push({name:"unsupported-Sommerfeld-0.9-claim",status:"pass",elapsedMs:Date.now()-started});
+  // A real author/reviewer pair previously approved this underdetermined
+  // scenario. A valid number is not evidence of a regime threshold.
+  const underdetermined = structuredClone(valid);
+  underdetermined[2] = { ...underdetermined[2],
+    text:"Ein Radiallager wird nach 10 Sekunden Stillstand mit 60 U/min angefahren. Welcher Schmierungszustand liegt vor?",
+    answers:[
+      {key:"A",text:"Mischreibung, weil 60 U/min für einen tragenden Schmierfilm zu gering sind.",correct:true},
+      {key:"B",text:"Ohne Last, Geometrie, Viskosität und Lagermodell ist der Zustand nicht bestimmbar.",correct:false},
+      {key:"C",text:"Vollständige Flüssigkeitsreibung, weil jede Drehbewegung die Oberflächen trennt.",correct:false},
+      {key:"D",text:"Trockenreibung, weil im Stillstand grundsätzlich kein Schmierstoff im Lager bleibt.",correct:false}
+    ], explanation:"Bei 60 U/min entsteht noch kein tragender Schmierfilm; daher liegt Mischreibung vor." };
+  started=Date.now(); rejected=false;
+  try { await reviewQuestionGrounding(provider,underdetermined,[sources,"Ein hydrodynamischer Schmierfilm entsteht durch Relativbewegung im keilförmigen Spalt. Beim Anfahren kann Mischreibung auftreten."],Date.now()+40000); }
+  catch(error) {
+    if(error.code==="factual-review" && /Fachprüfung 2\.0:/.test(error.message)) rejected=true;
+    else throw error;
+  }
+  if(!rejected)throw new Error("underdetermined-bearing-regime-approved");
+  report.cases.push({name:"underdetermined-bearing-regime",status:"pass",elapsedMs:Date.now()-started});
   const absurd = structuredClone(valid);
   absurd[0].answers[1].text="Die Feder bestellt selbstständig Kaffee im Internet.";
   started=Date.now(); rejected=false;
@@ -119,7 +138,7 @@ try {
   report.status="pass";
 } catch(error) {
   report.status="fail";
-  report.reason=["unsupported-numeric-claim-approved","absurd-distractor-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
+  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
   if(error.diagnostic) {
     report.diagnostic=error.diagnostic;

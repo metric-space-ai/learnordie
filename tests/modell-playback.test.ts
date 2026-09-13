@@ -4,6 +4,17 @@ import { createModellSceneState, resetModellLearning, trainModellStep } from "..
 import { modellSceneKeys } from "../packages/slide-engine/src/scenes/modell-types";
 import { modellIsPlaying, setModellPlaying, toggleModellPlaying } from "../packages/slide-engine/src/scenes/modell-playback";
 
+test("reduced-motion runtime starts inactive and begins execution only after play", () => {
+  const state = createModellSceneState(false);
+  assert.equal(state.executing, false);
+  assert.equal(modellIsPlaying("runtime", state), false);
+  state.inputX = -.7;
+  toggleModellPlaying("runtime", state);
+  assert.equal(state.executing, true);
+  assert.equal(state.outputAngle, -42);
+  assert.equal(modellIsPlaying("runtime", state), true);
+});
+
 for (const key of modellSceneKeys) {
   test(`${key}: play/pause/resume controls the effective simulation state`, () => {
     const state = createModellSceneState(false);

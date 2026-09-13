@@ -48,7 +48,7 @@ export function createModellSceneState(playing: boolean): ModellSceneState {
     oscillator: { x: GRAVITY / 4 + INITIAL_DISPLACEMENT, v: 0, time: 0 },
     oscillatorTrace: [{ x: GRAVITY / 4 + INITIAL_DISPLACEMENT, time: 0 }],
     description: "force",
-    executing: true,
+    executing: playing,
     inputX: 0.4,
     outputAngle: 24,
     servoAngle: 0,
