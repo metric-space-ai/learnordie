@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { demoLecture } from "./demo-data";
 import { createModelQuestionBank } from "./model-question-bank";
 import { originalModelSlides } from "./model-original-source";
@@ -131,4 +132,13 @@ test("demo copy review preserves the four answer keys, levels and points", () =>
     keys: ["A", "B", "C", "D"],
     correct: [index % 2 === 0 ? "B" : "A"]
   })));
+});
+
+test("database seed uses the same reviewed questions as newly created lectures", () => {
+  const seedSource = readFileSync(new URL("../../scripts/admin.mjs", import.meta.url), "utf8");
+  for (const question of demoLecture.questions) {
+    for (const text of [question.text, question.explanation, ...question.answers.map((answer) => answer.text)]) {
+      assert.ok(seedSource.includes(JSON.stringify(text)), `Database seed has stale wording: ${text}`);
+    }
+  }
 });

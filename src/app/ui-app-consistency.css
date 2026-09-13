@@ -156,6 +156,9 @@
 .learn-save-status[data-state="error"] { color: var(--app-danger); }
 .learn-shell :is(.learn-more, .learn-bar, .overlay-panel) { font-family: var(--app-font), system-ui, sans-serif; }
 .learn-shell .learn-more-panel {
+  position: fixed;
+  top: max(64px, calc(env(safe-area-inset-top) + 56px));
+  right: max(12px, env(safe-area-inset-right));
   min-width: 0;
   width: min(280px, calc(100vw - 32px));
   max-height: min(60svh, 420px);
