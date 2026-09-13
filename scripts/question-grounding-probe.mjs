@@ -8,6 +8,22 @@ const { getAIProvider } = await import("@/server/providers/ai");
 const { reviewQuestionGrounding } = await import("@/server/question-grounding-review");
 const provider = getAIProvider();
 if (provider.info.model.toLowerCase() !== "minimax-m3") throw new Error("MiniMax M3 required");
+// These requests contain only the synthetic fixtures below. Retain bounded
+// verdict fields so a semantic refusal is distinguishable from bad JSON or
+// unavailable transport, without printing HTTP errors or credentials.
+const reviewVerdicts = [];
+const complete = provider.complete.bind(provider);
+provider.complete = async (input) => {
+  const result = await complete(input);
+  try {
+    const parsed = JSON.parse(result.answer);
+    reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
+      level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
+      sourceQuote: String(entry?.sourceQuote ?? "").slice(0, 600), reason: String(entry?.reason ?? "").slice(0, 400)
+    })) : null });
+  } catch { reviewVerdicts.push({ malformedJson: true }); }
+  return result;
+};
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(...args)=>{
   const url=new URL(args[0] instanceof Request?args[0].url:String(args[0]));
@@ -36,7 +52,7 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
   {key:"C",text:"Der Schmierfilm bricht sofort zusammen.",correct:false},
   {key:"D",text:"Es liegt ausschließlich hydrostatische Schmierung vor.",correct:false}
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
-const report = {model:provider.info.model,databaseWrites:false,browserTested:false,cases:[]};
+const report = {model:provider.info.model,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 try {
   let started=Date.now();
   await reviewQuestionGrounding(provider,valid,sources,Date.now()+14000);
@@ -54,6 +70,7 @@ try {
 } catch(error) {
   report.status="fail";
   report.reason=error.message==="unsupported-numeric-claim-approved"?error.message:"review-failed-before-required-verdict";
+  report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
   process.exitCode=1;
 }
 globalThis.fetch=originalFetch;
