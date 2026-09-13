@@ -23,6 +23,7 @@ const child = spawn(
     "src/lib/presenter-question-shortcut.test.ts",
     "tests/unit/transcript-recording-status.test.mjs",
     "scripts/lib/purge-session-transcripts.test.mjs",
+    "scripts/lib/upgrade-original-slides.test.mjs",
     "src/components/theme/theme-store.test.mjs",
     "src/server/model-demo.test.ts",
     "src/lib/model-original-template.test.ts",
