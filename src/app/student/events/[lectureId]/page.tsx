@@ -38,7 +38,7 @@ export default async function StudentEventPage({ params }: { params: Promise<{ l
       <article className="student-series lb-enter-panel">
         <header className="student-series-head">
           <div>
-            <h2>{lecture.title}</h2>
+            <h1>{lecture.title}</h1>
             <p className="student-series-meta">
               <span>Termin {formatDateTime(lecture.liveAt)}</span>
             </p>

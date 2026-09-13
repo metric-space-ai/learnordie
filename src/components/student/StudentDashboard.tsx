@@ -74,7 +74,7 @@ function SeriesCard({
     <article className="student-series lb-enter-panel">
       <header className="student-series-head">
         <div>
-          <h2>{series.seriesTitle}</h2>
+          <h2><Link href={`/student/series/${encodeURIComponent(series.seriesId)}`}>{series.seriesTitle}</Link></h2>
           <p className="student-series-meta">
             {series.displayName && <span>Name in dieser Vorlesung: {series.displayName}</span>}
             {series.joinCode && <span>Code {series.joinCode}</span>}
@@ -247,6 +247,10 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
                 autoFocus
               />
               <button className="plain-button small" type="submit">Speichern</button>
+              <button className="plain-button small" type="button" onClick={() => {
+                setPseudonymInput(dashboard.profile.pseudonym);
+                setEditing(false);
+              }}>Abbrechen</button>
             </form>
           ) : (
             <>
@@ -257,6 +261,8 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
           )}
         </div>
       </header>
+
+      <h1 className="student-page-title">Meine Vorlesungen</h1>
 
       <section className="student-addcode lb-enter-panel" aria-label="Vorlesung hinzufügen">
         <form className="student-addcode-form" onSubmit={addCode}>
@@ -276,7 +282,7 @@ export function StudentDashboard({ initialDashboard }: { initialDashboard: Stude
 
       {dashboard.series.length === 0 ? (
         <section className="student-emptystate lb-enter-panel">
-          <h1>Gib einen Vorlesungscode ein</h1>
+          <h2>Gib einen Vorlesungscode ein</h2>
         </section>
       ) : (
         <div className="student-series-grid">

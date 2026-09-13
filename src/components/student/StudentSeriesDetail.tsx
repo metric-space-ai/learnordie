@@ -32,7 +32,7 @@ export function StudentSeriesDetail({ series }: { series: StudentDashboardSeries
       <article className="student-series lb-enter-panel">
         <header className="student-series-head">
           <div>
-            <h2>{series.seriesTitle}</h2>
+            <h1>{series.seriesTitle}</h1>
             {series.examDate && (
               <p className="student-series-meta">
                 <span>Prüfung {formatDate(series.examDate)}</span>
