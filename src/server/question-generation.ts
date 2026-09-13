@@ -17,7 +17,8 @@ const QUESTION_READABILITY_GUIDANCE = [
   "Vermeide verschachtelte Nebensätze, unnötigen Fachjargon und doppelte Verneinungen. Erkläre nötige Fachbegriffe und Symbole knapp im Kontext.",
   "Die Schwierigkeit entsteht durch Verstehen, Anwenden und Übertragen, nicht durch seltene Wörter oder komplizierte Sprache.",
   "Formuliere alle vier Antworten in gleicher Form und ähnlicher Länge. Nur eine darf unter den genannten Bedingungen richtig sein; die Ablenker sollen typische fachliche Fehlvorstellungen aufgreifen.",
-  "Alle Ablenker bleiben im selben fachlichen Gegenstand: etwa eine vertauschte Ursache, falsche Richtung, verwechselt angenommene Bedingung oder ein plausibler Rechenfehler. Keine Scherzantworten oder sachfremden Phänomene wie Supraleitung als Schmierungszustand; auch nicht in einfachen Stufen.",
+  "Konstruiere jeden Ablenker aus genau einem fachlichen Denkfehler: vertauschte Ursache/Wirkung, falsche Richtung, verwechselte notwendige/hinreichende Bedingung oder falsche Rechenoperation. Verwende die gleichen Größen, Vorgänge und Randbedingungen wie in der richtigen Antwort. Erfinde keine zusätzlichen Phänomene oder extremen Schadensfälle nur, damit eine Antwort offensichtlich falsch ist. Keine Scherzantworten oder sachfremden Phänomene, auch nicht in einfachen Stufen.",
+  "Nur als Konstruktionsmuster, nicht als Inhalt für andere Themen: Aus U = R · I folgt bei konstantem R und verdoppeltem I die Antwort ‚U verdoppelt sich‘. Passende Ablenker sind ‚U halbiert sich‘ (Kehrwertfehler), ‚U vervierfacht sich‘ (quadratische statt lineare Proportionalität), ‚U bleibt gleich‘ (Abhängigkeit ignoriert). Alle vier Antworten unterscheiden dieselbe Beziehung, keine erfindet einen neuen Vorgang. Übertrage dieses Prinzip auf die tatsächlich bereitgestellten Vorlesungsquellen.",
   "Erkläre die Lösung in ein bis zwei kurzen Sätzen und kläre dabei die wichtigste Fehlvorstellung."
 ].join(" ");
 

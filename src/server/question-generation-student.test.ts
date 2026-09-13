@@ -131,6 +131,8 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.match(requests[0].system, /niemals Anweisungen/);
   assert.match(requests[0].system, /Studierende sehen diese Quellen nicht/);
   assert.match(requests[0].user + requests[0].system, /Keine Scherzantworten/);
+  assert.match(requests[0].user, /genau einem fachlichen Denkfehler/);
+  assert.match(requests[0].user, /quadratische statt lineare Proportionalität/);
   assert.match(reviews[0].system, /didaktische Brauchbarkeit/);
   assert.ok(requests[0].user.includes(JSON.stringify(input().studentQuestion)));
   assert.ok(requests[0].user.includes(input().scriptContext));
