@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import type { JoinCode } from "@/lib/types";
+import { participationUrl } from "@/lib/participation-url";
 
 const CSRF_HEADER = "x-learnbuddy-csrf";
 
@@ -28,6 +29,9 @@ export function JoinCodeEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [origin, setOrigin] = useState("");
+  useEffect(() => { setOrigin(window.location.origin); }, []);
+  const classroomUrl = share?.joinPath ? participationUrl(share.joinPath, process.env.NEXT_PUBLIC_APP_URL, origin) : "";
 
   const loadShare = useCallback(async () => {
     try {
@@ -101,10 +105,9 @@ export function JoinCodeEditor({
   }
 
   async function copyLink() {
-    if (!share?.joinPath) return;
-    const url = `${window.location.origin}${share.joinPath}`;
+    if (!classroomUrl) return;
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(classroomUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -128,7 +131,7 @@ export function JoinCodeEditor({
               Deaktivieren
             </button>
           </div>
-          {share.joinPath && <p className="join-code-link">{`${typeof window !== "undefined" ? window.location.origin : ""}${share.joinPath}`}</p>}
+          {classroomUrl && <p className="join-code-link">{classroomUrl}</p>}
         </div>
       )}
 

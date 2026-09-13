@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Slide } from "@/lib/types";
+import { participationUrl } from "@/lib/participation-url";
 import {
   legacySlidesToSlideDocument,
   type SlideDocument
@@ -45,12 +46,9 @@ export function SlideEngineCanvas({
   const qrDialog = useRef<HTMLDialogElement>(null);
   const participationButton = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
-    // A production candidate uses the explicitly configured public origin,
-    // rather than publishing its disposable deployment hostname in the QR.
-    try { setOrigin(new URL(process.env.NEXT_PUBLIC_APP_URL || window.location.origin).origin); }
-    catch { setOrigin(window.location.origin); }
+    setOrigin(window.location.origin);
   }, []);
-  const lectureUrl = lectureToken ? `${origin}${participationPath ?? `/l/${encodeURIComponent(lectureToken)}`}` : "";
+  const lectureUrl = lectureToken ? participationUrl(participationPath ?? `/l/${encodeURIComponent(lectureToken)}`, process.env.NEXT_PUBLIC_APP_URL, origin) : "";
   useEffect(() => {
     const dialog = qrDialog.current;
     if (qrOpen && dialog && !dialog.open) dialog.showModal();
