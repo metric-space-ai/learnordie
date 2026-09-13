@@ -60,7 +60,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [sttStatus, setSttStatus] = useState<"idle" | "requesting" | "listening" | "transcribing" | "ready" | "error">("idle");
   const [lastTranscriptAt, setLastTranscriptAt] = useState(0);
   const [transcriptPending, setTranscriptPending] = useState(0);
-  const [statusClock, setStatusClock] = useState(Date.now());
+  const [statusClock, setStatusClock] = useState(0);
   const [questions, setQuestions] = useState(lecture.questions);
   const families = groupQuestionFamilies(questionsForSlide(questions, lecture.slides[slide]?.id));
   const [liveQuestionsOn, setLiveQuestionsOn] = useState(true);
