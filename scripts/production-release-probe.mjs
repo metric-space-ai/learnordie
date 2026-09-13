@@ -13,7 +13,7 @@ if (!process.argv.includes("--run") || process.env.VERCEL_ENV !== "production" |
 
 const { default: postgres } = await import("postgres");
 const { getEmbeddingProvider } = await import("@/server/providers/embeddings");
-const report = { mode: "read-only-inventory-and-synthetic-embedding", database: null, embedding: null };
+const report = { mode: "read-only-inventory-and-synthetic-providers", database: null, embedding: null, ai: null };
 const sql = postgres(process.env.DATABASE_URL, {
   max: 1, prepare: false, connect_timeout: 10,
   connection: { statement_timeout: 15000, application_name: "learnordie-release-readonly" }
@@ -42,8 +42,16 @@ try {
 
 // Probe the already configured external adapter without changing the deployment selection.
 const selected = process.env.LEARNBUDDY_EMBEDDING_PROVIDER;
+const originalFetch = globalThis.fetch;
+let responseStatus = null;
+globalThis.fetch = async (...args) => {
+  const response = await originalFetch(...args);
+  responseStatus = response.status;
+  return response;
+};
+const missingEmbeddingConfig = ["LEARNBUDDY_EMBEDDING_API_KEY", "LEARNBUDDY_EMBEDDING_BASE_URL", "LEARNBUDDY_EMBEDDING_MODEL"].filter(key => !process.env[key]);
 try {
-  if (!process.env.LEARNBUDDY_EMBEDDING_API_KEY || !process.env.LEARNBUDDY_EMBEDDING_BASE_URL || !process.env.LEARNBUDDY_EMBEDDING_MODEL) {
+  if (missingEmbeddingConfig.length) {
     throw new Error("missing-config");
   }
   process.env.LEARNBUDDY_EMBEDDING_PROVIDER = "openai-compatible";
@@ -53,10 +61,24 @@ try {
   if (vector.length !== provider.dimensions || !Number.isFinite(norm) || norm <= 0) throw new Error("invalid-vector");
   report.embedding = { status: "pass", adapter: provider.name, dimensions: vector.length, syntheticInputOnly: true };
 } catch {
-  report.embedding = { status: "fail", message: "Configured external embedding adapter failed its synthetic request; no provider response or credentials logged." };
+  report.embedding = { status: "fail", httpStatus: responseStatus, missingConfig: missingEmbeddingConfig, message: "Configured external embedding adapter failed its synthetic request; no provider response or credentials logged." };
   process.exitCode = 1;
 } finally {
   if (selected === undefined) delete process.env.LEARNBUDDY_EMBEDDING_PROVIDER;
   else process.env.LEARNBUDDY_EMBEDDING_PROVIDER = selected;
+}
+
+responseStatus = null;
+try {
+  const { getAIProvider } = await import("@/server/providers/ai");
+  const provider = getAIProvider();
+  const result = await provider.complete({ system: "Synthetic deployment check. Reply with exactly: ok", user: "Return ok.", maxOutputTokens: 32 });
+  if (!result.answer?.trim()) throw new Error("empty-answer");
+  report.ai = { status: "pass", httpStatus: responseStatus, syntheticInputOnly: true };
+} catch {
+  report.ai = { status: "fail", httpStatus: responseStatus, message: "Configured app AI adapter failed its synthetic request; no provider response or credentials logged." };
+  process.exitCode = 1;
+} finally {
+  globalThis.fetch = originalFetch;
 }
 console.log(JSON.stringify(report, null, 2));
