@@ -11,6 +11,7 @@ import { Presence } from "./Presence";
 import { LiveQuizDrawer } from "./LiveQuizDrawer";
 import { SlideEngineCanvas } from "./SlideEngineCanvas";
 import { PseudonymChooser } from "./student/PseudonymChooser";
+import "./learner-workspace.css";
 
 const followPresenter = () => undefined;
 
@@ -21,7 +22,7 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [chatText, setChatText] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatFeedback, setChatFeedback] = useState("");
-  const [answeredOnce, setAnsweredOnce] = useState(false);
+  const [identityPanelOpen, setIdentityPanelOpen] = useState(false);
   const [identitySaved, setIdentitySaved] = useState(false);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityMessage, setIdentityMessage] = useState("");
@@ -29,7 +30,18 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const seriesId = seriesIdForLecture(lecture);
   const round = live.connected ? live.state?.round : null;
   const enrollment = () => ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
-  useEffect(() => { if (live.state?.receipt) setAnsweredOnce(true); }, [live.state?.receipt]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || (!chatOpen && !leaderboardOpen && !identityPanelOpen)) return;
+      event.preventDefault();
+      setChatOpen(false);
+      setLeaderboardOpen(false);
+      setIdentityPanelOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [chatOpen, identityPanelOpen, leaderboardOpen]);
 
   useEffect(() => {
     let stopped = false;
@@ -48,9 +60,38 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       body: JSON.stringify({ sessionId: live.state.sessionId, roundId: round.id, level, selected }), signal: AbortSignal.timeout(6000) });
     const payload = await response.json();
     if (!response.ok) { live.refresh(); throw new Error(payload.error ?? "Antwort nicht gespeichert. Bitte erneut versuchen."); }
-    setAnsweredOnce(true);
     live.refresh();
     return payload.receipt as LiveAnswerReceipt;
+  }
+
+  function toggleLeaderboard() {
+    if (leaderboardOpen) {
+      setLeaderboardOpen(false);
+      return;
+    }
+    setChatOpen(false);
+    setIdentityPanelOpen(false);
+    setLeaderboardOpen(true);
+  }
+
+  function toggleChatPanel() {
+    if (chatOpen) {
+      setChatOpen(false);
+      return;
+    }
+    setLeaderboardOpen(false);
+    setIdentityPanelOpen(false);
+    setChatOpen(true);
+  }
+
+  function toggleIdentityPanel() {
+    if (identityPanelOpen) {
+      setIdentityPanelOpen(false);
+      return;
+    }
+    setChatOpen(false);
+    setLeaderboardOpen(false);
+    setIdentityPanelOpen(true);
   }
 
   async function saveLiveIdentity() {
@@ -87,32 +128,37 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
 
   return <main className={`slide-screen learn-shell lb-motion-root ${round ? "question-open" : ""}`} data-live-status={live.state?.status ?? "connecting"}>
     <SlideEngineCanvas lectureToken={lecture.publicToken} lectureTitle={lecture.title} showJoinIntro={live.state?.showIntro ?? true}
+      participationPath={lecture.participationPath}
       current={Math.min(live.state?.slideIndex ?? 0, Math.max(0, lecture.slides.length - 1))} navigationDisabled
-      onNext={followPresenter} onPrevious={followPresenter} slideDocument={lecture.slideDocument} slides={lecture.slides} />
+      showNavigation={false} onNext={followPresenter} onPrevious={followPresenter} slideDocument={lecture.slideDocument} slides={lecture.slides} />
     {(!live.connected || live.state?.status !== "active") && <aside className="student-connection-notice" role="status">
       {!live.connected ? (live.error || "Live-Verbindung wird hergestellt …") : live.state?.status === "ended" ? "Die Live-Sitzung ist beendet." : "Warte auf den Start durch die Lehrperson."}
       {live.state?.status === "ended" && <a href={`/learn/${lecture.publicToken}`}>Jetzt selbstständig lernen</a>}
       {!live.connected && <button type="button" onClick={live.refresh}>Erneut verbinden</button>}
     </aside>}
-    <div className="action-stack live-controls lb-enter-control">
-      {lecture.leaderboardEnabled && <button className="icon-action action-text" type="button" onClick={() => setLeaderboardOpen(true)}>Rangliste</button>}
-      <button className="icon-action action-text" type="button" onClick={() => setChatOpen((current) => !current)}>Frage stellen</button>
+    <div className="learner-workspace-toolbar learner-workspace-toolbar--live lb-enter-control" role="group" aria-label="Live-Steuerung">
+      {lecture.leaderboardEnabled && <button className="learner-toolbar-action" type="button" aria-controls="learner-leaderboard-panel" aria-pressed={leaderboardOpen} onClick={toggleLeaderboard}>Rangliste</button>}
+      <button className="learner-toolbar-action" type="button" aria-controls="live-chat-question-panel" aria-pressed={chatOpen} onClick={toggleChatPanel}>Frage stellen</button>
+      <button className="learner-toolbar-action" type="button" aria-controls="live-identity-panel" aria-pressed={identityPanelOpen} onClick={toggleIdentityPanel}>Pseudonym</button>
     </div>
-    <Presence show={chatOpen}>{(motionState) => <aside className="chat-question-panel lb-enter-overlay" data-panel-origin="chat-question" data-state={motionState} aria-label="Frage an Dozierende">
-      <div><strong>Frage an Dozierende</strong><button className="plain-button" type="button" onClick={() => setChatOpen(false)}>Schließen</button></div>
+    <Presence show={chatOpen}>{(motionState) => <aside id="live-chat-question-panel" className="chat-question-panel learner-live-panel lb-enter-overlay" data-panel-origin="chat-question" data-state={motionState} aria-label="Frage an Dozierende">
+      <div><strong>Frage an Dozierende</strong><button className="plain-button" type="button" aria-label="Frage an Dozierende schließen" onClick={() => setChatOpen(false)}>Schließen</button></div>
       <textarea value={chatText} onChange={(event) => setChatText(event.target.value)} aria-label="Deine Frage" rows={3} />
       <button className="primary-button" disabled={chatSending || chatText.trim().length < 4} type="button" onClick={() => void submitChatQuestion()}>{chatSending ? "Sendet …" : "Senden"}</button>
       {chatFeedback && <p role="status">{chatFeedback}</p>}
     </aside>}</Presence>
     {round && <LiveQuizDrawer key={round.id} round={round} serverOffset={live.serverOffset} receipt={live.state?.receipt ?? null} onAnswer={answer} />}
-    {!round && (answeredOnce || live.state?.receipt) && <aside className="identity-save-nudge live-identity-nudge lb-enter-panel" aria-label="Pseudonym sichern">
-      <strong>{identitySaved ? "Pseudonym gesichert" : "Pseudonym später wählen?"}</strong>
+    <Presence show={identityPanelOpen}>{(motionState) => <aside id="live-identity-panel" className="learner-identity-panel lb-enter-panel" data-state={motionState} aria-label="Pseudonym sichern">
+      <div className="learner-identity-panel-head">
+        <strong>{identitySaved ? "Pseudonym gesichert" : "Pseudonym"}</strong>
+        <button type="button" className="learner-panel-close" aria-label="Pseudonym schließen" title="Schließen" onClick={() => setIdentityPanelOpen(false)}>×</button>
+      </div>
       {identitySaved ? <a className="plain-button small" href="/student">Meine Vorlesungen</a> : <>
         <PseudonymChooser value={pseudonym} onChange={setPseudonym} seriesId={seriesIdForLecture(lecture)} disabled={identitySaving} label="Eigenes Pseudonym" />
         <button className="plain-button small" type="button" onClick={() => void saveLiveIdentity()} disabled={identitySaving}>{identitySaving ? "Sichert …" : "Sichern"}</button>
         {identityMessage && <p role="status">{identityMessage}</p>}
       </>}
-    </aside>}
+    </aside>}</Presence>
     <Presence show={lecture.leaderboardEnabled && leaderboardOpen}>{(motionState) => <LeaderboardModal entries={live.state?.leaderboard ?? []} loading={!live.connected || !live.state?.leaderboard} motionState={motionState} onClose={() => setLeaderboardOpen(false)} />}</Presence>
   </main>;
 }

@@ -16,7 +16,7 @@ export function LeaderboardModal({
   onClose: () => void;
 }) {
   return (
-    <aside className="overlay-panel lb-enter-overlay" data-panel-origin="leaderboard" data-state={motionState} aria-label="Rangliste">
+    <aside id="learner-leaderboard-panel" className="overlay-panel lb-enter-overlay" data-panel-origin="leaderboard" data-state={motionState} aria-label="Rangliste">
       <div className="overlay-head">
         <h2>Rangliste</h2>
         <button type="button" onClick={onClose} aria-label="Rangliste schließen" title="Schließen">×</button>

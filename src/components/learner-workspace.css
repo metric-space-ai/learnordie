@@ -1,0 +1,285 @@
+.learn-shell .learner-workspace-toolbar {
+  position: fixed;
+  z-index: 24;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 4px 6px;
+  border: 1px solid color-mix(in oklab, var(--ink) 18%, transparent);
+  border-radius: 11px 9px 12px 8px;
+  background: color-mix(in oklab, var(--panel) 96%, white 4%);
+  color: var(--ink);
+  box-shadow: 0 4px 18px rgb(28 31 32 / 15%);
+  backdrop-filter: blur(12px);
+  transform: translateX(-50%);
+}
+
+.learn-shell .learner-slide-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.learn-shell .learner-slide-navigation button,
+.learn-shell .learner-question-toggle,
+.learn-shell .learner-control-menu summary,
+.learn-shell .learner-toolbar-action,
+.learn-shell .learner-panel-close {
+  display: inline-flex;
+  min-width: 40px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.learn-shell .learner-slide-navigation button,
+.learn-shell .learner-question-toggle {
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.learn-shell .learner-slide-count {
+  min-width: 44px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  text-align: center;
+}
+
+.learn-shell .learner-toolbar-action,
+.learn-shell .learner-control-menu summary {
+  font-size: 12px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.learn-shell .learner-control-menu summary {
+  list-style: none;
+  border-color: color-mix(in oklab, var(--ink) 16%, transparent);
+  cursor: pointer;
+}
+
+.learn-shell .learner-control-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.learn-shell .learner-slide-navigation button:hover,
+.learn-shell .learner-question-toggle:hover,
+.learn-shell .learner-control-menu summary:hover,
+.learn-shell .learner-toolbar-action:hover,
+.learn-shell .learner-control-menu [aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--ink) 24%, transparent);
+  background: color-mix(in oklab, var(--panel) 78%, var(--ink) 8%);
+}
+
+.learn-shell .learner-workspace-toolbar :focus-visible,
+.learn-shell .learner-identity-panel :focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.learn-shell .learner-control-menu {
+  position: relative;
+}
+
+.learn-shell .learner-control-menu-panel {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 26;
+  width: min(260px, calc(100vw - 24px));
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
+  border-radius: 10px 12px 9px 11px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 5px 20px rgb(28 31 32 / 16%);
+}
+
+.learn-shell .learner-control-menu-panel .plain-button,
+.learn-shell .learner-control-menu-panel a {
+  min-height: 40px;
+  justify-content: flex-start;
+  padding: 8px 10px;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.learn-shell .learner-density-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 6px 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.learn-shell .learner-density-control input {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.learn-shell .learner-density-control output {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.learn-shell .learner-menu-theme {
+  width: 100%;
+  min-height: 40px;
+  justify-content: flex-start;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--ink) 14%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+
+.learn-shell .slide-engine-stage .slide-lecture-link {
+  position: absolute;
+  z-index: 12;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: calc(env(safe-area-inset-left, 0px) + 12px);
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
+  border-radius: 7px 9px 8px 7px;
+  background: color-mix(in oklab, var(--panel) 95%, white 5%);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.25;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(28 31 32 / 10%);
+}
+
+.learn-shell .overlay-panel,
+.learn-shell .learner-live-panel {
+  max-height: calc(100svh - 92px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.learn-shell .learner-live-panel {
+  position: fixed;
+  z-index: 20;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid color-mix(in oklab, var(--ink) 18%, transparent);
+  border-radius: 11px 9px 12px 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 5px 22px rgb(28 31 32 / 16%);
+}
+
+.learn-shell .learner-live-panel > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.learn-shell .learner-live-panel textarea {
+  width: 100%;
+  margin: 12px 0 8px;
+}
+
+.learn-shell .learner-identity-panel {
+  position: fixed;
+  z-index: 21;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  display: grid;
+  gap: 12px;
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(100svh - 100px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid color-mix(in oklab, var(--ink) 18%, transparent);
+  border-radius: 11px 9px 12px 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 5px 22px rgb(28 31 32 / 16%);
+}
+
+.learn-shell .learner-identity-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.learn-shell .learner-panel-close {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 22px;
+}
+
+.learn-shell:fullscreen .learner-workspace-toolbar,
+.learn-shell:has(.slide-engine-stage:fullscreen) .learner-workspace-toolbar {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .learn-shell .learner-workspace-toolbar {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    gap: 2px;
+    padding: 3px 4px;
+  }
+
+  .learn-shell .learner-slide-navigation button,
+  .learn-shell .learner-question-toggle,
+  .learn-shell .learner-control-menu summary {
+    min-width: 38px;
+    min-height: 40px;
+  }
+
+  .learn-shell .learner-slide-count {
+    min-width: 40px;
+  }
+
+  .learn-shell .overlay-panel,
+  .learn-shell .learner-live-panel {
+    top: 12px;
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+    left: 12px;
+    width: auto;
+    max-height: none;
+  }
+
+  .learn-shell .learner-identity-panel {
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+    width: min(320px, calc(100vw - 24px));
+  }
+
+}
