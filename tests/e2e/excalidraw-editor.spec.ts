@@ -12,6 +12,8 @@ type NativeElement = {
   id: string;
   type: string;
   text?: string;
+  width?: number;
+  fontSize?: number;
   fileId?: string;
   isDeleted?: boolean;
   customData?: { learnordie?: { type: string; html?: string; sceneId?: string } };
@@ -148,6 +150,18 @@ test("native text is edited directly, saved in preview, reloaded and presented t
   const clean = diagnostics(page);
   const lecture = await createLecture(page, "Text");
   const editor = await nativeEditor(page);
+  await page.getByLabel("Element einfügen", { exact: true }).click();
+  await page.getByRole("button", { name: "Text hinzufügen", exact: true }).click();
+  await expect(page.locator(".studio-save-status")).toHaveText("Ungespeichert");
+  const inserted = firstScene(await save(page, lecture)).elements.find((element) => element.text === "Neuer Text" && !element.isDeleted);
+  expect(inserted).toBeTruthy();
+  const measuredWidth = await page.evaluate(async () => {
+    await document.fonts.load('32px "Excalifont"', "Neuer Text");
+    const context = document.createElement("canvas").getContext("2d")!;
+    context.font = '32px "Excalifont"';
+    return context.measureText("Neuer Text").width;
+  });
+  expect(inserted!.width!, "Saved text bounds fit the loaded drawing font, not fallback metrics").toBeGreaterThanOrEqual(measuredWidth - 1);
   const canvas = editor.locator("canvas.interactive");
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();

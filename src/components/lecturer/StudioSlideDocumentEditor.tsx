@@ -70,6 +70,13 @@ export function StudioSlideDocumentEditor({ lectureId, currentIndex, seriesTitle
     setBusy(true);
     try {
       const runtime = await loadCanvasRuntime();
+      if (type === "text") {
+        // The native converter measures synchronously. Wait for the actual
+        // drawing font, not just the Assistant UI font, before fixing bounds.
+        // Otherwise fallback-font widths can clip the text in saved previews.
+        const faces = await window.document.fonts.load('32px "Excalifont"', "Neuer Text");
+        if (!faces.length) throw new Error("Die Zeichen-Schrift ist noch nicht verfügbar.");
+      }
       const state = api.current.getAppState();
       const zoom = Number((state.zoom as { value?: number })?.value ?? 1);
       const x = -Number(state.scrollX ?? 0) + Number(state.width ?? 1000) / zoom / 2 - 160;
