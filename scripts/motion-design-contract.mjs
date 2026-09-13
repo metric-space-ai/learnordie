@@ -304,14 +304,18 @@ expectContains("student_live_contract", studentLiveExperience, [
 ], "src/components/StudentLiveExperience.tsx");
 
 expectContains("lecturer_live_contract", lecturerLiveExperience, [
-  "className={`slide-screen presentation-screen lb-motion-root",
+  "className=\"slide-screen presentation-screen lb-motion-root\"",
   "transcript-panel lb-enter-overlay",
   "data-panel-origin=\"transcript\"",
-  "<LiveQuizDrawer",
+  "<PresenterRoundStatus",
   "<Presence show={transcriptVisible}>",
-  "{questionOpen && live.state?.round &&",
+  "void dynamicRoundRef.current?.()",
   "<details className=\"presentation-controls\"",
   "aria-label=\"Präsentationssteuerung\""
+], "src/components/LecturerLiveExperience.tsx");
+
+expectNotContains("non_disruptive_presenter", lecturerLiveExperience, [
+  "<LiveQuizDrawer", "question-open"
 ], "src/components/LecturerLiveExperience.tsx");
 
 expectContains("studio_contract", lecturerDashboard, [

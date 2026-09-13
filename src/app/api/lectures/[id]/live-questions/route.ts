@@ -28,7 +28,8 @@ function slideContext(lecture: Lecture, slideId: string): LiveQuestionSlideConte
     for (const element of node.canvas?.elements ?? []) {
       if (!element.isDeleted && element.type === "text" && element.text) lines.push(element.text);
     }
-    for (const block of node.blocks) {
+    // Native editable text is authoritative; old block projections may be stale.
+    for (const block of node.canvas ? [] : node.blocks) {
       if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") lines.push(block.text);
       else if (block.type === "callout") lines.push(block.text);
       else if (block.type === "bulletList" || block.type === "numberedList") lines.push(...block.items);
@@ -103,7 +104,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   const knownFamilyIds = new Set(lecture.questions.map((question) => question.familyId));
   const updated = await repository.appendQuestionFamily(
     id,
-    { slideId: parsed.data.slideId, source: "live_transcript", variants },
+    { slideId: parsed.data.slideId, source: contextSource === "slide" ? "live_slide" : "live_transcript", variants },
     session.email
   );
   if (!updated) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
