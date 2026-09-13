@@ -47,7 +47,7 @@ test("MiniMax media adapters send bounded M3 vision and asr-1.0 requests without
   globalThis.fetch = async (input, init = {}) => {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     ocrRequests.push({ url: String(input), init, body });
-    return Response.json({ choices: [{ message: { content: "Gleitlagerung und Schmierfilm" } }] });
+    return Response.json({ choices: [{ message: { content: `OCR batch ${ocrRequests.length}` } }] });
   };
 
   const ocr = getOCRProvider();
@@ -55,12 +55,16 @@ test("MiniMax media adapters send bounded M3 vision and asr-1.0 requests without
   const ocrResult = await ocr.extractText({
     fileName: "slide.png",
     mimeType: "image/png",
-    images: [{ name: "slide.png", mimeType: "image/png", bytes: Buffer.from("png test bytes") }]
+    images: Array.from({ length: 10 }, (_, index) => ({
+      name: `slide-${index + 1}.png`,
+      mimeType: "image/png",
+      bytes: Buffer.from(`png test bytes ${index + 1}`)
+    }))
   });
-  assert.equal(ocrResult.text, "Gleitlagerung und Schmierfilm");
+  assert.equal(ocrResult.text, "OCR batch 1\n\nOCR batch 2");
   assert.equal(ocrResult.model, "MiniMax-M3");
   assert.equal(ocrResult.confidence, undefined);
-  assert.equal(ocrRequests.length, 1);
+  assert.equal(ocrRequests.length, 2, "all images are submitted in bounded batches");
   assert.equal(ocrRequests[0].url, "https://api.minimax.io/v1/chat/completions");
   assert.equal((ocrRequests[0].init.headers as Record<string, string>).authorization, "Bearer minimax-test-token");
   const ocrBody = ocrRequests[0].body;
@@ -70,9 +74,14 @@ test("MiniMax media adapters send bounded M3 vision and asr-1.0 requests without
   assert.equal(ocrBody.max_completion_tokens, 2048);
   const messages = ocrBody.messages as Array<{ role: string; content: unknown }>;
   const content = messages[1].content as Array<{ type: string; image_url?: { url: string; detail: string } }>;
+  assert.equal(content.length - 1, 8, "each MiniMax request is limited to eight images");
   assert.equal(content[1].type, "image_url");
-  assert.equal(content[1].image_url?.url, `data:image/png;base64,${Buffer.from("png test bytes").toString("base64")}`);
+  assert.equal(content[1].image_url?.url, `data:image/png;base64,${Buffer.from("png test bytes 1").toString("base64")}`);
   assert.equal(content[1].image_url?.detail, "high");
+  const secondBatchMessages = ocrRequests[1].body.messages as Array<{ role: string; content: unknown }>;
+  const secondBatchContent = secondBatchMessages[1].content as Array<{ type: string; image_url?: { url: string } }>;
+  assert.equal(secondBatchContent.length - 1, 2);
+  assert.equal(secondBatchContent[2].image_url?.url, `data:image/png;base64,${Buffer.from("png test bytes 10").toString("base64")}`);
 
   let ocrCalls = 0;
   globalThis.fetch = async () => {

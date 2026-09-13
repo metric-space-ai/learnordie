@@ -46,7 +46,7 @@ const ALTERNATIVE_ENV_GROUPS = [
   },
   {
     id: "stt_provider_key",
-    description: "Mistral or self-hosted STT provider key",
+    description: "Selected speech-to-text provider key",
     anyOf: ["MISTRAL_API_KEY", "LEARNBUDDY_STT_API_KEY"]
   },
   {
@@ -675,7 +675,16 @@ function requiredEnvFor(environment) {
 function checkEnvSet(source, names) {
   const required = requiredEnvFor(environment);
   const missing = required.filter((name) => !names.has(name));
-  const missingGroups = ALTERNATIVE_ENV_GROUPS
+  const alternativeGroups = ALTERNATIVE_ENV_GROUPS.map((group) => (
+    group.id === "stt_provider_key" && envValue("LEARNBUDDY_STT_PROVIDER").toLowerCase() === "minimax"
+      ? {
+        ...group,
+        description: "MiniMax asr-1.0 speech-to-text provider key",
+        anyOf: ["LEARNORDIE_MINIMAX_API_KEY", "MINIMAX_API_KEY"]
+      }
+      : group
+  ));
+  const missingGroups = alternativeGroups
     .filter((group) => !group.anyOf.some((name) => names.has(name)))
     .map((group) => ({ id: group.id, description: group.description, anyOf: group.anyOf }));
   const forbidden = environment === "development"
@@ -686,7 +695,7 @@ function checkEnvSet(source, names) {
     pass("required_env", "All required deployment environment names are present.", {
       source,
       required: required.length,
-      alternativeGroups: ALTERNATIVE_ENV_GROUPS.length,
+      alternativeGroups: alternativeGroups.length,
       runtimeProvided: environment === "preview" ? PREVIEW_RUNTIME_ENV : []
     });
   } else {

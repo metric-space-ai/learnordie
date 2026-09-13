@@ -30,6 +30,7 @@ const child = spawn(
     "src/server/request-origin.test.ts",
     "src/server/providers/ai.test.ts",
     "src/server/providers/minimax-media.test.ts",
+    "tests/unit/deploy-readiness-minimax.test.mjs",
     "packages/slide-engine/src/excalidraw/scene.test.ts",
     "tests/unit/excalidraw-runtime.test.mjs",
     "tests/unit/standalone-native-export.test.ts"

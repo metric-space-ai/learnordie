@@ -418,9 +418,10 @@ class MiniMaxM3VisionOCRProvider implements OCRProvider {
   }): Promise<OCRProviderResult> {
     if (input.images.length === 0) return { text: "", model: MINIMAX_M3_MODEL };
 
-    const images = input.images.slice(0, 8);
+    const imageBatches: OCRImageInput[][] = [];
+    let batch: OCRImageInput[] = [];
     let estimatedRequestBytes = 4096;
-    for (const image of images) {
+    for (const image of input.images) {
       const mimeType = image.mimeType.trim().toLowerCase().split(";", 1)[0];
       if (!MINIMAX_IMAGE_MIME_TYPES.has(mimeType)) {
         throw new Error(`MiniMax M3 OCR does not support image type ${mimeType || "(missing)"}.`);
@@ -429,77 +430,90 @@ class MiniMaxM3VisionOCRProvider implements OCRProvider {
       if (image.bytes.byteLength > MINIMAX_IMAGE_MAX_BYTES) {
         throw new Error("MiniMax M3 OCR images must be 10 MiB or smaller.");
       }
-      estimatedRequestBytes += 4 * Math.ceil(image.bytes.byteLength / 3) + mimeType.length + 64;
+      const imageRequestBytes = 4 * Math.ceil(image.bytes.byteLength / 3) + mimeType.length + 64;
+      if (batch.length >= 8 || estimatedRequestBytes + imageRequestBytes > MINIMAX_REQUEST_MAX_BYTES) {
+        imageBatches.push(batch);
+        batch = [];
+        estimatedRequestBytes = 4096;
+      }
+      if (estimatedRequestBytes + imageRequestBytes > MINIMAX_REQUEST_MAX_BYTES) {
+        throw new Error("MiniMax M3 OCR image exceeds the 64 MiB request limit.");
+      }
+      batch.push(image);
+      estimatedRequestBytes += imageRequestBytes;
     }
-    if (estimatedRequestBytes > MINIMAX_REQUEST_MAX_BYTES) {
-      throw new Error("MiniMax M3 OCR request exceeds the 64 MiB request limit.");
-    }
+    if (batch.length > 0) imageBatches.push(batch);
 
     const endpoint = MINIMAX_M3_OCR_ENDPOINT;
     assertDeploymentFetchEndpoint(endpoint, "MiniMax M3 OCR endpoint");
     const language = input.language ?? (envValue("LEARNBUDDY_OCR_LANGUAGE") || "de");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ocrTimeoutMs());
-    const imageContent = images.map((image) => {
-      const mimeType = image.mimeType.trim().toLowerCase().split(";", 1)[0];
-      return {
-        type: "image_url",
-        image_url: {
-          url: `data:${mimeType};base64,${image.bytes.toString("base64")}`,
-          detail: "high"
-        }
-      };
-    });
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.apiKey}`,
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          model: MINIMAX_M3_MODEL,
-          thinking: { type: "disabled" },
-          reasoning_split: true,
-          temperature: 0,
-          max_completion_tokens: 2048,
-          messages: [
-            {
-              role: "system",
-              content: `Extrahiere sichtbaren Text aus Vorlesungsfolien. Antworte nur mit dem erkannten Text in ${language}.`
-            },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Datei: ${input.fileName}. Extrahiere den gesamten fachlich relevanten Text, Formeln und Beschriftungen aus den Bildern.`
-                },
-                ...imageContent
-              ]
-            }
-          ]
-        }),
-        signal: controller.signal
+    const extractedTexts: string[] = [];
+    for (const images of imageBatches) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ocrTimeoutMs());
+      const imageContent = images.map((image) => {
+        const mimeType = image.mimeType.trim().toLowerCase().split(";", 1)[0];
+        return {
+          type: "image_url",
+          image_url: {
+            url: `data:${mimeType};base64,${image.bytes.toString("base64")}`,
+            detail: "high"
+          }
+        };
       });
-      const payload = await response.json().catch(() => null) as OpenAICompatibleVisionResponse | null;
-      if (!response.ok) {
-        const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-        throw new Error(`MiniMax M3 OCR request failed: ${message}`);
-      }
 
-      const text = normalizedOpenAICompatibleVisionText(payload);
-      if (!text) throw new Error("MiniMax M3 OCR response contained no recognized text.");
-      return { text, model: MINIMAX_M3_MODEL };
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("MiniMax M3 OCR request timed out.");
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.apiKey}`,
+            "content-type": "application/json"
+          },
+          body: JSON.stringify({
+            model: MINIMAX_M3_MODEL,
+            thinking: { type: "disabled" },
+            reasoning_split: true,
+            temperature: 0,
+            max_completion_tokens: 2048,
+            messages: [
+              {
+                role: "system",
+                content: `Extrahiere sichtbaren Text aus Vorlesungsfolien. Antworte nur mit dem erkannten Text in ${language}.`
+              },
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: `Datei: ${input.fileName}. Extrahiere den gesamten fachlich relevanten Text, Formeln und Beschriftungen aus den Bildern.`
+                  },
+                  ...imageContent
+                ]
+              }
+            ]
+          }),
+          signal: controller.signal
+        });
+        const payload = await response.json().catch(() => null) as OpenAICompatibleVisionResponse | null;
+        if (!response.ok) {
+          const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
+          throw new Error(`MiniMax M3 OCR request failed: ${message}`);
+        }
+
+        const text = normalizedOpenAICompatibleVisionText(payload);
+        if (!text) throw new Error("MiniMax M3 OCR response contained no recognized text.");
+        extractedTexts.push(text);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error("MiniMax M3 OCR request timed out.");
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
     }
+
+    return { text: extractedTexts.join("\n\n"), model: MINIMAX_M3_MODEL };
   }
 }
 
