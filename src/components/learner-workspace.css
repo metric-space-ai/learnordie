@@ -193,7 +193,7 @@
 .learn-shell .learn-question-spots .hotspot {
   position: absolute; display: grid; place-items: center;
   min-width: 44px; min-height: 44px; width: 44px; height: 44px; padding: 0;
-  translate: -50% -50%;
+  margin: -22px 0 0 -22px;
   transform: none;
   border: 2px dashed var(--ink); border-radius: 46% 54% 49% 51%;
   background: var(--panel); color: var(--ink);

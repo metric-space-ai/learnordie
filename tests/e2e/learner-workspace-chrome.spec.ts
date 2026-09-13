@@ -88,6 +88,15 @@ test.describe("standalone learner workspace", () => {
     await expect(density).toHaveAttribute("aria-valuetext", "bis zu 7 Fragen-Spots");
     await expect(page.locator(".hotspots .hotspot")).toHaveCount(1);
     await more.click();
+    const spotFits = await page.locator(".hotspots .hotspot").first().evaluate(async (element) => {
+      for (let frame = 0; frame < 45; frame += 1) {
+        await new Promise(requestAnimationFrame);
+        const bounds = element.getBoundingClientRect();
+        if (bounds.left < 0 || bounds.right > innerWidth) return false;
+      }
+      return true;
+    });
+    expect(spotFits, "Spot and its entrance animation must stay inside the viewport").toBe(true);
     await page.locator(".hotspots .hotspot").first().click();
     const question = page.locator(".question-drawer");
     await expect(question).toBeVisible();
