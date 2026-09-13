@@ -74,7 +74,7 @@ class EmbedErrorBoundary extends Component<{ children?: ReactNode }, { failed: b
   }
 }
 
-function EmbedContent({ element }: { element: CanvasElement }) {
+export function CanvasEmbedContent({ element }: { element: CanvasElement }) {
   const data = parseCanvasEmbed(element);
   if (!data) return <div role="note">Diese Einbettung wird nicht unterstützt.</div>;
   if (data.type === "html") {
@@ -122,7 +122,7 @@ export function renderCanvasEmbeddable(runtime: CanvasRuntime, element: CanvasEl
         if (ownedRoot) queueMicrotask(() => ownedRoot.unmount());
       }
       paint() {
-        this.root?.render(createElement(EmbedErrorBoundary, { key: this.props.element.id }, createElement(EmbedContent, { element: this.props.element })));
+        this.root?.render(createElement(EmbedErrorBoundary, { key: this.props.element.id }, createElement(CanvasEmbedContent, { element: this.props.element })));
       }
       render() {
         return runtime.createElement("div", {

@@ -500,6 +500,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     >
       {learningSaveMessage && <p className="learn-save-status" role="status" data-state={learningSaveState}>{learningSaveMessage}</p>}
       <SlideEngineCanvas
+        mobileReading
         lectureToken={lecture.publicToken}
         participationPath={lecture.participationPath}
         lectureTitle={lecture.title}

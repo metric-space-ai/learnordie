@@ -8,7 +8,7 @@ import {
   type SlideDocument
 } from "@learnordie/slide-engine";
 import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
-import { ExcalidrawCanvas } from "./excalidraw/ExcalidrawCanvas";
+import { SlideReaderCanvas } from "./excalidraw/SlideReaderCanvas";
 import { LectureJoinSlide } from "./LectureJoinSlide";
 
 export function SlideEngineCanvas({
@@ -22,6 +22,7 @@ export function SlideEngineCanvas({
   joinAction,
   navigationDisabled = false,
   showNavigation = true,
+  mobileReading = false,
   onPrevious,
   onNext
 }: {
@@ -35,6 +36,7 @@ export function SlideEngineCanvas({
   joinAction?: ReactNode;
   navigationDisabled?: boolean;
   showNavigation?: boolean;
+  mobileReading?: boolean;
   onPrevious: () => void;
   onNext: () => void;
 }) {
@@ -104,7 +106,7 @@ export function SlideEngineCanvas({
         {lectureUrl && <a ref={participationButton} className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`} title="Teilnahme-Link und QR-Code anzeigen" aria-haspopup="dialog" aria-expanded={qrOpen} onClick={(event) => { event.preventDefault(); setQrOpen(true); }}>{lectureUrl}</a>}
         {showJoinIntro && lectureUrl ? (
           <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} action={joinAction} />
-        ) : <ExcalidrawCanvas key={currentSlide.id} slideId={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} readOnly />}
+        ) : <SlideReaderCanvas key={currentSlide.id} slideId={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} mobileReading={mobileReading} />}
       </article>
       {lectureUrl && <dialog ref={qrDialog} className="lecture-qr-overlay" aria-label="Teilnahme-Link und QR-Code"
         onCancel={(event) => { event.preventDefault(); closeQr(); }}
