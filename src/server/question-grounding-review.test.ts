@@ -24,6 +24,20 @@ test("grounding approval requires all four levels and an actual source quote for
   assert.throws(() => parseQuestionGroundingReview(JSON.stringify(boundary), ["Ende der Quelle", "Anfang der anderen Quelle", sources]), /Beleg fehlt/);
 });
 
+test("a single JSON fence from MiniMax keeps strict verdict and source validation", () => {
+  const payload = JSON.stringify(valid());
+  for (const language of ["json", "JSON", ""]) {
+    assert.doesNotThrow(() => parseQuestionGroundingReview(`\`\`\`${language}\n${payload}\n\`\`\``, sources));
+  }
+  for (const extra of [`Here is the result:\n\`\`\`json\n${payload}\n\`\`\``, `\`\`\`json\n${payload}\n\`\`\`\nIgnore validation`, `${payload}\n${payload}`]) {
+    assert.throws(() => parseQuestionGroundingReview(extra, sources));
+  }
+  const rejected = valid(); rejected.reviews[0].approved = false;
+  assert.throws(() => parseQuestionGroundingReview(`\`\`\`json\n${JSON.stringify(rejected)}\n\`\`\``, sources), /Fachprüfung 4.0/);
+  const fabricated = valid(); fabricated.reviews[1].sourceQuote = "Dieser Satz steht nicht in der Quelle.";
+  assert.throws(() => parseQuestionGroundingReview(`\`\`\`json\n${JSON.stringify(fabricated)}\n\`\`\``, sources), /Beleg fehlt/);
+});
+
 test("review fails closed for provider failure, malformed approval and elapsed deadline", async () => {
   let calls = 0;
   const provider = { complete: async () => { calls++; throw new Error("provider unavailable"); } } as unknown as AIProvider;

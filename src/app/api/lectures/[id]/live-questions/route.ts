@@ -4,7 +4,7 @@ import { z } from "zod";
 import { questionsForSlide } from "@/lib/questions";
 import type { Lecture } from "@/lib/types";
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
-import { acceptedTranscriptContext, generateLiveQuestionFamily, liveQuestionSlideContext } from "@/server/question-generation";
+import { acceptedTranscriptContext, generateLiveQuestionFamily, liveQuestionContextSource, liveQuestionSlideContext } from "@/server/question-generation";
 import { LiveSessionError, liveLecture, readLiveSession } from "@/server/live-session-repository";
 import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
@@ -106,9 +106,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     }
   }
 
-  const contextSource = parsed.data.mode === "transcript-only"
-    ? "transcript"
-    : transcript.length >= MIN_TRANSCRIPT_CHARS ? "transcript" : "slide";
+  const contextSource = liveQuestionContextSource(parsed.data.mode, parsed.data.allowSlideContext, transcript.length);
   if (contextSource === "slide" && parsed.data.allowSlideContext) transcript = [slide.title, ...slide.lines].join("\n");
   if (parsed.data.mode === "transcript-only" && contextSource !== "transcript") {
     return NextResponse.json({ error: "Für diese Frage ist ein aktuelles Live-Transkript erforderlich." }, { status: 422 });

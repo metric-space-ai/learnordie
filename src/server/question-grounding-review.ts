@@ -5,8 +5,15 @@ const LEVELS = ["4.0", "3.0", "2.0", "1.0"];
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const sourceBlocks = (sources: string | readonly string[]) => (typeof sources === "string" ? [sources] : sources).filter(source => source.trim());
 
+/** Accept a single JSON code fence, not prose, partial objects or extra payloads. */
+export function parseGroundingJson(answer: string): unknown {
+  const text = answer.trim();
+  const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(text);
+  return JSON.parse(fenced ? fenced[1] : text);
+}
+
 export function parseQuestionGroundingReview(answer: string, sources: string | readonly string[]) {
-  const parsed = JSON.parse(answer) as { reviews?: unknown };
+  const parsed = parseGroundingJson(answer) as { reviews?: unknown };
   if (!Array.isArray(parsed?.reviews) || parsed.reviews.length !== 4) {
     throw new Error("Fachprüfung: vier Einzelprüfungen erforderlich.");
   }

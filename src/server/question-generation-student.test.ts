@@ -3,10 +3,17 @@ import test from "node:test";
 
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { demoLecture } from "@/lib/demo-data";
-import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, liveQuestionSlideContext, parseStudentExamDraft } from "./question-generation";
+import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, liveQuestionContextSource, liveQuestionSlideContext, parseStudentExamDraft } from "./question-generation";
 import type { AIProvider } from "./providers/ai";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
+test("normal Space selects the current slide even with previous speech; Shift+Space requires transcript", () => {
+  assert.equal(liveQuestionContextSource(undefined, true, 8000), "slide");
+  assert.equal(liveQuestionContextSource(undefined, true, 0), "slide");
+  assert.equal(liveQuestionContextSource("transcript-only", true, 8000), "transcript");
+  assert.equal(liveQuestionContextSource("transcript-only", false, 0), "transcript");
+  assert.equal(liveQuestionContextSource(undefined, false, 8000), "transcript");
+});
 const selfContainedStems = [
   "Für eine Saite gilt ψ(0)=0. Welche Randbedingung ist vorgegeben?",
   "Bei ψ(0)=0: Welchen Wert hat die Auslenkung am Rand x=0?",

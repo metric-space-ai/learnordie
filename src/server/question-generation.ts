@@ -667,6 +667,12 @@ export function parseStudentExamDraft(answer: string, input: { lectureId: string
   };
 }
 
+export function liveQuestionContextSource(mode: "transcript-only" | undefined, allowSlideContext: boolean | undefined, transcriptLength: number) {
+  if (mode === "transcript-only") return "transcript" as const;
+  if (allowSlideContext) return "slide" as const;
+  return transcriptLength >= 120 ? "transcript" as const : "slide" as const;
+}
+
 function isConfiguredMiniMaxM3(provider: AIProvider) {
   if (!/^MiniMax-M3(?:$|[-/])/i.test(provider.info.model)) return false;
   if (provider.info.provider === "learnordie-responses") {
