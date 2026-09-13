@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sameOrigin } from "./request-origin.ts";
+import { sameOrigin } from "./request-origin";
 
 const request = (headers: Record<string, string> = {}, url = "http://localhost:3070/api/test") => new Request(url, { headers });
 test("same-origin public Host works when Next uses an internal listen hostname", () => {
