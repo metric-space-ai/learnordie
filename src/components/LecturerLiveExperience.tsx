@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 
 import { audioFileExtension, recordAudioSnippet, startContinuousWavCapture } from "@/lib/audio-capture";
 import type { RecordedPassage } from "@/lib/audio-capture";
+import { transcriptRecordingStatus, type TranscriptionPhase } from "@/lib/transcript-recording-status";
 import { LiveOperationScope, type LiveOperation } from "@/lib/live-operation-scope";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
@@ -60,7 +61,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [transcriptMessage, setTranscriptMessage] = useState("");
   const [transcriptSavingId, setTranscriptSavingId] = useState<string | null>(null);
   const [transcriptDrafts, setTranscriptDrafts] = useState<TranscriptDraft[]>([]);
-  const [sttStatus, setSttStatus] = useState<"idle" | "requesting" | "listening" | "transcribing" | "ready" | "error">("idle");
+  const [sttStatus, setSttStatus] = useState<TranscriptionPhase>("idle");
   const [lastTranscriptAt, setLastTranscriptAt] = useState(0);
   const [transcriptPending, setTranscriptPending] = useState(0);
   const [statusClock, setStatusClock] = useState(0);
@@ -527,12 +528,9 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
     };
   }, [autoSegmenting, listening, transcribeAudioBlob, activeSessionId]);
 
-  const recordingState = sttStatus === "error" ? "error" : !listening ? transcriptPending ? "pending" : "off"
-    : lastTranscriptAt > 0 && statusClock - lastTranscriptAt < 30_000 ? "confirmed" : "pending";
-  const recordingLabel = recordingState === "error" ? "Live-Transkript: Fehler"
-    : recordingState === "off" ? "Live-Transkript: aus"
-    : recordingState === "confirmed" ? "Live-Transkript: aktueller Text bestätigt"
-    : listening ? "Live-Transkript: Aufnahme läuft, Bestätigung ausstehend" : "Live-Transkript: letzte Passage wird verarbeitet";
+  const { state: recordingState, label: recordingLabel } = transcriptRecordingStatus({
+    phase: sttStatus, listening, pending: transcriptPending, lastTranscriptAt, now: statusClock
+  });
 
   return (
     <main
@@ -603,8 +601,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
             </div>
           )}
           <div className="transcript-actions lb-enter-row" style={{ "--lb-i": 7 } as MotionStyle}>
-            <button className="plain-button" type="button" disabled={sttStatus === "requesting" || (!listening && transcriptPending > 0)} onClick={listening ? stopListening : startListening}>
-              {listening ? "Mikrofon aus" : "Mikrofon an"}
+            <button className="plain-button" type="button" disabled={sttStatus !== "requesting" && !listening && transcriptPending > 0} onClick={listening || sttStatus === "requesting" ? stopListening : startListening}>
+              {sttStatus === "requesting" ? "Freigabe abbrechen" : listening ? "Mikrofon aus" : "Mikrofon an"}
             </button>
             <button className="plain-button" disabled={!listening || sttStatus === "transcribing" || autoSegmenting || transcriptPending > 0} type="button" onClick={transcribeCurrentPassage}>
               Jetzt transkribieren
