@@ -8,6 +8,7 @@ import { audioFileExtension, recordAudioSnippet, startContinuousWavCapture } fro
 import type { RecordedPassage } from "@/lib/audio-capture";
 import { transcriptRecordingStatus, type TranscriptionPhase } from "@/lib/transcript-recording-status";
 import { LiveOperationScope, type LiveOperation } from "@/lib/live-operation-scope";
+import { presenterQuestionShortcut } from "@/lib/presenter-question-shortcut";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
 import { LeaderboardModal } from "./LeaderboardModal";
@@ -144,7 +145,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       } catch (error) {
         if (generationAbortRef.current === abort) {
           setLiveQuestionStatus("error");
-          setRoundMessage(error instanceof Error && error.name !== "AbortError" ? error.message : "Fragenerstellung dauert zu lange. Leertaste zum erneuten Versuch.");
+          setRoundMessage(error instanceof Error && error.name !== "AbortError" ? error.message : `Fragenerstellung dauert zu lange. ${mode === "transcript-only" ? "Shift+Leertaste" : "Leertaste"} zum erneuten Versuch.`);
         }
       } finally {
         clearTimeout(timeout);
@@ -417,16 +418,17 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         toggleFullscreen();
         return;
       }
-      if (event.code === "Space" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const questionShortcut = presenterQuestionShortcut(event);
+      if (event.code === "Space" && event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey && !event.isComposing) event.preventDefault();
+      if (questionShortcut) {
         event.preventDefault();
-        if (event.repeat) return;
+        if (questionShortcut === "transcript-only") {
+          void dynamicRoundRef.current?.("transcript-only");
+          return;
+        }
         if (showJoinIntro) { next(); return; }
         setQuestionOrigin("space");
         void dynamicRoundRef.current?.();
-      }
-      if (event.key.toLowerCase() === "l" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault();
-        if (!event.repeat) void dynamicRoundRef.current?.("transcript-only");
       }
     };
 
@@ -672,7 +674,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         <button type="button" disabled={showJoinIntro || questionOpen || live.busy || !live.connected || liveStatus !== "active" || liveQuestionStatus === "generating"}
           onClick={() => void dynamicRoundRef.current?.()}>Neue Frage · Leertaste</button>
         <button type="button" disabled={showJoinIntro || questionOpen || live.busy || !live.connected || liveQuestionStatus === "generating"}
-          onClick={() => void dynamicRoundRef.current?.("transcript-only")}>Frage aus letzter Passage · L</button>
+          aria-keyshortcuts="Shift+Space"
+          onClick={() => void dynamicRoundRef.current?.("transcript-only")}>Frage aus letzter Passage · Shift+Leertaste</button>
         {questionOpen && <button type="button" disabled={live.busy} onClick={() => void sendLive({ action: "close" })}>Frage schließen</button>}
         <button className="live-back-link" type="button" disabled={live.busy} onClick={async () => {
           if (live.state?.status === "ended" || await live.send({ action: "end" })) { stopListening(); window.location.assign("/lecturer"); }

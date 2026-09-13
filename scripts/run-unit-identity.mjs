@@ -20,6 +20,7 @@ const child = spawn(
     "src/lib/student-pseudonym.test.ts",
     "src/lib/canvas-sync.test.ts",
     "src/lib/participation-url.test.ts",
+    "src/lib/presenter-question-shortcut.test.ts",
     "tests/unit/transcript-recording-status.test.mjs",
     "scripts/lib/purge-session-transcripts.test.mjs",
     "src/components/theme/theme-store.test.mjs",
