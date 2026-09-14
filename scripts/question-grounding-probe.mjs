@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Known synthetic cases / repository lesson sources only. No database writes or credentials in output.
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Optional with --diagnose-model-transcript: --tool-output-experiment uses one non-executed function result as the JSON envelope. This is a diagnostic-only transport override, not normal application behavior or release acceptance.");
   console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review | --diagnose-spoken-source | --diagnose-student-bearing | --diagnose-model-transcript]\nRuns actual MiniMax source and answer review on synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance. --diagnose-student-bearing measures one synthetic student bearing question with unchanged runtime deadlines and prompts. --diagnose-model-transcript exercises the live transcript generator with eight repository model slides, the full repository manuscript, and synthetic speech; unchanged runtime deadlines/prompts, no database access. Diagnostic modes are never a release-gate pass. No database writes; not a browser acceptance test.");
   process.exit(0);
 }
@@ -9,6 +10,8 @@ const diagnoseReview = process.argv.includes("--diagnose-review");
 const diagnoseSpokenSource = process.argv.includes("--diagnose-spoken-source");
 const diagnoseStudentBearing = process.argv.includes("--diagnose-student-bearing");
 const diagnoseModelTranscript = process.argv.includes("--diagnose-model-transcript");
+const toolOutputExperiment = process.argv.includes("--tool-output-experiment");
+if (toolOutputExperiment && !diagnoseModelTranscript) throw new Error("Tool output experiment requires --diagnose-model-transcript.");
 if ([diagnoseReview, diagnoseSpokenSource, diagnoseStudentBearing, diagnoseModelTranscript].filter(Boolean).length > 1) {
   console.error("Choose exactly one diagnostic mode.");
   process.exit(1);
@@ -76,7 +79,13 @@ const originalFetch=globalThis.fetch;
 globalThis.fetch=async(...args)=>{
   const url=new URL(args[0] instanceof Request?args[0].url:String(args[0]));
   if(url.protocol!=="https:"||!["api.minimax.io","llm.learnordie.app"].includes(url.hostname))throw new Error("Unexpected provider endpoint");
-  return originalFetch(...args);
+  if (!toolOutputExperiment) return originalFetch(...args);
+  if (url.hostname !== "llm.learnordie.app" || !url.pathname.endsWith("/responses")) throw new Error("tool-experiment-requires-responses-proxy");
+  const { questionToolRequest, questionToolResult } = await import("./lib/question-tool-output.mjs");
+  const body = questionToolRequest(JSON.parse(String(args[1]?.body)));
+  const response = await originalFetch(args[0], { ...args[1], body: JSON.stringify(body) });
+  if (!response.ok) return response;
+  return Response.json(questionToolResult(await response.json()), { status: response.status });
 };
 const sources = "Eine vertikal aufgehängte Masse m schwingt ungedämpft an einer linearen Feder der Steifigkeit k. Bei gleichbleibender Masse gilt für die Gleichgewichtsauslenkung x_eq = m*g/k und für die Eigenkreisfrequenz omega = sqrt(k/m). Eine weichere Feder führt deshalb zu größerer statischer Auslenkung und langsamerer Schwingung. Vervierfacht man k, halbiert sich die Schwingungsdauer und die statische Auslenkung sinkt auf ein Viertel. Die Sommerfeldzahl kombiniert Viskosität, Drehzahl, Belastung und Lagerspiel.";
 const levels = ["4.0", "3.0", "2.0", "1.0"];
@@ -107,6 +116,7 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
   {key:"D",text:"Es liegt ausschließlich hydrostatische Schmierung vor.",correct:false}
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
 const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview || diagnoseSpokenSource || diagnoseStudentBearing || diagnoseModelTranscript,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
+if (toolOutputExperiment) report.experimentalTransport = "function-result-no-execution";
 try {
   if (diagnoseModelTranscript) {
     const { demoLecture } = await import("@/lib/demo-data");
