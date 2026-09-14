@@ -212,6 +212,13 @@ test("MiniMax proxy identity requires its HTTPS endpoint and follows configured 
   }
 });
 
+test("standalone references allow a described antecedent and mixed German quotation marks", () => {
+  const payload = validPayload();
+  payload.variants[2].text = "Ein Steuergerät enthält die feste Zuordnung y = 60°·x. Die Funktion wird im Betrieb ausgewertet. Welche Aussage zu diesem System ist korrekt?";
+  payload.variants[3].text = 'Ein Team behauptet: „Unser System lernt, weil es auf jede neue Sensoreingabe reagiert." Wie beurteilen Sie diese Aussage?';
+  assert.equal(parseStudentExamDraft(JSON.stringify(payload), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }).supported, true);
+});
+
 test("strict student draft parsing rejects duplicate levels, duplicate answers, non-booleans, and overlength instead of clipping", () => {
   const duplicateLevel = validPayload();
   duplicateLevel.variants[3].level = "3.0";
@@ -448,8 +455,9 @@ test("a reviewer timeout retries the same candidate, never reauthors a question"
   restoreGeneratorEnvironment(t);
   process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
   process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
-  for (const failEveryReview of [false, true]) {
-    const fixture = makeProvider([JSON.stringify(validLivePayload())]);
+  for (const entryPoint of ["live", "student"]) {
+   for (const failEveryReview of [false, true]) {
+    const fixture = makeProvider([JSON.stringify(entryPoint === "live" ? validLivePayload() : validPayload())]);
     const complete = fixture.provider.complete.bind(fixture.provider);
     const reviewInputs: AICompleteInput[] = [];
     fixture.provider.complete = async request => {
@@ -459,16 +467,23 @@ test("a reviewer timeout retries the same candidate, never reauthors a question"
       }
       return complete(request);
     };
-    const result = generateLiveQuestionFamily({
+    const result = entryPoint === "student" ? generateStudentExamDraft(input(), fixture.provider) : generateLiveQuestionFamily({
       lecture: demoLecture, slide: { title: "Randbedingungen", lines: ["Randbedingung ψ(0)=0."] },
       transcript: "Die Randbedingung legt die zulässige Lösung fest.", existingQuestionTexts: [],
       contextSource: "transcript", transcriptOnly: true
     }, fixture.provider);
-    if (failEveryReview) await assert.rejects(result, /timed out/);
-    else assert.equal((await result).length, 4);
+    if (failEveryReview) await assert.rejects(result, error => {
+      const cause = error instanceof StudentDraftError ? error.cause : error;
+      return cause instanceof Error && /timed out/.test(cause.message);
+    });
+    else {
+      const generated = await result;
+      assert.equal(Array.isArray(generated) ? generated.length : generated.supported ? generated.variants.length : 0, 4);
+    }
     assert.equal(fixture.requests.length, 1, "transport failure is not author feedback");
     assert.equal(reviewInputs.length, 2, "bounded to one retry of the same review");
     assert.equal(reviewInputs[0].user, reviewInputs[1].user);
+   }
   }
 });
 

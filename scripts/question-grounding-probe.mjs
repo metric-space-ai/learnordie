@@ -11,6 +11,8 @@ const diagnoseSpokenSource = process.argv.includes("--diagnose-spoken-source");
 const diagnoseStudentBearing = process.argv.includes("--diagnose-student-bearing");
 const diagnoseModelTranscript = process.argv.includes("--diagnose-model-transcript");
 const toolOutputExperiment = process.argv.includes("--tool-output-experiment");
+const fastAuthorExperiment = process.argv.includes("--fast-author-experiment");
+if (fastAuthorExperiment && !toolOutputExperiment) throw new Error("Fast author experiment requires the isolated tool output experiment.");
 if (toolOutputExperiment && !diagnoseModelTranscript) throw new Error("Tool output experiment requires --diagnose-model-transcript.");
 if ([diagnoseReview, diagnoseSpokenSource, diagnoseStudentBearing, diagnoseModelTranscript].filter(Boolean).length > 1) {
   console.error("Choose exactly one diagnostic mode.");
@@ -35,7 +37,11 @@ provider.complete = async (input) => {
   const request = diagnoseSpokenSource && input.system.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")
     ? {...input, system: input.system + " Eine qualitative Ursache-Wirkungs-Aussage ist bereits prüfbarer Stoff; eine Formel oder weitere Herleitung ist dafür nicht erforderlich. Konstruiere qualitative Anwendung und Transfer aus genau dieser Beziehung: eine geänderte Bedingung, eine passende Maßnahme für ein Ziel oder die Prüfung einer widersprechenden Behauptung. Erfinde weder quantitative Faktoren noch eine zusätzliche physikalische Ursache. supported=false ist nicht allein wegen fehlender Zahlen, Formeln oder Skriptduplikate zulässig."}
     : input;
-  try { result=await complete(diagnoseReview ? {...request, timeoutMs:60000} : request); }
+  const isReview = input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1");
+  // Isolated comparison: function-argument author without adaptive thinking;
+  // independent factual review still uses adaptive reasoning and its runtime deadline.
+  const measuredRequest = fastAuthorExperiment && !isReview ? { ...request, reasoningEffort: "none" } : request;
+  try { result=await complete(diagnoseReview ? {...measuredRequest, timeoutMs:60000} : measuredRequest); }
   catch(error) {
     reviewVerdicts.push({providerFailure:/timed out|abort/i.test(String(error?.message??""))?"timeout":"transport",elapsedMs:Date.now()-requestStarted});
     throw error;
@@ -117,6 +123,7 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
 const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview || diagnoseSpokenSource || diagnoseStudentBearing || diagnoseModelTranscript,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 if (toolOutputExperiment) report.experimentalTransport = "function-result-no-execution";
+if (fastAuthorExperiment) report.experimentalAuthorReasoning = "none; independent review unchanged";
 try {
   if (diagnoseModelTranscript) {
     const { demoLecture } = await import("@/lib/demo-data");

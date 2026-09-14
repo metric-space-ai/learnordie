@@ -14,7 +14,7 @@ const authorSchema = object({
 });
 const reviewSchema = object({ reviews: array(object({
   level, approved: { type: "boolean" }, reason: string(600),
-  answerChecks: array(object({ key, reason: string(400), verdict: {
+  answerChecks: array(object({ key, reason: string(300), verdict: {
     type: "string", enum: ["correct", "incorrect", "unsupported", "contradictory"]
   } }), 4),
   sourceIds: array(string(60), 1, 4),

@@ -568,11 +568,11 @@ function selfContainedQuestionText(value: unknown, field: string) {
   for (const match of normalized.matchAll(danglingReference)) {
     const referent = match[1];
     const precedingText = normalized.slice(0, match.index);
-    // A case can be described in the preceding sentence without literally
-    // containing the noun "Situation" or "Fall". The factual reviewer still
-    // checks whether that description suffices to answer the question.
-    const describedCase = /^(?:situation|fall)$/.test(referent) && /[.!?]\s+\S/.test(precedingText);
-    const quotedStatement = referent === "aussage" && /(?:„[^“]+“|"[^"]+"|»[^«]+«)/u.test(precedingText);
+    // A described antecedent need not repeat the same noun (Steuergerät →
+    // System). This lexical guard rejects absent lead-ins; the independent
+    // factual review decides whether the supplied description is sufficient.
+    const describedCase = /[.!?]\s+\S/.test(precedingText);
+    const quotedStatement = referent === "aussage" && /[„"»][^“"«]+[“"«]/u.test(precedingText);
     if (!precedingText.includes(referent) && !describedCase && !quotedStatement) {
       throw new Error(`Draft generator returned ${field} with an undefined reference.`);
     }
