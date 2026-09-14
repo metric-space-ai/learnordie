@@ -29,7 +29,9 @@ provider.complete = async (input) => {
   }
   try {
     const parsed = parseGroundingJson(result.answer);
-    reviewVerdicts.push({ elapsedMs: Date.now()-requestStarted, usage: result.usage, reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
+    reviewVerdicts.push({ elapsedMs: Date.now()-requestStarted, usage: result.usage,
+      syntheticUnsupportedReason: parsed.supported === false ? String(parsed.reason ?? "").slice(0,600) : undefined,
+      reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
       level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
       answerChecks: Array.isArray(entry?.answerChecks) ? entry.answerChecks.slice(0,4).map(check=>({key:check?.key,verdict:check?.verdict,reason:String(check?.reason??"").slice(0,300)})) : undefined,
       sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
@@ -95,6 +97,23 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
 const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 try {
+  if (!diagnoseReview) {
+    // Browser regression: the slides discuss bearings, but accepted current
+    // speech explains a spring. The student asks about the spoken topic. These
+    // are public synthetic fixture texts, never a production lecture dump.
+    const { demoLecture } = await import("@/lib/demo-data");
+    const { generateStudentExamDraft, liveQuestionSlideContext } = await import("@/server/question-generation");
+    const { STUDENT_DRAFT_GENERATION_BUDGET_MS } = await import("@/server/student-draft-limits");
+    const lecture = {...demoLecture, title:"QA Audioabnahme 2026-09-13", questions:[], transcriptSegments:[]};
+    const slide = liveQuestionSlideContext(lecture, lecture.slides[1].id);
+    const speech = "Eine Masse hängt an einer Feder. Wenn die Feder weicher wird, hängt die Masse weiter. nach unten, die Schwingung wird langsamer. Eine Masse hängt an einer Feder. Wenn die Feder weicher wird,";
+    const started = Date.now();
+    const draft = await generateStudentExamDraft({lecture,slide,slideId:lecture.slides[1].id,
+      sourceQuestionId:"synthetic-spoken-spring",studentQuestion:"Wie verändern sich Ruhelage und Schwingung, wenn dieselbe Masse an einer weicheren Feder hängt?",
+      transcriptContext:speech,latestTranscript:speech,scriptContext:"",deadlineAt:Date.now()+STUDENT_DRAFT_GENERATION_BUDGET_MS},provider);
+    if(!draft.supported || draft.variants.length!==4)throw new Error("supported-spoken-topic-rejected");
+    report.cases.push({name:"spoken-spring-topic-over-bearing-slides",status:"pass",elapsedMs:Date.now()-started});
+  }
   let started=Date.now();
   await reviewQuestionGrounding(provider,valid,sources,Date.now()+(diagnoseReview?65000:40000));
   report.cases.push({name:"grounded-spring-family",status:"pass",elapsedMs:Date.now()-started});
@@ -194,7 +213,7 @@ try {
   report.status="pass";
 } catch(error) {
   report.status="fail";
-  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","two-correct-options-approved","contradictory-compound-answer-approved","recall-only-family-approved","unsupported-ranking-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
+  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","two-correct-options-approved","contradictory-compound-answer-approved","recall-only-family-approved","unsupported-ranking-approved","supported-student-fixture-rejected","supported-spoken-topic-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
   if(report.failureClass==="source-review") report.syntheticValidationReason=String(error.message).slice(0,600);
   if(error.diagnostic) {
