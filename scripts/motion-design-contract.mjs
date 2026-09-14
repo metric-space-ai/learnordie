@@ -320,7 +320,8 @@ expectContains("lecturer_live_contract", lecturerLiveExperience, [
   "data-panel-origin=\"transcript\"",
   "<PresenterRoundStatus",
   "<Presence show={transcriptVisible}>",
-  "void dynamicRoundRef.current?.()",
+  "void preparedRoundRef.current?.()",
+  "void dynamicRoundRef.current?.(\"transcript-only\")",
   "<details className=\"presentation-controls\"",
   "aria-label=\"Präsentationssteuerung\""
 ], "src/components/LecturerLiveExperience.tsx");
