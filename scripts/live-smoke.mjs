@@ -427,11 +427,14 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   await page.goto(appUrl(`/learn/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
   await waitForNativeCanvas(page, timeoutMs);
-  const hotspot = page.getByLabel(/Frage Niveau .* anzeigen/).first();
+  const hotspot = page.getByLabel("Fragen-Spots auf der Folie", { exact: true }).locator("button").first();
   const learnMenu = page.locator(".learn-more");
-  if (!await hotspot.isVisible()) await learnMenu.locator("summary").click();
-  await page.getByLabel("Fragen-Hotspots").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
-  await openQuizDrawer(page, hotspot, timeoutMs);
+  if (await hotspot.isVisible()) {
+    await openQuizDrawer(page, hotspot, timeoutMs);
+  } else {
+    if (await learnMenu.getAttribute("open") === null) await learnMenu.locator("summary").click();
+    await openQuizDrawer(page, page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }), timeoutMs);
+  }
   if (await learnMenu.getAttribute("open") !== null) await learnMenu.locator("summary").click();
   await page.locator(".question-drawer .answer").first().click();
   await page.locator(".question-drawer[data-answer-state='answered']").waitFor({ state: "visible", timeout: timeoutMs });

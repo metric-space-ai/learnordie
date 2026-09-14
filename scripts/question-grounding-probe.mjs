@@ -1,14 +1,15 @@
 #!/usr/bin/env node
-// Known synthetic cases only. No database writes and no credential output.
+// Known synthetic cases / repository lesson sources only. No database writes or credentials in output.
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review | --diagnose-spoken-source | --diagnose-student-bearing]\nRuns actual MiniMax source and answer review on public synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance. --diagnose-student-bearing measures one synthetic student bearing question with unchanged runtime deadlines and prompts. Diagnostic modes are never a release-gate pass. No database writes; not a browser acceptance test.");
+  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review | --diagnose-spoken-source | --diagnose-student-bearing | --diagnose-model-transcript]\nRuns actual MiniMax source and answer review on synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance. --diagnose-student-bearing measures one synthetic student bearing question with unchanged runtime deadlines and prompts. --diagnose-model-transcript exercises the live transcript generator with eight repository model slides, the full repository manuscript, and synthetic speech; unchanged runtime deadlines/prompts, no database access. Diagnostic modes are never a release-gate pass. No database writes; not a browser acceptance test.");
   process.exit(0);
 }
 const localProductionEnv = process.argv.includes("--production-env");
 const diagnoseReview = process.argv.includes("--diagnose-review");
 const diagnoseSpokenSource = process.argv.includes("--diagnose-spoken-source");
 const diagnoseStudentBearing = process.argv.includes("--diagnose-student-bearing");
-if ([diagnoseReview, diagnoseSpokenSource, diagnoseStudentBearing].filter(Boolean).length > 1) {
+const diagnoseModelTranscript = process.argv.includes("--diagnose-model-transcript");
+if ([diagnoseReview, diagnoseSpokenSource, diagnoseStudentBearing, diagnoseModelTranscript].filter(Boolean).length > 1) {
   console.error("Choose exactly one diagnostic mode.");
   process.exit(1);
 }
@@ -105,8 +106,31 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
   {key:"C",text:"Der Schmierfilm bricht sofort zusammen.",correct:false},
   {key:"D",text:"Es liegt ausschließlich hydrostatische Schmierung vor.",correct:false}
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
-const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview || diagnoseSpokenSource || diagnoseStudentBearing,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
+const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview || diagnoseSpokenSource || diagnoseStudentBearing || diagnoseModelTranscript,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 try {
+  if (diagnoseModelTranscript) {
+    const { demoLecture } = await import("@/lib/demo-data");
+    const { originalModelSlides, originalModelCompanion } = await import("@/lib/model-original-source");
+    const { originalModelText } = await import("@/lib/model-original-template");
+    const { generateLiveQuestionFamily, liveQuestionSlideContext } = await import("@/server/question-generation");
+    const slides = originalModelSlides.map((source, index) => ({
+      id: `synthetic-model-${index + 1}`, eyebrow: originalModelText(source.kicker), title: originalModelText(source.title),
+      topic: source.nav, diagram: "formula", copy: [source.lead, source.formula, source.takeaway, source.question].map(originalModelText)
+    }));
+    const lecture = { ...demoLecture, id: "synthetic-model-transcript", publicToken: "synthetic-model-transcript",
+      title: "Der Modellbegriff im Wandel", seriesTitle: "Digitale Transformation", slides, questions: [], transcriptSegments: [] };
+    const speech = "Wir unterscheiden Ausführen und Lernen. Eine von Hand festgelegte Zuordnung kann in einem Steuergerät ausgeführt werden, ohne aus Daten gelernt worden zu sein. Bei der Auswertung werden die vorhandenen Parameter benutzt und nicht verändert. Lernen bezeichnet hier dagegen das Anpassen von Parametern an Beispieldaten. Eine neue Eingabe allein ist also noch kein Training.";
+    const started = Date.now();
+    const variants = await generateLiveQuestionFamily({ lecture, slide: liveQuestionSlideContext(lecture, slides[4].id),
+      transcript: speech, latestTranscript: speech, scriptContext: originalModelCompanion,
+      existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true }, provider);
+    if (variants.length !== 4) throw new Error("model-transcript-family-incomplete");
+    report.cases.push({ name: "model-transcript-execution-versus-learning", status: "pass", elapsedMs: Date.now() - started,
+      sourceSlideCount: slides.length, manuscriptCharacters: originalModelCompanion.length, syntheticSpeechCharacters: speech.length });
+    report.status = "diagnostic-complete-not-release-gate";
+    console.log(JSON.stringify(report, null, 2));
+    process.exit(0);
+  }
   if (diagnoseStudentBearing) {
     // Exact public question composed by our browser acceptance harness, not
     // a user's lecture/student payload. Do not fetch production DB contents.

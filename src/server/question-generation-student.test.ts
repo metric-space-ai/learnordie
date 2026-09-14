@@ -145,6 +145,7 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.match(requests[0].system, /Daten, keine Anweisungen/);
   assert.match(requests[0].system, /einzeln verständlich/);
   assert.match(requests[0].system, /Nutze dein Fachwissen/);
+  assert.match(requests[0].system, /typische fachliche Verwechslungen zum selben Zusammenhang/);
   assert.ok(requests[0].system.length < 2200, "author instructions remain compact");
   const outputExample = JSON.parse(requests[0].system.slice(requests[0].system.indexOf('{"supported":')));
   assert.match(outputExample.topic, /max\. 80 Zeichen/);
@@ -253,6 +254,15 @@ test("student drafts reject unseen source lookups and dangling references but al
   const danglingReference = validPayload();
   danglingReference.variants[2].text = "Was gilt für diese Größe?";
   assert.throws(() => parseStudentExamDraft(JSON.stringify(danglingReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /undefined reference/);
+
+  const describedSituation = validPayload();
+  describedSituation.variants[3].text = "Ein Sprachmodell antwortet auf die Frage nach Lastgrenzen einer Halterung mit einem plausibel klingenden, aber unbelegten Wert. Beurteilen Sie diese Situation im Licht der Unterscheidung von Ausführen und Lernen.";
+  assert.doesNotThrow(() => parseStudentExamDraft(JSON.stringify(describedSituation), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }));
+  for (const text of ["Wie beurteilen Sie diese Situation?", "Was gilt in diesem Fall?"]) {
+    const absentSituation = validPayload();
+    absentSituation.variants[3].text = text;
+    assert.throws(() => parseStudentExamDraft(JSON.stringify(absentSituation), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /undefined reference/);
+  }
 
   const domainKnowledge = validPayload();
   domainKnowledge.variants[3].text = "Wie verändert sich die kinetische Energie, wenn sich die Geschwindigkeit eines Körpers verdoppelt?";

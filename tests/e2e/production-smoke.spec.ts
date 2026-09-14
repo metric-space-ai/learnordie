@@ -1151,6 +1151,8 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/alias-loader.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
     ["scripts/alias-register.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
     ["scripts/apply-question-wording.mjs", "Usage: node scripts/apply-question-wording.mjs"],
+    ["scripts/attach-model-manuscript.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/attach-model-manuscript.mjs"],
+    ["scripts/audio-transcription-probe.mjs", "Usage: audio-transcription-probe.mjs"],
     ["scripts/create-test-account.mjs", "Usage: node scripts/create-test-account.mjs"],
     ["scripts/identity-gates.mjs", "Usage: node scripts/identity-gates.mjs"],
     ["scripts/import-model-original.mjs", "Usage: node scripts/import-model-original.mjs"],
@@ -1164,6 +1166,7 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/live-smoke.mjs", "Usage: npm run smoke:live -- [options]"],
     ["scripts/motion-design-contract.mjs", "Usage: npm run motion:contract"],
     ["scripts/provider-smoke.mjs", "Usage: npm run provider:smoke -- [options]"],
+    ["scripts/question-grounding-probe.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs"],
     ["scripts/production-release-probe.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/production-release-probe.mjs --run"],
     ["scripts/production-schema.mjs", "Usage: node scripts/production-schema.mjs"],
     ["scripts/release-gate.mjs", "Usage: npm run release:gate -- [options]"],
@@ -1171,6 +1174,7 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/slide-engine-qa-contract.mjs", "Usage: node scripts/slide-engine-qa-contract.mjs"],
     ["scripts/slide-engine-vendor-check.mjs", "Usage: node scripts/slide-engine-vendor-check.mjs"],
     ["scripts/vendor-reveal-core.mjs", "Usage: node scripts/vendor-reveal-core.mjs"],
+    ["scripts/upgrade-dt01-slides.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/upgrade-dt01-slides.mjs"],
     ["scripts/worker-smoke.mjs", "Usage: npm run smoke:worker -- [options]"],
     ["scripts/self-host-smoke.mjs", "Usage: npm run smoke:self-host -- [options]"]
   ] as const;
@@ -2733,7 +2737,7 @@ MISTRAL_API_KEY=replace-with-mistral-key
   const assistantPayload = await assistantResponse.json() as { lecture?: typeof lecture };
   const assistantMessage = assistantPayload.lecture?.assistantMessages?.find((message) => message.role === "assistant");
   expect(assistantMessage?.metadata?.provider).toBe("openai-compatible");
-  expect(assistantMessage?.metadata?.model).toBe("mock-e2e-chat");
+  expect(assistantMessage?.metadata?.model).toBe("MiniMax-M3");
   expect(assistantMessage?.metadata?.toolPlan?.[0]?.action).toBe("slide_point");
   expect(assistantMessage?.metadata?.toolPlan?.[1]?.action).toBe("review_draft");
   expect(assistantMessage?.content).toContain("Mock-Erklärung");
