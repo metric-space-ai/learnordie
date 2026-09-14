@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Known synthetic cases / repository lesson sources only. No database writes or credentials in output.
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("Optional with --diagnose-model-transcript: --tool-output-experiment uses one non-executed function result as the JSON envelope. This is a diagnostic-only transport override, not normal application behavior or release acceptance.");
   console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review | --diagnose-spoken-source | --diagnose-student-bearing | --diagnose-model-transcript]\nRuns actual MiniMax source and answer review on synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance. --diagnose-student-bearing measures one synthetic student bearing question with unchanged runtime deadlines and prompts. --diagnose-model-transcript exercises the live transcript generator with eight repository model slides, the full repository manuscript, and synthetic speech; unchanged runtime deadlines/prompts, no database access. Diagnostic modes are never a release-gate pass. No database writes; not a browser acceptance test.");
+  console.log("Optional with --diagnose-model-transcript: --tool-output-experiment requests a non-executed function result as the JSON envelope; a completed JSON message is also accepted. --fast-author-experiment disables author reasoning only. These diagnostic transport overrides are not normal application behavior or release acceptance.");
   process.exit(0);
 }
 const localProductionEnv = process.argv.includes("--production-env");
