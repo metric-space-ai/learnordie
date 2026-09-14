@@ -152,6 +152,10 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.ok(requests[0].user.includes(input().scriptContext));
   assert.ok(requests[0].user.includes(input().transcriptContext));
   assert.ok(requests[0].user.includes(input().latestTranscript));
+  assert.match(requests[0].system, /gleichberechtigte fachliche Quellen/);
+  assert.match(requests[0].system, /passende Transkriptpassage genügt auch bei fachlich anderen Folien/);
+  assert.ok(requests[0].user.indexOf(input().transcriptContext) < requests[0].user.indexOf("FACHLICHER KONTEXT DER VORLESUNGSFOLIEN"));
+  assert.doesNotMatch(requests[0].user, /ergänzender Kontext/);
   assert.match(requests[0].system, /auch früheren Folien/);
   assert.match(requests[0].system, /hypothetische Fälle und Rechenwerte erlaubt/);
   assert.match(requests[0].system, /Erfinde keine empirischen Fakten/);
