@@ -45,6 +45,22 @@ export function questionToolRequest(body) {
 export function questionToolResult(payload) {
   if (payload?.status !== "completed") throw new Error("tool-experiment-incomplete-response");
   const calls = payload.output?.filter(item => item.type === "function_call") ?? [];
+  // MiniMax supports tool_choice:auto, not a forced named function. A completed
+  // JSON message is therefore a legitimate alternate envelope, not evidence
+  // that the actual question or review is valid. The same runtime validators
+  // and independent reviewer still run after this syntax-only normalization.
+  if (calls.length === 0) {
+    const messages = payload.output?.filter(item => item.type === "message") ?? [];
+    const texts = messages.flatMap(item => (item.content ?? []).filter(part => part.type === "output_text").map(part => part.text));
+    const text = texts.length === 1 ? texts[0] : messages.length === 0 ? payload.output_text : undefined;
+    if (messages.length <= 1 && typeof text === "string" && text.trim()) {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ...payload, output_text: text, output: [] };
+      }
+    }
+    throw new Error(`tool-experiment-missing-single-result (messages=${messages.length}, textParts=${texts.length})`);
+  }
   if (calls.length !== 1 || calls[0].name !== name || typeof calls[0].arguments !== "string") {
     throw new Error("tool-experiment-missing-single-result");
   }

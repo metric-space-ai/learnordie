@@ -28,3 +28,21 @@ test("tool result is syntax-checked and cannot accept missing, duplicate or diff
   }
   assert.throws(() => questionToolResult({status:"incomplete",output:[call]}));
 });
+
+test("auto tool selection may return one complete JSON message without skipping semantic review", () => {
+  const text = JSON.stringify({supported:true,variants:[]});
+  const message = {type:"message",content:[{type:"output_text",text}]};
+  assert.equal(questionToolResult({status:"completed",output:[message]}).output_text, text);
+  assert.equal(questionToolResult({status:"completed",output_text:text}).output_text, text);
+  // An empty variants array survives transport only; application validation
+  // still rejects it. This helper is deliberately not a release quality gate.
+  for (const payload of [
+    {status:"incomplete",output:[message]},
+    {status:"completed",output:[message,message]},
+    {status:"completed",output:[{...message,content:[...message.content,...message.content]}]},
+    {status:"completed",output_text:'{"variants":'},
+    {status:"completed",output_text:'[]'},
+    {status:"completed",output_text:'null'},
+    {status:"completed",output:[{type:"message",content:[{type:"refusal",refusal:"No"}]}]}
+  ]) assert.throws(() => questionToolResult(payload));
+});
