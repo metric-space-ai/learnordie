@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { currentSessionTranscript } from "@/lib/session-transcript";
+import { LIVE_QUESTION_GENERATION_BUDGET_MS } from "@/lib/live-question-limits";
 import type { Lecture, LectureMaterial, QuestionLevel, QuestionVariant, AnswerOption } from "@/lib/types";
 import type { MaterialChunk } from "./material-pipeline";
 import { generateReviewVariants, levelPoints, withVariantMetadata } from "./lecture-factory";
@@ -447,7 +448,7 @@ export async function generateLiveQuestionFamily(input: {
 
   // Ein zweiter Versuch, falls die KI eine schon gestellte Frage wiederholt.
   const existing = new Set(input.existingQuestionTexts.map(questionFingerprint));
-  const deadlineAt = Date.now() + 50_000;
+  const deadlineAt = Date.now() + LIVE_QUESTION_GENERATION_BUDGET_MS;
   const reviewSources = [input.latestTranscript, input.slide.lines.join("\n"), input.transcript, input.scriptContext].filter((source): source is string => Boolean(source));
   let variants: QuestionVariant[] = [];
   let validationError: unknown;

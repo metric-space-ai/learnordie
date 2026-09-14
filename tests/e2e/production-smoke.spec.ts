@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
-import { expect, type Browser, type Page, test } from "@playwright/test";
+import { expect, request, type Browser, type Page, test } from "@playwright/test";
 import postgres from "postgres";
 import { openStudioActions } from "./studio-controls";
 import type { Lecture } from "../../src/lib/types";
@@ -357,12 +357,17 @@ async function createSmokeLecture(page: Page) {
 }
 
 async function enrollSmokeParticipant(page: Page, lecture: Pick<Lecture, "id" | "seriesTitle" | "seriesId">, participant: { anonymousKey: string; pseudonym: string }) {
-  const profile = await page.request.post("/api/student/profile", { data: participant });
-  expect(profile.ok()).toBe(true);
-  const enrollment = await page.request.post("/api/student/enrollments", { headers: { cookie: `lb_student_key=${participant.anonymousKey}` }, data: {
+  // Each simulated participant owns a distinct cookie jar. Profile POST must
+  // not rotate the authenticated identity of a previously created student.
+  const student = await request.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+  const profile = await student.post("/api/student/profile", { data: participant });
+  expect(profile.ok(), await profile.text()).toBe(true);
+  const enrollment = await student.post("/api/student/enrollments", { data: {
     seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link", displayName: participant.pseudonym
   } });
-  expect(enrollment.ok()).toBe(true);
+  expect(enrollment.ok(), await enrollment.text()).toBe(true);
+  } finally { await student.dispose(); }
 }
 
 async function seedPracticeLeaderboardLoad(page: Page, runId: string, lecture: Lecture) {
@@ -371,12 +376,6 @@ async function seedPracticeLeaderboardLoad(page: Page, runId: string, lecture: L
     2: "3.0",
     3: "2.0",
     4: "1.0"
-  };
-  const correctKeyByLevel: Record<string, string> = {
-    "4.0": "B",
-    "3.0": "A",
-    "2.0": "B",
-    "1.0": "A"
   };
   const participants = Array.from({ length: 30 }, (_, index) => {
     const rank = index + 1;
@@ -390,7 +389,14 @@ async function seedPracticeLeaderboardLoad(page: Page, runId: string, lecture: L
 
   for (const participant of participants) {
     await enrollSmokeParticipant(page, lecture, participant);
+    const questions = lecture.questions.filter((question) => question.level === levelsByPoints[participant.points]);
+    expect(questions.length).toBeGreaterThan(0);
     for (let answerIndex = 0; answerIndex < participant.answerCount; answerIndex += 1) {
+      // Keep repeated practice attempts, but never invent new family IDs:
+      // the ranking must award this learning objective only once.
+      const question = questions[0];
+      const correctAnswer = question.answers.find((answer) => answer.correct)!;
+      expect(question.points).toBe(participant.points);
       const response = await page.request.post("/api/events", {
         data: {
           lectureToken: lecture.publicToken,
@@ -399,23 +405,18 @@ async function seedPracticeLeaderboardLoad(page: Page, runId: string, lecture: L
           pseudonym: participant.pseudonym,
           payload: {
             mode: "learn",
-            level: levelsByPoints[participant.points],
-            points: participant.points,
-            questionText: `30er Live-Smoke ${runId}: Mischreibung`,
-            selected: correctKeyByLevel[levelsByPoints[participant.points]],
-            selectedAnswerKey: correctKeyByLevel[levelsByPoints[participant.points]],
-            selectedAnswerText: "Startphase entlasten oder zusätzliche Schmierfilmversorgung vorsehen.",
-            correctAnswerKey: correctKeyByLevel[levelsByPoints[participant.points]],
-            correctAnswerText: "Startphase entlasten oder zusätzliche Schmierfilmversorgung vorsehen.",
-            correct: true,
-            smokeRunId: runId,
-            answerIndex
+            level: question.level,
+            familyId: question.familyId,
+            questionText: question.text,
+            selectedAnswerKey: correctAnswer.key
           }
         }
       });
       expect(response.ok()).toBe(true);
-      const payload = await response.json() as { ok?: boolean };
+      const payload = await response.json() as { ok?: boolean; event?: { payload?: { earnedPoints?: number; correct?: boolean } } };
       expect(payload.ok).toBe(true);
+      expect(payload.event?.payload?.earnedPoints).toBe(participant.points);
+      expect(payload.event?.payload?.correct).toBe(true);
     }
   }
 
@@ -3430,6 +3431,7 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
   const chatPayload = await chatResponse.json() as {
     accepted?: boolean;
     chatQuestion?: {
+      id?: string;
       moderationProvider?: string;
       moderationModel?: string;
       moderationConfidence?: number;
@@ -3437,10 +3439,22 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
     };
   };
   expect(chatPayload.accepted).toBe(true);
-  expect(chatPayload.chatQuestion?.moderationProvider).toBe("openai-compatible");
-  expect(chatPayload.chatQuestion?.moderationModel).toBe("mock-e2e-chat");
-  expect(chatPayload.chatQuestion?.moderationConfidence).toBeGreaterThanOrEqual(90);
-  expect(chatPayload.chatQuestion?.moderationSignals).toContain("Stribeck");
+  expect(chatPayload.chatQuestion?.moderationProvider).toBeUndefined();
+  expect(chatPayload.chatQuestion?.moderationModel).toBeUndefined();
+  expect(chatPayload.chatQuestion?.moderationConfidence).toBeUndefined();
+  expect(chatPayload.chatQuestion?.moderationSignals).toBeUndefined();
+  if (!new URL(e2eDatabaseUrl).pathname.includes("e2e")) throw new Error("Moderation assertions require the isolated E2E database.");
+  const moderationSql = postgres(e2eDatabaseUrl, { max: 1, prepare: false });
+  try {
+    const [moderation] = await moderationSql`
+      select moderation_provider, moderation_model, moderation_confidence, moderation_signals
+      from student_chat_questions where id=${chatPayload.chatQuestion!.id!} and lecture_id=${lecture.id}
+    `;
+    expect(moderation.moderation_provider).toBe("openai-compatible");
+    expect(moderation.moderation_model).toBe("MiniMax-M3");
+    expect(moderation.moderation_confidence).toBeGreaterThanOrEqual(90);
+    expect(moderation.moderation_signals).toContain("Stribeck");
+  } finally { await moderationSql.end(); }
   await expect(page.getByText("Frage wurde an den Referenten weitergeleitet.")).toBeVisible();
   await page.getByRole("button", { name: "Schließen" }).click();
 
@@ -3500,7 +3514,7 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
   } finally { await command({ action: "end" }); await teacherContext.close(); }
 });
 
-test("Historische Lern-Rangliste: 30 Studierende, Top10 und eigene Position bleiben konsistent", async ({ page }) => {
+test("Historische Lern-Rangliste: 30 Studierende, Wiederholungen ohne Zusatzpunkte, Top10 und eigene Position", async ({ page }) => {
   test.setTimeout(120000);
   const assertClean = attachBrowserDiagnostics(page);
   const runId = Date.now().toString(36);
@@ -3526,9 +3540,9 @@ test("Historische Lern-Rangliste: 30 Studierende, Top10 und eigene Position blei
   expect(leaderboardPayload.entries?.[0]).toMatchObject({
     rank: 1,
     name: "Load 01",
-    points: 12,
-    correct: 3,
-    answers: 3,
+    points: 4,
+    correct: 1,
+    answers: 1,
     self: true
   });
   const lowerParticipant = participants[29];
@@ -3553,7 +3567,7 @@ test("Historische Lern-Rangliste: 30 Studierende, Top10 und eigene Position blei
   await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.locator(".leader-row")).toHaveCount(10);
   await expect(page.locator(".leader-row").first()).toContainText("1 · Load 01");
-  await expect(page.locator(".leader-row").first()).toContainText("12");
+  await expect(page.locator(".leader-row").first().locator("strong")).toHaveText("4");
   assertClean();
 });
 
@@ -3710,8 +3724,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
   await expectNativeCanvas(page);
 
-  await page.locator(".learn-more summary").click();
-  await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
+  await page.getByLabel("Fragen-Spots auf der Folie", { exact: true }).getByRole("button").first().click();
   await expect(page.locator(".learn-hotspot-shared-ghost[data-shared-element='learn-hotspot']")).toBeAttached();
   const hotspotSharedMotion = await page.evaluate(() => {
     const ghost = document.querySelector<HTMLElement>(".learn-hotspot-shared-ghost");
@@ -3726,7 +3739,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(hotspotSharedMotion.sharedElement).toBe("learn-hotspot");
-  expect(hotspotSharedMotion.level).toBe("3.0");
+  expect(hotspotSharedMotion.level).toBe("2.0");
   expect(hotspotSharedMotion.hasSharedClass).toBe(true);
   expect(hotspotSharedMotion.duration).toBe(620);
   expect(hotspotSharedMotion.radius).toBe("999px");
@@ -3805,9 +3818,9 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.goto("/learn/gleitlagerung-demo");
   await expectNativeCanvas(page);
   await page.locator(".learn-more summary").click();
-  await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
+  await page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
-  await page.locator(".learn-more summary").click();
+  await expect(page.locator(".learn-more")).not.toHaveAttribute("open", "");
   const mobileLearnFit = await page.evaluate(() => {
     const drawer = document.querySelector<HTMLElement>(".question-drawer");
     const slide = document.querySelector<HTMLElement>(".slide-screen");

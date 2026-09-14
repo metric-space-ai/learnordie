@@ -230,7 +230,7 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
   }
 });
 
-test("Space generates an asynchronous 60-second round while the lecturer keeps presenting", async ({ browser }) => {
+test("Shift+Space uses captured transcript for an asynchronous 60-second round while the lecturer keeps presenting", async ({ browser }) => {
   test.setTimeout(120_000);
   const contexts: BrowserContext[] = [];
   const errors: string[] = [];
@@ -243,6 +243,24 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
   let releaseGeneration = () => {};
   try {
     const teacher = await open();
+    // Exercise real browser audio capture and transcript persistence, but use
+    // synthetic audio and a declared STT fixture: this is not ASR quality proof.
+    await teacher.addInitScript(() => {
+      if (!navigator.mediaDevices) return;
+      Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => {
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const destination = context.createMediaStreamDestination();
+        oscillator.frequency.value = 220;
+        gain.gain.value = 0.08;
+        oscillator.connect(gain).connect(destination);
+        oscillator.start();
+        await context.resume();
+        window.addEventListener("pagehide", () => { oscillator.stop(); void context.close(); }, { once: true });
+        return destination.stream;
+      } });
+    });
     const { lecture, csrf } = await fixture(teacher);
     const api = `/api/lecture/${lecture.publicToken}/live`;
     const command = `/api/lectures/${lecture.id}/live-session`;
@@ -252,12 +270,28 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
     await Promise.all(students.map((page) => page.goto(`/l/${lecture.publicToken}`)));
     await teacher.goto(`/lecturer/live/${lecture.publicToken}`);
     await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
+    const speech = "Der Schmierfilm trennt die Oberflächen und trägt die Last. Mit zunehmender Viskosität kann sich bei gleicher Drehzahl ein tragfähigerer Schmierfilm bilden.";
+    let audioRequests = 0;
+    await teacher.route(`**/api/lectures/${lecture.id}/stt`, async route => {
+      audioRequests++;
+      expect(route.request().headers()["content-type"]).toContain("multipart/form-data");
+      expect(route.request().postDataBuffer()!.byteLength).toBeGreaterThan(1000);
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        text: speech, provider: "synthetic-e2e-stt", confidence: 100, audioBytes: route.request().postDataBuffer()!.byteLength
+      }) });
+    });
+    await teacher.locator(".transcript-indicator").click();
+    await teacher.getByRole("button", { name: "Mikrofon an", exact: true }).click();
+    await expect(teacher.getByLabel("Bestätigtes Transkript dieser Sitzung")).toContainText(speech, { timeout: 20_000 });
+    expect(audioRequests).toBeGreaterThan(0);
+    await teacher.getByRole("button", { name: "Mikrofon aus", exact: true }).click();
+    await teacher.getByRole("button", { name: "Transkript ausblenden", exact: true }).click();
     // A failed provider call must be visible without opening an interrupting
     // modal, and the same shortcut must permit a deliberate retry.
     const generationPath = `**/api/lectures/${lecture.id}/live-questions`;
     await teacher.route(generationPath, (route) => route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Fragengenerator vorübergehend nicht erreichbar." }) }));
     await teacher.locator("body").click({ position: { x: 8, y: 100 } });
-    await teacher.keyboard.press("Space");
+    await teacher.keyboard.press("Shift+Space");
     await expect(teacher.locator(".presenter-round-toast")).toContainText("vorübergehend nicht erreichbar");
     expect((await state()).round).toBeNull();
     await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
@@ -273,6 +307,8 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
     const held = new Promise<void>((resolve) => { releaseGeneration = resolve; });
     await teacher.route(generationPath, async (route) => {
       requests++;
+      expect(route.request().postDataJSON()).toMatchObject({ mode: "transcript-only" });
+      expect(route.request().postDataJSON().transcript).toContain(speech);
       const response = await route.fetch();
       expect(response.status()).toBe(200);
       family = (await response.json()).family;
@@ -281,9 +317,9 @@ test("Space generates an asynchronous 60-second round while the lecturer keeps p
       await held;
       await route.fulfill({ response });
     });
-    await teacher.keyboard.press("Space");
+    await teacher.keyboard.press("Shift+Space");
     await expect(teacher.getByText("Frage wird erstellt …", { exact: true })).toBeVisible();
-    await teacher.keyboard.press("Space");
+    await teacher.keyboard.press("Shift+Space");
     await teacher.keyboard.press("ArrowRight");
     await expect(teacher.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[1].id);
     releaseGeneration();

@@ -9,6 +9,7 @@ import type { RecordedPassage } from "@/lib/audio-capture";
 import { transcriptRecordingStatus, type TranscriptionPhase } from "@/lib/transcript-recording-status";
 import { LiveOperationScope, type LiveOperation } from "@/lib/live-operation-scope";
 import { presenterQuestionShortcut } from "@/lib/presenter-question-shortcut";
+import { LIVE_QUESTION_REQUEST_TIMEOUT_MS } from "@/lib/live-question-limits";
 import { currentSessionTranscript } from "@/lib/session-transcript";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
@@ -138,7 +139,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       setRoundMessage("");
       const abort = new AbortController();
       generationAbortRef.current = abort;
-      const timeout = setTimeout(() => abort.abort(), 55_000);
+      const timeout = setTimeout(() => abort.abort(), LIVE_QUESTION_REQUEST_TIMEOUT_MS);
       try {
         const response = await fetch(`/api/lectures/${lecture.id}/live-questions`, {
           method: "POST", headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
@@ -354,7 +355,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         method: "POST",
         headers: { "content-type": "application/json", "x-learnbuddy-csrf": csrfToken },
         body: JSON.stringify({ slideId, transcript, sessionId: operation.sessionId, mode: "transcript-only" }),
-        signal: AbortSignal.any([AbortSignal.timeout(55_000), abort.signal, operation.signal])
+        signal: AbortSignal.any([AbortSignal.timeout(LIVE_QUESTION_REQUEST_TIMEOUT_MS), abort.signal, operation.signal])
       });
       const payload = await response.json().catch(() => ({}));
       if (!sessionScopeRef.current.isCurrent(operation)) return;

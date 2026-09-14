@@ -10,8 +10,9 @@ import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 
-// Eine KI-Anfrage dauert bis zu 45 s; die Funktion braucht etwas Reserve.
-export const maxDuration = 60;
+// Creation includes an independent review and at most one author correction.
+// The 60-second student answer clock starts later, when the family is fired.
+export const maxDuration = 150;
 
 const MAX_BODY_BYTES = 16_384;
 const MIN_TRANSCRIPT_CHARS = 120;

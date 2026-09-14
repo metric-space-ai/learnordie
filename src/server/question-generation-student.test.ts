@@ -8,6 +8,7 @@ import type { AIProvider } from "./providers/ai";
 import { StudentDraftError, studentDraftDiagnostic } from "./student-draft-error";
 import { GroundingReviewError, parseQuestionGroundingReview } from "./question-grounding-review";
 import { QUESTION_LEVEL_GUIDANCE } from "./question-level-guidance";
+import { LIVE_QUESTION_GENERATION_BUDGET_MS, LIVE_QUESTION_REQUEST_TIMEOUT_MS } from "@/lib/live-question-limits";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 test("normal Space selects the current slide even with previous speech; Shift+Space requires transcript", () => {
@@ -403,6 +404,48 @@ test("transcript shortcut generation is MiniMax-only and retries strict grounded
     contextSource: "transcript",
     transcriptOnly: true
   }, wrongProvider), /MiniMax M3/);
+});
+
+test("live creation budgets a reviewed correction independently of the student answer clock", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  let clock = 1_800_000_000_000;
+  const started = clock;
+  t.mock.method(Date, "now", () => clock);
+  const rejection = JSON.stringify({ reviews: levels.map(level => ({ level, approved: false, reason: "Synthetic first-attempt factual refusal" })) });
+  const fixture = makeProvider([JSON.stringify(validLivePayload()), JSON.stringify(validLivePayload())], [rejection]);
+  const complete = fixture.provider.complete.bind(fixture.provider);
+  fixture.provider.complete = async (request) => {
+    assert.ok((request.timeoutMs ?? 0) >= 20_000, "each measured 20-second stage retains its required budget");
+    clock += 20_000;
+    return complete(request);
+  };
+  const variants = await generateLiveQuestionFamily({
+    lecture: demoLecture, slide: { title: "Randbedingungen", lines: ["Die Randbedingung bestimmt die zulässige Lösung."] },
+    transcript: "Eine Randbedingung legt die zulässigen Lösungen fest.", latestTranscript: "Die aktuelle Randbedingung lautet ψ(0)=0.",
+    existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true
+  }, fixture.provider);
+  assert.equal(variants.length, 4);
+  assert.equal(fixture.requests.length, 2);
+  assert.equal(fixture.reviews.length, 2);
+  assert.equal(clock - started, 80_000);
+  assert.equal(LIVE_QUESTION_GENERATION_BUDGET_MS, 120_000);
+  assert.ok(LIVE_QUESTION_REQUEST_TIMEOUT_MS > LIVE_QUESTION_GENERATION_BUDGET_MS);
+
+  const overdue = makeProvider([JSON.stringify(validLivePayload())]);
+  const overdueComplete = overdue.provider.complete.bind(overdue.provider);
+  overdue.provider.complete = async (request) => {
+    clock += LIVE_QUESTION_GENERATION_BUDGET_MS;
+    return overdueComplete(request);
+  };
+  await assert.rejects(generateLiveQuestionFamily({
+    lecture: demoLecture, slide: { title: "Randbedingungen", lines: ["ψ(0)=0"] },
+    transcript: "Die aktuelle Randbedingung bestimmt die zulässige Lösung.",
+    existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true
+  }, overdue.provider), /timed out/);
+  assert.equal(overdue.requests.length, 1);
+  assert.equal(overdue.reviews.length, 0, "no further model calls or approval after the attempt deadline");
 });
 
 test("current-session transcript context excludes accepted transcript from an earlier lecture session", () => {
