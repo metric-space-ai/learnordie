@@ -168,7 +168,7 @@ export async function reviewQuestionGrounding(provider: AIProvider, variants: Qu
   const candidates = variants.map(({ level, text, answers, explanation }) => ({ level, text, answers: answers.map(({key, text}) => ({key, text})), explanation }));
   let formatCorrection: { error: string; previousReview: string } | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const timeoutMs = Math.min(20_000, deadlineAt - Date.now() - 1_000);
+    const timeoutMs = Math.min(30_000, deadlineAt - Date.now() - 1_000);
     if (timeoutMs <= 0) throw new GroundingReviewError("timeout", "Fachprüfung: Zeitlimit erreicht.");
     const result = await provider.complete({
       system: system + (formatCorrection ? " Die letzte Prüfantwort war formal ungültig. Prüfe dieselben unveränderten Kandidaten erneut. Jeder reviews-Eintrag muss vier answerChecks mit key/reason/verdict enthalten; fehlende Einzelurteile selbst bestimmen, nicht pauschal correct annehmen. Verwende sourceIds mit exakten IDs aus sources, keine Auslassungszeichen und keine neu geschriebenen Zitate. Fachlich nicht belegbare Kandidaten weiterhin mit approved=false ablehnen." : ""),

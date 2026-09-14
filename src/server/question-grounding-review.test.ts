@@ -54,6 +54,13 @@ test("the larger structured-review allowance never extends the caller's total de
   assert.ok(timeout > 0 && timeout <= 2000, "reserve one second within the existing caller budget");
 });
 
+test("reasoned option review has a 30-second cap even when the caller has more time", async () => {
+  let timeout = 0;
+  const provider = { complete: async (input: {timeoutMs:number}) => { timeout=input.timeoutMs; return {answer:JSON.stringify(valid())}; } } as unknown as AIProvider;
+  await reviewQuestionGrounding(provider, [], sources, Date.now()+90_000);
+  assert.equal(timeout, 30_000);
+});
+
 test("citation formatting gets one bounded repair, but a factual refusal is never repaired into approval", async () => {
   const shortened = valid(); shortened.reviews[0].sourceQuote = "Die Eigenfrequenz ... bei gleichbleibender Masse.";
   const requests: Array<{user:string;system:string;timeoutMs:number}> = [];
@@ -65,7 +72,7 @@ test("citation formatting gets one bounded repair, but a factual refusal is neve
   assert.deepEqual(JSON.parse(requests[0].user).sources, JSON.parse(requests[1].user).sources);
   assert.deepEqual(JSON.parse(requests[0].user).candidates, JSON.parse(requests[1].user).candidates);
   assert.match(requests[1].system, /keine Auslassungszeichen/);
-  assert.ok(requests.every(request => request.timeoutMs <= 20_000));
+  assert.ok(requests.every(request => request.timeoutMs <= 24_000), "review stays inside this caller's 25-second deadline");
   let calls = 0;
   const refused = valid(); refused.reviews[0].approved = false;
   const rejecting = { complete: async () => { calls++; return {answer:JSON.stringify(refused)}; } } as unknown as AIProvider;
