@@ -25,6 +25,7 @@ provider.complete = async (input) => {
     const parsed = parseGroundingJson(result.answer);
     reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
       level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
+      answerChecks: Array.isArray(entry?.answerChecks) ? entry.answerChecks.slice(0,4).map(check=>({key:check?.key,verdict:check?.verdict})) : undefined,
       sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
       distractors: Array.isArray(entry?.distractors) ? entry.distractors.slice(0,3).map(check=>({key:check?.key,kind:check?.kind,reason:String(check?.reason??"").slice(0,200)})) : undefined,
       sourceQuote: String(entry?.sourceQuote ?? "").slice(0, 600), reason: String(entry?.reason ?? "").slice(0, 400)
@@ -123,6 +124,20 @@ try {
   }
   if(!rejected)throw new Error("absurd-distractor-approved");
   report.cases.push({name:"factually-false-but-useless-distractor",status:"pass",elapsedMs:Date.now()-started});
+  const ambiguous=structuredClone(valid);
+  ambiguous[0].answers[1].text="Die statische Verlängerung wächst und die Eigenkreisfrequenz sinkt.";
+  started=Date.now();rejected=false;
+  try {await reviewQuestionGrounding(provider,ambiguous,sources,Date.now()+40000);}
+  catch(error){if(error.code==="factual-review" && /Fachprüfung 4\.0:/.test(error.message))rejected=true;else throw error;}
+  if(!rejected)throw new Error("two-correct-options-approved");
+  report.cases.push({name:"two-equivalent-correct-options",status:"pass",elapsedMs:Date.now()-started});
+  const compound=structuredClone(valid);
+  compound[1].answers[0].text="Die weichere Feder senkt die Eigenkreisfrequenz und lässt dieselbe Masse zugleich schneller und langsamer schwingen.";
+  started=Date.now();rejected=false;
+  try {await reviewQuestionGrounding(provider,compound,sources,Date.now()+40000);}
+  catch(error){if(error.code==="factual-review" && /Fachprüfung 3\.0:/.test(error.message))rejected=true;else throw error;}
+  if(!rejected)throw new Error("contradictory-compound-answer-approved");
+  report.cases.push({name:"correct-clause-does-not-rescue-contradiction",status:"pass",elapsedMs:Date.now()-started});
   // Reproduce a browser-observed family whose four labels hide the same
   // recall task. This must fail on pedagogy, not transport/schema failure.
   const mixedSources="Mischreibung liegt vor, wenn Schmierfilm und Festkörperkontakt gleichzeitig auftreten. Der Festkörperkontakt kann Verschleiß und Erwärmung verursachen. Ein vollständig trennender Schmierfilm verhindert direkten Kontakt der Oberflächen.";
@@ -162,7 +177,7 @@ try {
   report.status="pass";
 } catch(error) {
   report.status="fail";
-  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","recall-only-family-approved","unsupported-ranking-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
+  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","two-correct-options-approved","contradictory-compound-answer-approved","recall-only-family-approved","unsupported-ranking-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
   if(error.diagnostic) {
     report.diagnostic=error.diagnostic;

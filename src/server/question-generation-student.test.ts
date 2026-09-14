@@ -75,21 +75,32 @@ function restoreGeneratorEnvironment(t: import("node:test").TestContext) {
 function makeProvider(answers: string[], reviewAnswers: string[] = []) {
   const requests: Array<{ system: string; user: string }> = [];
   const reviews: Array<{ system: string; user: string }> = [];
+  let authored: ReturnType<typeof validPayload> | undefined;
   const provider = {
     info: { provider: "openai-compatible", model: "MiniMax-M3" },
     complete: async (input: { system: string; user: string }) => {
       if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
         assert.ok(input.system.includes(QUESTION_LEVEL_GUIDANCE), "independent review uses the same cognitive contract as the author");
         reviews.push(input);
-        const { sources, candidates } = JSON.parse(input.user) as { sources: Array<{id:string;text:string}>; candidates: Array<{level: string;text: string;answers: Array<{key:string;correct:boolean}>;explanation: string}> };
+        const { sources, candidates } = JSON.parse(input.user) as { sources: Array<{id:string;text:string}>; candidates: Array<{level: string;text: string;answers: Array<{key:string;text:string}>;explanation: string}> };
         assert.deepEqual(candidates.map(candidate => candidate.level), levels);
         assert.ok(candidates.every(candidate => candidate.text && candidate.answers.length === 4 && candidate.explanation));
         assert.ok(sources.length > 0);
-        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: candidates.map(candidate => ({ level:candidate.level, approved: true, sourceIds: [sources[0].id], distractors:candidate.answers.filter(answer=>!answer.correct).map(answer=>({key:answer.key,kind:"misconception",reason:"Testfehlvorstellung"})), reason: "Testbeleg" })) }) };
+        assert.ok(candidates.every(candidate=>candidate.answers.every(answer=>!("correct" in answer))));
+        // The fake reviewer looks up the test's authored fixture, not a secret
+        // answer flag in the real request. This mock is not semantic evidence.
+        return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: candidates.map(candidate => {
+          const correctText=authored?.variants.find(v=>v.level===candidate.level)?.answers.find(a=>a.correct)?.text;
+          return {level:candidate.level,approved:true,sourceIds:[sources[0].id],
+            answerChecks:candidate.answers.map(answer=>({key:answer.key,verdict:answer.text===correctText?"correct":"incorrect"})),
+            distractors:candidate.answers.filter(answer=>answer.text!==correctText).map(answer=>({key:answer.key,kind:"misconception",reason:"Testfehlvorstellung"})),reason:"Testbeleg"};
+        }) }) };
       }
       requests.push(input);
       if (input.system.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")) assert.ok(input.system.includes(QUESTION_LEVEL_GUIDANCE));
-      return { answer: answers.shift() ?? JSON.stringify(validPayload()) };
+      const answer=answers.shift() ?? JSON.stringify(validPayload());
+      try { authored=JSON.parse(answer); } catch { authored=undefined; }
+      return { answer };
     },
     explain: async () => ({ answer: "" })
   } as unknown as AIProvider;
