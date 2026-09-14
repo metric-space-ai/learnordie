@@ -144,3 +144,34 @@ test("independent answer verdicts cannot be overridden by global approval or aut
     assert.throws(()=>parseQuestionGroundingReview(JSON.stringify({reviews:changed}),sources,candidates),/vier eindeutige Antwortprüfungen/);
   }
 });
+
+test("repair feedback identifies reviewed answer text after keys have been shuffled", () => {
+  // The author wrote this bad option third, but the parser assigned it B.
+  const badText = "Die Lagerwerkstoffe verlieren bei niedrigen Drehzahlen ihre Festigkeit.";
+  const candidates = (["4.0", "3.0", "2.0", "1.0"] as const).map(level => ({ level, answers: [
+    { key: "A" as const, text: "Plausible other misconception", correct: false },
+    { key: "B" as const, text: badText, correct: false },
+    { key: "C" as const, text: "Correct physical explanation", correct: true },
+    { key: "D" as const, text: "Another misconception", correct: false }
+  ] }));
+  const reviews = candidates.map(candidate => ({ level: candidate.level, approved: true, sourceIds: ["S1.1"],
+    answerChecks: candidate.answers.map(answer => ({ key: answer.key, verdict: answer.correct ? "correct" : "incorrect", reason: "Independent fixture verdict" })),
+    distractors: candidate.answers.filter(answer => !answer.correct).map(answer => ({ key: answer.key, kind: answer.key === "B" ? "unrelated" : "misconception" }))
+  }));
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify({ reviews }), sources, candidates), error => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /Unbrauchbarer Ablenker B/);
+    assert.ok(error.message.includes(`Beanstandeter Antworttext: ${JSON.stringify(badText)}`));
+    return true;
+  });
+  const factual = reviews.map(review => ({ ...review,
+    distractors: review.distractors.map(check => ({ ...check, kind: "misconception" })),
+    answerChecks: review.answerChecks.map(check => ({ ...check, verdict: check.key === "B" ? "correct" : check.verdict }))
+  }));
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify({ reviews: factual }), sources, candidates), error => {
+    assert.ok(error instanceof Error);
+    assert.ok(error.message.includes(`B ${JSON.stringify(badText)}=correct`));
+    assert.match(error.message, /Independent fixture verdict/);
+    return true;
+  });
+});

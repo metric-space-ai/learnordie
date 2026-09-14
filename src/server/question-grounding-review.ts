@@ -84,13 +84,17 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
         if (checks.some(check => check.verdict === "unsupported" || check.verdict === "contradictory")
           || chosen.length !== 1 || expected.length !== 1 || chosen[0].key !== expected[0].key) {
           factualRefusal = true;
-          failures.push(`Fachprüfung ${entry.level}: Unabhängige Antwortprüfung widerspricht der eindeutigen Autorenlösung (${checks.map(check => `${check.key}=${check.verdict}`).join(", ")}).`);
+          failures.push(`Fachprüfung ${entry.level}: Unabhängige Antwortprüfung widerspricht der eindeutigen Autorenlösung (${checks.map(check => `${check.key} ${JSON.stringify(variant.answers.find(answer => answer.key === check.key)?.text ?? "")}=${check.verdict}: ${check.reason}`).join("; ")}).`);
         }
       }
       if (Array.isArray(entry.distractors)) {
         for (const check of entry.distractors) {
           if (check && ["unrelated", "joke", "not_false"].includes(check.kind)) {
-            failures.push(`Fachprüfung ${entry.level}: Unbrauchbarer Ablenker ${String(check.key).slice(0, 1)} (${check.kind}). ${typeof check.reason === "string" ? check.reason.slice(0, 300) : ""}`);
+            // The parser shuffles answer keys. The author's previous JSON is
+            // still unshuffled, so a key alone identifies the wrong option on
+            // repair. Carry the actual reviewed text back to the author.
+            const answerText = variant?.answers.find(answer => answer.key === check.key)?.text;
+            failures.push(`Fachprüfung ${entry.level}: Unbrauchbarer Ablenker ${String(check.key).slice(0, 1)} (${check.kind}). Beanstandeter Antworttext: ${JSON.stringify(answerText ?? "unbekannt")}. ${typeof check.reason === "string" ? check.reason.slice(0, 300) : ""}`);
           }
         }
       }
