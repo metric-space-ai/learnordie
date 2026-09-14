@@ -129,7 +129,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
 
   after(async () => {
    try {
-    const currentLecture = await repository.getLectureById(id, session.email);
+    const currentLecture = (await repository.listLectures(session.email)).find((item) => item.id === id);
     if (!currentLecture) throw new Error("Lecture no longer exists.");
     const generated = await generateStudentQuestionExamDraft(currentLecture, question, { deadlineAt: studentDraftDeadline(now.getTime()) });
     if (!generated.supported) {
