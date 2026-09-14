@@ -48,7 +48,13 @@ provider.complete = async (input) => {
         }))
       } : undefined
     });
-  } catch { reviewVerdicts.push({ malformedJson: true }); }
+  } catch {
+    // Public synthetic inputs only: identify truncation versus a wrong envelope.
+    // Never copy this logging into runtime handlers with lecture/student data.
+    reviewVerdicts.push({ malformedJson: true, syntheticOutputChars: result.answer.length,
+      syntheticOutputPrefix: result.answer.slice(0, 240), syntheticOutputSuffix: result.answer.slice(-480),
+      usage: result.usage });
+  }
   return result;
 };
 const originalFetch=globalThis.fetch;
