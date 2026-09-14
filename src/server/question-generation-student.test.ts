@@ -316,10 +316,22 @@ test("student draft length constraints are explicit and repair can rewrite an ov
   assert.equal(requests.length, 2);
   assert.equal(reviews.length, 1, "invalid structure must not reach independent factual review");
   assert.match(requests[0].user, /coreStatement.*8 bis 240 Zeichen/);
-  assert.match(requests[0].user, /topic 2 bis 5 Wörter und 3 bis 80 Zeichen/);
+  assert.match(requests[0].user, /topic 3 bis 80 Zeichen/);
   assert.match(requests[1].user, /core statement: 241 characters; expected 8 to 240/);
   assert.match(requests[1].user, /Formuliere überlange Felder als vollständige kürzere Aussagen/);
   assert.doesNotMatch(requests[1].user, /Kürze keine Felder/);
+});
+
+test("short German compound topics are valid without weakening question or character validation", () => {
+  for (const topic of ["Feder-Masse-System", "Schwingung", "Die Ruhelage einer Masse an einer weicheren Feder"]) {
+    const payload = {...validPayload(), topic};
+    const parsed = parseStudentExamDraft(JSON.stringify(payload), {lectureId: "fixture", slideId: "slide", sourceQuestionId: "student"});
+    assert.equal(parsed.supported, true);
+    if (parsed.supported) assert.equal(parsed.topic, topic);
+  }
+  for (const topic of ["", "ab", "x".repeat(81)]) {
+    assert.throws(() => parseStudentExamDraft(JSON.stringify({...validPayload(), topic}), {lectureId: "fixture", slideId: "slide", sourceQuestionId: "student"}), /out-of-range/);
+  }
 });
 
 test("grounding diagnostics distinguish schema, context and factual failures without logging private reasons", () => {

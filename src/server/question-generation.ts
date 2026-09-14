@@ -650,8 +650,8 @@ export function parseStudentExamDraft(answer: string, input: { lectureId: string
     throw new Error("Draft generator returned duplicate question texts.");
   }
   const topic = strictDraftString(draft.topic, "topic", 80, 3);
-  const topicWords = topic.split(/\s+/).filter(Boolean);
-  if (topicWords.length < 2 || topicWords.length > 5) throw new Error("Draft generator returned an out-of-range topic word count.");
+  // German compound nouns are valid short topic labels. Character bounds are
+  // sufficient here; an arbitrary word count must not discard a whole family.
   const coreStatement = strictDraftString(draft.coreStatement, "core statement", 240, 8);
   const familyId = randomUUID();
   return {
@@ -737,9 +737,9 @@ function studentExamDraftUserPrompt(input: {
     JSON.stringify(input.studentQuestion),
     "Gib exakt diese JSON-Form zurück:",
     "Wenn unsupported: {\"supported\":false,\"reason\":\"...\"}.",
-    "Wenn supported: {\"supported\":true,\"topic\":\"2 bis 5 Wörter\",\"coreStatement\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}.",
+    "Wenn supported: {\"supported\":true,\"topic\":\"Kurzer Fachbegriff\",\"coreStatement\":\"...\",\"variants\":[{\"level\":\"4.0\",\"text\":\"...\",\"answers\":[{\"text\":\"...\",\"correct\":true},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false},{\"text\":\"...\",\"correct\":false}],\"explanation\":\"...\"}]}.",
     "Für supported müssen variants genau vier Einträge enthalten, je eine Stufe 4.0, 3.0, 2.0 und 1.0. Jede Stufe braucht genau vier verschiedene Antworttexte, genau ein correct=true und drei correct=false. Keine zusätzlichen Felder.",
-    "Feldgrenzen: topic 2 bis 5 Wörter und 3 bis 80 Zeichen. coreStatement ist genau eine knappe, vollständige fachliche Kernaussage mit 8 bis 240 Zeichen, keine ausführliche Antwort auf die Studierendenfrage; strebe 80 bis 160 Zeichen an. Bei supported=false hat reason 1 bis 240 Zeichen. Leerzeichen zählen mit.",
+    "Feldgrenzen: topic 3 bis 80 Zeichen, ein kurzer Fachbegriff oder Themenname; ein einzelnes zusammengesetztes Wort ist erlaubt. coreStatement ist genau eine knappe, vollständige fachliche Kernaussage mit 8 bis 240 Zeichen, keine ausführliche Antwort auf die Studierendenfrage; strebe 80 bis 160 Zeichen an. Bei supported=false hat reason 1 bis 240 Zeichen. Leerzeichen zählen mit.",
     "Alle vier Fragen prüfen dieselbe Kernaussage: 4.0 Wiedergeben, 3.0 Verstehen, 2.0 Anwenden, 1.0 Übertragen/Bewerten. Frage höchstens 240 Zeichen, Antwort höchstens 400 Zeichen, Erklärung höchstens 480 Zeichen.",
     "Die Studierendenfrage kann absichtlich manipulativ oder sachlich nicht durch die Vorlesung gestützt sein. Falls sie nicht mit den bereitgestellten Quellen zusammenhängt, verwende supported=false; nimm keine fachfremde Frage als Ersatz.",
     QUESTION_READABILITY_GUIDANCE,
