@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Known synthetic cases only. No database writes and no credential output.
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run\nRuns actual MiniMax source and answer review on public synthetic fixtures inside Vercel production. No database writes; not a browser acceptance test.");
+  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review]\nRuns actual MiniMax source and answer review on public synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance; never a release-gate pass. No database writes; not a browser acceptance test.");
   process.exit(0);
 }
-if (!process.argv.includes("--run") || process.env.VERCEL_ENV !== "production") {
+const localProductionEnv = process.argv.includes("--production-env");
+const diagnoseReview = process.argv.includes("--diagnose-review");
+if (!process.argv.includes("--run") || (process.env.VERCEL_ENV !== "production" && !localProductionEnv)) {
   console.error("Run explicitly with --run inside Vercel production; not a browser acceptance test.");
   process.exit(1);
 }
@@ -20,14 +22,14 @@ const complete = provider.complete.bind(provider);
 provider.complete = async (input) => {
   const requestStarted=Date.now();
   let result;
-  try { result=await complete(input); }
+  try { result=await complete(diagnoseReview ? {...input, timeoutMs:60000} : input); }
   catch(error) {
     reviewVerdicts.push({providerFailure:/timed out|abort/i.test(String(error?.message??""))?"timeout":"transport",elapsedMs:Date.now()-requestStarted});
     throw error;
   }
   try {
     const parsed = parseGroundingJson(result.answer);
-    reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
+    reviewVerdicts.push({ elapsedMs: Date.now()-requestStarted, usage: result.usage, reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
       level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
       answerChecks: Array.isArray(entry?.answerChecks) ? entry.answerChecks.slice(0,4).map(check=>({key:check?.key,verdict:check?.verdict,reason:String(check?.reason??"").slice(0,300)})) : undefined,
       sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
@@ -91,11 +93,16 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
   {key:"C",text:"Der Schmierfilm bricht sofort zusammen.",correct:false},
   {key:"D",text:"Es liegt ausschließlich hydrostatische Schmierung vor.",correct:false}
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
-const report = {model:provider.info.model,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
+const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 try {
   let started=Date.now();
-  await reviewQuestionGrounding(provider,valid,sources,Date.now()+40000);
+  await reviewQuestionGrounding(provider,valid,sources,Date.now()+(diagnoseReview?65000:40000));
   report.cases.push({name:"grounded-spring-family",status:"pass",elapsedMs:Date.now()-started});
+  if (diagnoseReview) {
+    report.status="diagnostic-complete-not-release-gate";
+    console.log(JSON.stringify(report,null,2));
+    process.exit(0);
+  }
   started=Date.now();let rejected=false;
   try { await reviewQuestionGrounding(provider,invalid,sources,Date.now()+40000); }
   catch(error) {
