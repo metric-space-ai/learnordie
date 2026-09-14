@@ -288,6 +288,7 @@ test("invalid M3 output gets one strict repair attempt; unsupported questions st
   assert.equal(generated.supported, true);
   assert.equal(requests.length, 2);
   assert.match(requests[1].user, /OUTPUT VALIDATION RETRY/);
+  assert.match(requests[1].user, /formuliere die beanstandete Idee nicht bloß um/);
 
   const unsupportedProvider = makeProvider([JSON.stringify({ supported: false, reason: "Keine passende Vorlesungsgrundlage." })]).provider;
   const unsupported = await generateStudentExamDraft(input(), unsupportedProvider);
@@ -336,7 +337,7 @@ test("student draft length constraints are explicit and repair can rewrite an ov
   assert.match(requests[0].system, /"coreStatement":"Gemeinsames Lernziel \(max\. 240 Zeichen\)"/);
   assert.match(requests[0].system, /"topic":"Thema \(max\. 80 Zeichen\)"/);
   assert.match(requests[1].user, /core statement: 241 characters; expected 8 to 240/);
-  assert.match(requests[1].user, /Formuliere überlange Felder als vollständige kürzere Aussagen/);
+  assert.match(requests[1].user, /Formuliere überlange Felder vollständig kürzer, ohne nötige Angaben zu verlieren/);
   assert.doesNotMatch(requests[1].user, /Kürze keine Felder/);
 });
 
@@ -404,6 +405,31 @@ test("transcript shortcut generation is MiniMax-only and retries strict grounded
     contextSource: "transcript",
     transcriptOnly: true
   }, wrongProvider), /MiniMax M3/);
+});
+
+test("a live schema correction does not consume the later factual correction", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  const tooLong = validLivePayload();
+  tooLong.variants[3].text = "x".repeat(241);
+  const refusal = JSON.stringify({ reviews: levels.map(level => ({ level, approved: false, reason: "Ungeeignete falsche Antwort ersetzen" })) });
+  const fixture = makeProvider([JSON.stringify(tooLong), JSON.stringify(validLivePayload()), JSON.stringify(validLivePayload())], [refusal]);
+  const context = {
+    lecture: demoLecture, slide: { title: "Randbedingungen", lines: ["Die Randbedingung ψ(0)=0 legt die Auslenkung am Rand fest."] },
+    transcript: "Die Randbedingung legt die zulässige Lösung fest.", existingQuestionTexts: [],
+    contextSource: "transcript" as const, transcriptOnly: true
+  };
+  assert.equal((await generateLiveQuestionFamily(context, fixture.provider)).length, 4);
+  assert.equal(fixture.requests.length, 3);
+  assert.equal(fixture.reviews.length, 2);
+  assert.match(fixture.requests[1].user, /out-of-range live question text for 1\.0: 241 characters/);
+  assert.match(fixture.requests[2].user, /Ungeeignete falsche Antwort ersetzen/);
+
+  const rejected = makeProvider([JSON.stringify(tooLong), JSON.stringify(validLivePayload()), JSON.stringify(validLivePayload())], [refusal, refusal]);
+  await assert.rejects(generateLiveQuestionFamily(context, rejected.provider), /Ungeeignete falsche Antwort ersetzen/);
+  assert.equal(rejected.requests.length, 3, "never an unlimited sequence of author repairs");
+  assert.equal(rejected.reviews.length, 2);
 });
 
 test("live creation budgets a reviewed correction independently of the student answer clock", async (t) => {
@@ -477,7 +503,8 @@ test("failed factual review prevents publishing and bounded repair is reviewed a
   assert.equal(repaired.requests.length, 2);
   assert.equal(repaired.reviews.length, 2);
   assert.match(repaired.requests[1].user, /Unbelegter numerischer Grenzwert/);
-  assert.match(repaired.requests[1].user, /fachlichen, didaktischen oder strukturellen Fehler/);
+  assert.match(repaired.requests[1].user, /Behebe auch genannte Fehler an Fragen, Lösungen oder Format/);
+  assert.match(repaired.requests[1].user, /Ersetze beanstandete falsche Antworten durch typische fachliche Verwechslungen/);
   assert.ok(repaired.requests[1].user.includes(JSON.stringify(JSON.stringify(validPayload()))), "repair receives the rejected candidate, not only a verdict about missing content");
   const rejected = makeProvider([JSON.stringify(validPayload()), JSON.stringify(validPayload())], [rejection, rejection]);
   await assert.rejects(generateStudentExamDraft(input(), rejected.provider), /invalid after one retry/);

@@ -10,7 +10,7 @@ import { readJsonBody } from "@/server/request-json";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 
-// Creation includes an independent review and at most one author correction.
+// Creation includes review and at most one schema and one factual correction.
 // The 60-second student answer clock starts later, when the family is fired.
 export const maxDuration = 150;
 

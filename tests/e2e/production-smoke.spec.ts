@@ -3450,10 +3450,11 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
       select moderation_provider, moderation_model, moderation_confidence, moderation_signals
       from student_chat_questions where id=${chatPayload.chatQuestion!.id!} and lecture_id=${lecture.id}
     `;
-    expect(moderation.moderation_provider).toBe("openai-compatible");
-    expect(moderation.moderation_model).toBe("MiniMax-M3");
-    expect(moderation.moderation_confidence).toBeGreaterThanOrEqual(90);
-    expect(moderation.moderation_signals).toContain("Stribeck");
+    // Admission queues the student's question; it is not a model's factual approval.
+    expect(moderation.moderation_provider).toBe("learnordie-admission");
+    expect(moderation.moderation_model).toBe("bounded-admission-v2");
+    expect(moderation.moderation_confidence).toBe(0);
+    expect(moderation.moderation_signals).toContain("pending-source-review");
   } finally { await moderationSql.end(); }
   await expect(page.getByText("Frage wurde an den Referenten weitergeleitet.")).toBeVisible();
   await page.getByRole("button", { name: "Schließen" }).click();
@@ -3798,7 +3799,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.locator(".learn-hotspot-shared-ghost")).toHaveCount(0, { timeout: 1500 });
 
   await page.locator(".learn-more summary").click();
-  await page.getByRole("button", { name: "KI fragen" }).click();
+  await page.getByLabel("Lernsteuerung").getByRole("button", { name: "KI fragen", exact: true }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
   const chatMotion = await page.evaluate(() => {
     const panel = document.querySelector<HTMLElement>(".overlay-panel.tall");
