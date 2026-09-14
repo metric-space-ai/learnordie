@@ -111,7 +111,7 @@ test("source IDs resolve losslessly to originals and cannot bypass a refusal or 
 
 test("global approval cannot override a joke, unrelated answer or missing per-answer assessment", () => {
   const candidates = (["4.0","3.0","2.0","1.0"] as const).map(level=>({level,answers:(["A","B","C","D"] as const).map(key=>({key,text:"Testantwort",correct:key==="A"}))}));
-  const reviews = candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],reason:"Fachlich belegt",answerChecks:candidate.answers.map(answer=>({key:answer.key,verdict:answer.correct?"correct":"incorrect"})),distractors:["B","C","D"].map(key=>({key,kind:"misconception",reason:"Verwechselte Wirkungsrichtung"}))}));
+  const reviews = candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],reason:"Fachlich belegt",answerChecks:candidate.answers.map(answer=>({key:answer.key,reason:"Synthetic fixture comparison.",verdict:answer.correct?"correct":"incorrect"})),distractors:["B","C","D"].map(key=>({key,kind:"misconception",reason:"Verwechselte Wirkungsrichtung"}))}));
   assert.doesNotThrow(()=>parseQuestionGroundingReview(JSON.stringify({reviews}),sources,candidates));
   const compact = reviews.map(review=>({...review,distractors:review.distractors.map(({key,kind})=>({key,kind}))}));
   assert.doesNotThrow(()=>parseQuestionGroundingReview(JSON.stringify({reviews:compact}),sources,candidates));
@@ -127,12 +127,12 @@ test("global approval cannot override a joke, unrelated answer or missing per-an
 
 test("independent answer verdicts cannot be overridden by global approval or author flags", () => {
   const candidates=(["4.0","3.0","2.0","1.0"] as const).map(level=>({level,answers:(["A","B","C","D"] as const).map(key=>({key,text:key,correct:key==="A"}))}));
-  const reviews=candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],answerChecks:candidate.answers.map(answer=>({key:answer.key,verdict:answer.correct?"correct":"incorrect"})),distractors:["B","C","D"].map(key=>({key,kind:"misconception"}))}));
+  const reviews=candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],answerChecks:candidate.answers.map(answer=>({key:answer.key,reason:"Synthetic fixture comparison.",verdict:answer.correct?"correct":"incorrect"})),distractors:["B","C","D"].map(key=>({key,kind:"misconception"}))}));
   for(const verdicts of [["incorrect","correct","incorrect","incorrect"],["correct","correct","incorrect","incorrect"],["incorrect","incorrect","incorrect","incorrect"],["contradictory","incorrect","incorrect","incorrect"],["correct","unsupported","incorrect","incorrect"]]) {
     const changed=structuredClone(reviews);changed[0].answerChecks.forEach((check,i)=>check.verdict=verdicts[i]);
     assert.throws(()=>parseQuestionGroundingReview(JSON.stringify({reviews:changed}),sources,candidates),/Unabhängige Antwortprüfung/);
   }
-  for(const checks of [undefined,[],reviews[0].answerChecks.slice(0,3),[reviews[0].answerChecks[0],...reviews[0].answerChecks.slice(0,3)],reviews[0].answerChecks.map(check=>({...check,verdict:"probably"}))]) {
+  for(const checks of [undefined,[],reviews[0].answerChecks.slice(0,3),[reviews[0].answerChecks[0],...reviews[0].answerChecks.slice(0,3)],reviews[0].answerChecks.map(check=>({...check,verdict:"probably"})),reviews[0].answerChecks.map(check=>({...check,reason:""})),reviews[0].answerChecks.map(check=>({...check,reason:undefined}))]) {
     const changed=reviews.map((review,i)=>({...review,answerChecks:i===0?checks:review.answerChecks}));
     assert.throws(()=>parseQuestionGroundingReview(JSON.stringify({reviews:changed}),sources,candidates),/vier eindeutige Antwortprüfungen/);
   }

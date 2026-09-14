@@ -25,7 +25,7 @@ provider.complete = async (input) => {
     const parsed = parseGroundingJson(result.answer);
     reviewVerdicts.push({ reviews: Array.isArray(parsed.reviews) ? parsed.reviews.slice(0, 4).map(entry => ({
       level: String(entry?.level ?? "").slice(0, 8), approved: entry?.approved === true,
-      answerChecks: Array.isArray(entry?.answerChecks) ? entry.answerChecks.slice(0,4).map(check=>({key:check?.key,verdict:check?.verdict})) : undefined,
+      answerChecks: Array.isArray(entry?.answerChecks) ? entry.answerChecks.slice(0,4).map(check=>({key:check?.key,verdict:check?.verdict,reason:String(check?.reason??"").slice(0,300)})) : undefined,
       sourceIds: Array.isArray(entry?.sourceIds) ? entry.sourceIds.slice(0,4) : undefined,
       distractors: Array.isArray(entry?.distractors) ? entry.distractors.slice(0,3).map(check=>({key:check?.key,kind:check?.kind,reason:String(check?.reason??"").slice(0,200)})) : undefined,
       sourceQuote: String(entry?.sourceQuote ?? "").slice(0, 600), reason: String(entry?.reason ?? "").slice(0, 400)

@@ -92,7 +92,7 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
         return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: candidates.map(candidate => {
           const correctText=authored?.variants.find(v=>v.level===candidate.level)?.answers.find(a=>a.correct)?.text;
           return {level:candidate.level,approved:true,sourceIds:[sources[0].id],
-            answerChecks:candidate.answers.map(answer=>({key:answer.key,verdict:answer.text===correctText?"correct":"incorrect"})),
+            answerChecks:candidate.answers.map(answer=>({key:answer.key,reason:"Synthetic fixture comparison; not semantic model evidence.",verdict:answer.text===correctText?"correct":"incorrect"})),
             distractors:candidate.answers.filter(answer=>answer.text!==correctText).map(answer=>({key:answer.key,kind:"misconception",reason:"Testfehlvorstellung"})),reason:"Testbeleg"};
         }) }) };
       }
