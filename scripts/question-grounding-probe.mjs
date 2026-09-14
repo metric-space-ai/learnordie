@@ -123,6 +123,29 @@ try {
   }
   if(!rejected)throw new Error("absurd-distractor-approved");
   report.cases.push({name:"factually-false-but-useless-distractor",status:"pass",elapsedMs:Date.now()-started});
+  // Reproduce a browser-observed family whose four labels hide the same
+  // recall task. This must fail on pedagogy, not transport/schema failure.
+  const mixedSources="Mischreibung liegt vor, wenn Schmierfilm und Festkörperkontakt gleichzeitig auftreten. Der Festkörperkontakt kann Verschleiß und Erwärmung verursachen. Ein vollständig trennender Schmierfilm verhindert direkten Kontakt der Oberflächen.";
+  const shallow=levels.map((level,i)=>({
+    level,
+    text:["Was kennzeichnet Mischreibung?", "Welche Merkmale hat Mischreibung im Lager?", "Ein Lager befindet sich in Mischreibung. Welche Merkmale liegen vor?", "Bewerten Sie die Merkmale eines Lagers in Mischreibung. Welche liegen vor?"][i],
+    answers:["Schmierfilm und Festkörperkontakt wirken gleichzeitig.","Nur ein vollständig trennender Schmierfilm trägt.","Nur Festkörperkontakt ohne Schmierfilm liegt vor.","Der Schmierfilm verhindert jeden Festkörperkontakt."].map((text,j)=>({key:"ABCD"[j],text,correct:j===0})),
+    explanation:"Die Definition der Mischreibung umfasst gleichzeitig Schmierfilm und Festkörperkontakt."
+  }));
+  started=Date.now();rejected=false;
+  try {await reviewQuestionGrounding(provider,shallow,mixedSources,Date.now()+40000);}
+  catch(error){if(error.code==="factual-review" && /Fachprüfung (?:3|2|1)\.0:/.test(error.message))rejected=true;else throw error;}
+  if(!rejected)throw new Error("recall-only-family-approved");
+  report.cases.push({name:"four-labels-but-recall-only",status:"pass",elapsedMs:Date.now()-started});
+  const unprovenRanking=structuredClone(valid);
+  unprovenRanking[3]={...unprovenRanking[3],text:"Beim langsamen Hochlauf eines Lagers: Welcher Zustand ist am kritischsten?",
+    answers:[{key:"A",text:"Mischreibung ist stets kritischer als reine Trockenreibung.",correct:true},{key:"B",text:"Ohne Vergleichskriterium ist keine solche Rangfolge belegt.",correct:false},{key:"C",text:"Ein vollständig trennender Film ist immer am kritischsten.",correct:false},{key:"D",text:"Jeder Zustand ist unabhängig von Kontakt und Last gleich kritisch.",correct:false}],
+    explanation:"Mischreibung ist kritisch und deshalb der kritischste Zustand beim Hochlauf."};
+  started=Date.now();rejected=false;
+  try {await reviewQuestionGrounding(provider,unprovenRanking,[sources,mixedSources],Date.now()+40000);}
+  catch(error){if(error.code==="factual-review" && /Fachprüfung 1\.0:/.test(error.message))rejected=true;else throw error;}
+  if(!rejected)throw new Error("unsupported-ranking-approved");
+  report.cases.push({name:"unsupported-most-critical-ranking",status:"pass",elapsedMs:Date.now()-started});
   // Reproduce the student-ticker authoring path, not merely its independent
   // reviewer. This public demo fixture contains no user or production data.
   const { demoLecture } = await import("@/lib/demo-data");
@@ -139,7 +162,7 @@ try {
   report.status="pass";
 } catch(error) {
   report.status="fail";
-  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
+  report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","recall-only-family-approved","unsupported-ranking-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
   if(error.diagnostic) {
     report.diagnostic=error.diagnostic;

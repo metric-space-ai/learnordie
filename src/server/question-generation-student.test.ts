@@ -7,6 +7,7 @@ import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentE
 import type { AIProvider } from "./providers/ai";
 import { StudentDraftError, studentDraftDiagnostic } from "./student-draft-error";
 import { GroundingReviewError, parseQuestionGroundingReview } from "./question-grounding-review";
+import { QUESTION_LEVEL_GUIDANCE } from "./question-level-guidance";
 
 const levels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
 test("normal Space selects the current slide even with previous speech; Shift+Space requires transcript", () => {
@@ -78,6 +79,7 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
     info: { provider: "openai-compatible", model: "MiniMax-M3" },
     complete: async (input: { system: string; user: string }) => {
       if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
+        assert.ok(input.system.includes(QUESTION_LEVEL_GUIDANCE), "independent review uses the same cognitive contract as the author");
         reviews.push(input);
         const { sources, candidates } = JSON.parse(input.user) as { sources: Array<{id:string;text:string}>; candidates: Array<{level: string;text: string;answers: Array<{key:string;correct:boolean}>;explanation: string}> };
         assert.deepEqual(candidates.map(candidate => candidate.level), levels);
@@ -86,6 +88,7 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
         return { answer: reviewAnswers.shift() ?? JSON.stringify({ reviews: candidates.map(candidate => ({ level:candidate.level, approved: true, sourceIds: [sources[0].id], distractors:candidate.answers.filter(answer=>!answer.correct).map(answer=>({key:answer.key,kind:"misconception",reason:"Testfehlvorstellung"})), reason: "Testbeleg" })) }) };
       }
       requests.push(input);
+      if (input.system.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")) assert.ok(input.system.includes(QUESTION_LEVEL_GUIDANCE));
       return { answer: answers.shift() ?? JSON.stringify(validPayload()) };
     },
     explain: async () => ({ answer: "" })
