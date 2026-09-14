@@ -413,13 +413,22 @@ test("ticker exposes stale generation actions, reclaims safely, and fences the o
       headers: { "x-learnbuddy-csrf": csrf, "content-type": "application/json" },
       data: { action: "retry", questionId: staleQuestionId }
     });
-    expect(retryResponse.status()).toBe(200);
-    const retryBody = await retryResponse.json() as { questions: Array<{
+    // Retry acknowledges the attempt before after() runs the provider/review.
+    // An acknowledgement is not a saved draft; observe the committed result.
+    expect(retryResponse.status()).toBe(202);
+    type RetryTicker = { questions: Array<{
       id: string;
       examDraftStatus: string;
       generationStale: boolean;
       draft: unknown;
     }> };
+    let retryBody = await retryResponse.json() as RetryTicker;
+    await expect.poll(async () => {
+      const response = await page.request.get(tickerUrl);
+      expect(response.status()).toBe(200);
+      retryBody = await response.json() as RetryTicker;
+      return retryBody.questions.find(question => question.id === staleQuestionId)?.examDraftStatus;
+    }, { timeout: 45_000, intervals: [250, 500, 1000] }).toBe("draft");
     expect(retryBody.questions.find((question) => question.id === staleQuestionId)).toMatchObject({
       examDraftStatus: "draft",
       generationStale: false

@@ -122,14 +122,21 @@ test("student question becomes a reviewed live round while presenter and three s
     // Continue into independent study. Reopening after reload may be useful
     // practice, but must not award the same question family's points twice.
     const learner = students[0];
-    const practiceQuestion = lecture.questions.find(question => question.level === "2.0" && (!question.slideId || question.slideId === lecture.slides[0].id))!;
-    expect(practiceQuestion).toBeTruthy();
-    const correctKey = practiceQuestion.answers.find(answer => answer.correct)!.key;
+    // Publication adds a family. Match the question actually rendered in study,
+    // not the first seed question from the pre-publication lecture snapshot.
+    const knownQuestions = [...lecture.questions, ...variants];
+    let firstQuestionText: string | null = null;
     let firstScore: string | null = null;
     await learner.goto(`/learn/${lecture.publicToken}`);
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt) await learner.reload();
       await learner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
+      const questionText = (await learner.locator(".question-drawer .question").textContent())!.trim();
+      const practiceQuestion = knownQuestions.find(question => question.text === questionText && question.level === "2.0");
+      expect(practiceQuestion, `Rendered study question must have an authoritative answer key: ${questionText}`).toBeTruthy();
+      if (attempt === 0) firstQuestionText = questionText;
+      else expect(questionText, "Repeat the same question when testing duplicate score suppression").toBe(firstQuestionText);
+      const correctKey = practiceQuestion!.answers.find(answer => answer.correct)!.key;
       const saved = learner.waitForResponse(response => response.url().endsWith("/api/events")
         && response.request().method() === "POST" && response.request().postDataJSON()?.eventType === "answer_selected");
       await learner.locator(".answers .answer").filter({ has: learner.locator(".letter", { hasText: correctKey }) }).click();
