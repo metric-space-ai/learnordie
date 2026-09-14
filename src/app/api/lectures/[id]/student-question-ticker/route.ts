@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
@@ -7,13 +7,13 @@ import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
 import { studentDraftDiagnostic } from "@/server/student-draft-error";
+import { studentDraftDeadline, STUDENT_DRAFT_STALE_MS } from "@/server/student-draft-limits";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_TICKER_BODY_BYTES = 2048;
 const TICKER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RETRY_COOLDOWN_MS = 30_000;
-const GENERATION_STALE_MS = 90_000;
 const MAX_LECTURE_ATTEMPTS_PER_WINDOW = 12;
 const tickerAction = z.object({
   action: z.enum(["retry", "reject"]),
@@ -40,7 +40,7 @@ function tickerItems(lecture: NonNullable<Awaited<ReturnType<ReturnType<typeof g
       generationStale: question.examDraftStatus === "generating" && (
         !question.examDraftAttemptAt ||
         !Number.isFinite(Date.parse(question.examDraftAttemptAt)) ||
-        Date.now() - Date.parse(question.examDraftAttemptAt) >= GENERATION_STALE_MS
+        Date.now() - Date.parse(question.examDraftAttemptAt) >= STUDENT_DRAFT_STALE_MS
       ),
       examDraftError: question.examDraftError,
       draft: draftReady ? {
@@ -115,7 +115,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     now,
     since: new Date(now.getTime() - 15 * 60 * 1000),
     cooldownMs: RETRY_COOLDOWN_MS,
-    staleGenerationMs: GENERATION_STALE_MS,
+    staleGenerationMs: STUDENT_DRAFT_STALE_MS,
     maxAttempts: MAX_LECTURE_ATTEMPTS_PER_WINDOW
   }, session.email);
   if (attempt.status === "not_found") return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
@@ -127,8 +127,11 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   if (attempt.status === "draft") return NextResponse.json({ questions: tickerItems(lecture) });
   if (attempt.status !== "started") return NextResponse.json({ error: "Diese Studierendenfrage wurde nicht als fachliche Frage übernommen." }, { status: 409 });
 
-  try {
-    const generated = await generateStudentQuestionExamDraft(lecture, question, { deadlineAt: Date.now() + 45_000 });
+  after(async () => {
+   try {
+    const currentLecture = await repository.getLectureById(id, session.email);
+    if (!currentLecture) throw new Error("Lecture no longer exists.");
+    const generated = await generateStudentQuestionExamDraft(currentLecture, question, { deadlineAt: studentDraftDeadline(now.getTime()) });
     if (!generated.supported) {
       await repository.updateStudentExamDraftStatus({
         lectureId: id,
@@ -140,18 +143,23 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     } else {
       await repository.saveStudentExamDraft({ lectureId: id, chatQuestionId: question.id, attemptId: attempt.attemptId, variants: generated.variants }, session.email);
     }
-  } catch (error) {
+   } catch (error) {
     console.warn("student exam draft retry failed", studentDraftDiagnostic(error));
-    await repository.updateStudentExamDraftStatus({
-      lectureId: id,
-      chatQuestionId: question.id,
-      attemptId: attempt.attemptId,
-      status: "failed",
-      error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
-    }, session.email);
-  }
+    try {
+      await repository.updateStudentExamDraftStatus({
+        lectureId: id,
+        chatQuestionId: question.id,
+        attemptId: attempt.attemptId,
+        status: "failed",
+        error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
+      }, session.email);
+    } catch {
+      console.warn("student exam draft retry failure status could not be saved");
+    }
+   }
+  });
 
   const refreshed = (await repository.listLectures(session.email)).find((item) => item.id === id);
   if (!refreshed) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
-  return NextResponse.json({ questions: tickerItems(refreshed) });
+  return NextResponse.json({ questions: tickerItems(refreshed) }, { status: 202 });
 }

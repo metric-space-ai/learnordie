@@ -484,6 +484,13 @@ class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
+export function responsesProxyMessages(input: Pick<AICompleteInput, "system" | "user">) {
+  return [
+    { type: "message", role: "system", content: [{ type: "input_text", text: input.system }] },
+    { type: "message", role: "user", content: [{ type: "input_text", text: input.user }] }
+  ];
+}
+
 class ResponsesProxyProvider implements AIProvider {
   readonly info: AIProviderInfo;
   private readonly endpoint: string;
@@ -511,7 +518,8 @@ class ResponsesProxyProvider implements AIProvider {
         },
         body: JSON.stringify({
           model: this.info.model,
-          input: `${input.system}\n\n${input.user}`,
+          input: responsesProxyMessages(input),
+          temperature: Math.max(0.01, Math.min(1, input.temperature ?? 0.2)),
           max_output_tokens: input.maxOutputTokens ?? 520,
           reasoning: { effort: "none" },
           store: false
@@ -556,7 +564,8 @@ class ResponsesProxyProvider implements AIProvider {
       },
       body: JSON.stringify({
         model: this.info.model,
-        input: `${input.system}\n\n${input.user}`,
+        input: responsesProxyMessages(input),
+        temperature: Math.max(0.01, Math.min(1, input.temperature ?? 0.2)),
         max_output_tokens: input.maxOutputTokens ?? 520,
         reasoning: { effort: "none" },
         stream: true,

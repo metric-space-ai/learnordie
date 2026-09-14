@@ -6,14 +6,14 @@ import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
 import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
 import { studentDraftDiagnostic } from "@/server/student-draft-error";
+import { studentDraftDeadline, STUDENT_DRAFT_STALE_MS } from "@/server/student-draft-limits";
 import { getStudentRepository } from "@/server/student-repository";
 import { getCurrentStudentProfile } from "@/server/student-session";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_CHAT_QUESTION_BYTES = 4096;
 const CHAT_QUESTION_WINDOW_MS = 15 * 60 * 1000;
-const STUDENT_DRAFT_GENERATION_BUDGET_MS = 45_000;
 const DEFAULT_CHAT_QUESTION_LIMIT = 5;
 
 const chatQuestionSchema = z.object({
@@ -112,7 +112,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
         now: attemptNow,
         since: new Date(attemptNow.getTime() - CHAT_QUESTION_WINDOW_MS),
         cooldownMs: 30_000,
-        staleGenerationMs: 90_000,
+        staleGenerationMs: STUDENT_DRAFT_STALE_MS,
         maxAttempts: 12,
         initial: true
       });
@@ -123,7 +123,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
             const currentLecture = await repository.getLectureByToken(token);
             if (!currentLecture) throw new Error("Lecture no longer exists.");
             const generated = await generateStudentQuestionExamDraft(currentLecture, chatQuestion, {
-              deadlineAt: Date.now() + STUDENT_DRAFT_GENERATION_BUDGET_MS
+              deadlineAt: studentDraftDeadline(attemptNow.getTime())
             });
             if (!generated.supported) {
               await repository.updateStudentExamDraftStatus({
