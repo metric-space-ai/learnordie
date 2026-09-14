@@ -3465,7 +3465,10 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
       pseudonym: "Ohne Key"
     }
   });
-  expect(missingKeyResponse.status()).toBe(400);
+  // Identity is taken from the signed participant session, never a body key.
+  expect(missingKeyResponse.status()).toBe(200);
+  const sessionIdentityPayload = await missingKeyResponse.json();
+  expect(sessionIdentityPayload.chatQuestion.pseudonym).not.toBe("Ohne Key");
 
   const oversizedResponse = await page.request.post(chatQuestionUrl, {
     data: {
@@ -3477,21 +3480,20 @@ test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangl
   expect(oversizedResponse.status()).toBe(413);
 
   const rateLimitKey = `chat-rate-${Date.now().toString(36)}`;
-  for (let index = 0; index < 3; index += 1) {
-    const response = await page.request.post(chatQuestionUrl, {
-      data: {
-        text: `Wie verändert Viskosität die Stribeck-Kurve bei Mischreibung ${index}?`,
-        pseudonym: "Rate Limit",
-        anonymousKey: rateLimitKey
-      }
-    });
-    expect(response.ok()).toBe(true);
-  }
+  // The UI submission and keyless submission already consumed two attempts.
+  const lastAllowedResponse = await page.request.post(chatQuestionUrl, {
+    data: {
+      text: "Wie verändert Viskosität die Stribeck-Kurve bei Mischreibung?",
+      pseudonym: "Rate Limit",
+      anonymousKey: rateLimitKey
+    }
+  });
+  expect(lastAllowedResponse.ok()).toBe(true);
   const blockedResponse = await page.request.post(chatQuestionUrl, {
     data: {
       text: "Wie verändert Viskosität die Stribeck-Kurve beim nächsten Versuch?",
       pseudonym: "Rate Limit",
-      anonymousKey: rateLimitKey
+      anonymousKey: `${rateLimitKey}-spoofed-new-identity`
     }
   });
   expect(blockedResponse.status()).toBe(429);

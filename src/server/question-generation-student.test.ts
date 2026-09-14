@@ -239,6 +239,7 @@ test("student drafts reject unseen source lookups and dangling references but al
   const scriptReference = validPayload();
   scriptReference.variants[1].text = "Welche Aussage gilt laut Skript?";
   assert.throws(() => parseStudentExamDraft(JSON.stringify(scriptReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /unavailable context/);
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(scriptReference), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /laut Skript.*Formuliere/s);
 
   const pageReference = validPayload();
   pageReference.variants[1].text = "Welche These wird auf Seite 17 begründet?";
@@ -259,6 +260,11 @@ test("student drafts reject unseen source lookups and dangling references but al
   const describedSituation = validPayload();
   describedSituation.variants[3].text = "Ein Sprachmodell antwortet auf die Frage nach Lastgrenzen einer Halterung mit einem plausibel klingenden, aber unbelegten Wert. Beurteilen Sie diese Situation im Licht der Unterscheidung von Ausführen und Lernen.";
   assert.doesNotThrow(() => parseStudentExamDraft(JSON.stringify(describedSituation), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }));
+  const quotedStatement = validPayload();
+  quotedStatement.variants[3].text = "Ein Kollege behauptet: „Sobald mein Modell auf neue Daten reagiert, lernt es.“ Wie beurteilen Sie diese Aussage?";
+  assert.doesNotThrow(() => parseStudentExamDraft(JSON.stringify(quotedStatement), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }));
+  quotedStatement.variants[3].text = "Wie beurteilen Sie diese Aussage?";
+  assert.throws(() => parseStudentExamDraft(JSON.stringify(quotedStatement), { lectureId: "l", slideId: "s", sourceQuestionId: "q" }), /undefined reference/);
   for (const text of ["Wie beurteilen Sie diese Situation?", "Was gilt in diesem Fall?"]) {
     const absentSituation = validPayload();
     absentSituation.variants[3].text = text;
@@ -288,7 +294,8 @@ test("invalid M3 output gets one strict repair attempt; unsupported questions st
   assert.equal(generated.supported, true);
   assert.equal(requests.length, 2);
   assert.match(requests[1].user, /OUTPUT VALIDATION RETRY/);
-  assert.match(requests[1].user, /formuliere die beanstandete Idee nicht bloß um/);
+  assert.match(requests[1].system, /formuliere die beanstandete Idee nicht bloß um/);
+  assert.ok(requests[1].user.indexOf("PRÜFRÜCKMELDUNG") < requests[1].user.indexOf("VORLESUNGSKONTEXT"));
 
   const unsupportedProvider = makeProvider([JSON.stringify({ supported: false, reason: "Keine passende Vorlesungsgrundlage." })]).provider;
   const unsupported = await generateStudentExamDraft(input(), unsupportedProvider);
@@ -337,7 +344,7 @@ test("student draft length constraints are explicit and repair can rewrite an ov
   assert.match(requests[0].system, /"coreStatement":"Gemeinsames Lernziel \(max\. 240 Zeichen\)"/);
   assert.match(requests[0].system, /"topic":"Thema \(max\. 80 Zeichen\)"/);
   assert.match(requests[1].user, /core statement: 241 characters; expected 8 to 240/);
-  assert.match(requests[1].user, /Formuliere überlange Felder vollständig kürzer, ohne nötige Angaben zu verlieren/);
+  assert.match(requests[1].system, /Formuliere überlange Felder vollständig kürzer, ohne nötige Angaben zu verlieren/);
   assert.doesNotMatch(requests[1].user, /Kürze keine Felder/);
 });
 
@@ -503,8 +510,9 @@ test("failed factual review prevents publishing and bounded repair is reviewed a
   assert.equal(repaired.requests.length, 2);
   assert.equal(repaired.reviews.length, 2);
   assert.match(repaired.requests[1].user, /Unbelegter numerischer Grenzwert/);
-  assert.match(repaired.requests[1].user, /Behebe auch genannte Fehler an Fragen, Lösungen oder Format/);
-  assert.match(repaired.requests[1].user, /Ersetze beanstandete falsche Antworten durch typische fachliche Verwechslungen/);
+  assert.match(repaired.requests[1].system, /Behebe auch genannte Fehler an Fragen, Lösungen oder Format/);
+  assert.match(repaired.requests[1].system, /Ersetze beanstandete falsche Antworten durch typische fachliche Verwechslungen/);
+  assert.doesNotMatch(repaired.requests[1].system, /Unbelegter numerischer Grenzwert/, "untrusted reviewer feedback remains data, never system instructions");
   assert.ok(repaired.requests[1].user.includes(JSON.stringify(JSON.stringify(validPayload()))), "repair receives the rejected candidate, not only a verdict about missing content");
   const rejected = makeProvider([JSON.stringify(validPayload()), JSON.stringify(validPayload())], [rejection, rejection]);
   await assert.rejects(generateStudentExamDraft(input(), rejected.provider), /invalid after one retry/);

@@ -60,7 +60,9 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
   }
   const seen = new Set<string>();
   const sourceTexts = sourceBlocks(sources).map(normalize);
-  const passageIds = new Set(groundingSourcePassages(sources).filter(passage => normalize(passage.text).length >= 12).map(passage => passage.id));
+  // IDs refer to the exact supplied passages, including short formulas. The
+  // minimum source budget is checked by the caller, not by hiding valid IDs.
+  const passageIds = new Set(groundingSourcePassages(sources).map(passage => passage.id));
   for (const entry of parsed.reviews) {
     if (!entry || typeof entry !== "object" || !LEVELS.includes(entry.level) || seen.has(entry.level)) {
       throw new GroundingFormatError("Fachprüfung: ungültige oder doppelte Stufe.");

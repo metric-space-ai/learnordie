@@ -116,6 +116,14 @@ test("source IDs resolve losslessly to originals and cannot bypass a refusal or 
   assert.throws(() => parseQuestionGroundingReview(JSON.stringify({reviews:refused}), [original,sources]), /Fachprüfung 1.0: Sachlich falsch/);
 });
 
+test("a supplied short mathematical passage remains a valid source ID", () => {
+  const context = ["ψ(0)=0", sources];
+  const reviews = valid().reviews.map(({ sourceQuote, ...review }) => ({ ...review, sourceIds: ["S1.1"] }));
+  assert.equal(groundingSourcePassages(context)[0].text, "ψ(0)=0");
+  assert.doesNotThrow(() => parseQuestionGroundingReview(JSON.stringify({ reviews }), context));
+  assert.throws(() => parseQuestionGroundingReview(JSON.stringify({ reviews }), [" "]), /Beleg-ID/);
+});
+
 test("global approval cannot override a joke, unrelated answer or missing per-answer assessment", () => {
   const candidates = (["4.0","3.0","2.0","1.0"] as const).map(level=>({level,answers:(["A","B","C","D"] as const).map(key=>({key,text:"Testantwort",correct:key==="A"}))}));
   const reviews = candidates.map(candidate=>({level:candidate.level,approved:true,sourceIds:["S1.1"],reason:"Fachlich belegt",answerChecks:candidate.answers.map(answer=>({key:answer.key,reason:"Synthetic fixture comparison.",verdict:answer.correct?"correct":"incorrect"})),distractors:["B","C","D"].map(key=>({key,kind:"misconception",reason:"Verwechselte Wirkungsrichtung"}))}));
