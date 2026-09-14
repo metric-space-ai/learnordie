@@ -9,8 +9,8 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 const apply = args.includes("--apply");
-const expectedDigest = args.find(value => value.startsWith("--digest="))?.slice(9);
-const backupPath = args.find(value => value.startsWith("--backup="))?.slice(9);
+const expectedDigest = args.find(value => value.startsWith("--digest="))?.slice(9) ?? process.env.DT01_LAYOUT_DIGEST;
+const backupPath = args.find(value => value.startsWith("--backup="))?.slice(9) ?? process.env.DT01_LAYOUT_BACKUP;
 if (!args.includes("--run") || process.env.VERCEL_ENV !== "production" || !process.env.DATABASE_URL
   || args.some(value => !["--run", "--apply"].includes(value) && !/^--(digest|backup)=/.test(value))
   || (apply && (!/^[a-f0-9]{64}$/.test(expectedDigest ?? "") || !backupPath))) {
