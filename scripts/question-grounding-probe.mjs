@@ -179,6 +179,7 @@ try {
   report.status="fail";
   report.reason=["unsupported-numeric-claim-approved","underdetermined-bearing-regime-approved","absurd-distractor-approved","two-correct-options-approved","contradictory-compound-answer-approved","recall-only-family-approved","unsupported-ranking-approved","supported-student-fixture-rejected"].includes(error.message)?error.message:"review-failed-before-required-verdict";
   report.failureClass = /^Fachprüfung(?: |:)/.test(error.message) ? "source-review" : error.name;
+  if(report.failureClass==="source-review") report.syntheticValidationReason=String(error.message).slice(0,600);
   if(error.diagnostic) {
     report.diagnostic=error.diagnostic;
     // This probe only sends the hard-coded synthetic cases above. Never do
