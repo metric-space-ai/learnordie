@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
+import { groupQuestionFamilies, preparedQuestionFamiliesForSlide, questionsForSlide } from "@/lib/questions";
 import type { LiveAnswerReceipt, LiveCommand, LiveSessionView } from "@/lib/live-session";
 import type { Lecture, QuestionLevel, QuestionVariant } from "@/lib/types";
 import { getDb } from "./db/client";
@@ -139,7 +139,9 @@ export async function commandLiveSession(lecture: Lecture, command: LiveCommand)
       if (current.round && current.round.expiresAt > now) throw new LiveSessionError(409, "Eine Fragerunde läuft bereits. Ihre Antwortzeit bleibt unverändert.");
       // A generated family belongs to the slide at request time, not necessarily
       // the current slide after the asynchronous provider call has completed.
-      const families = groupQuestionFamilies(command.familyId ? lecture.questions : questionsForSlide(lecture.questions, lecture.slides[current.slideIndex]?.id));
+      const families = command.prepared
+        ? preparedQuestionFamiliesForSlide(lecture.questions, lecture.slides[current.slideIndex]?.id)
+        : groupQuestionFamilies(command.familyId ? lecture.questions : questionsForSlide(lecture.questions, lecture.slides[current.slideIndex]?.id));
       const questions = command.familyId ? families.find((family) => family[0]?.familyId === command.familyId) : families[command.familyIndex];
       if (!questions?.length) throw new LiveSessionError(400, "Fragenfamilie nicht gefunden.");
       if (questions.length !== 4 || new Set(questions.map(question => question.level)).size !== 4) {

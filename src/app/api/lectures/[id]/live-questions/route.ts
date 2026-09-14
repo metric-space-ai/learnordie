@@ -97,7 +97,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
         return NextResponse.json({ error: "Das aktuelle Live-Transkript ist noch zu kurz für eine Frage." }, { status: 422 });
       }
       // Client transcript text is only a hint for its display path; grounding for
-      // L is exclusively the accepted, current-session server record.
+      // Shift+Space is exclusively the accepted, current-session server record.
       transcript = current.accumulated;
       latestTranscript = current.recentWindow;
     } catch (error) {

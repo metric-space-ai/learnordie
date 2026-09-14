@@ -15,6 +15,15 @@ function familyKey(question: Pick<QuestionVariant, "slideId" | "familyId">) {
   return `${question.slideId ?? ""}|${question.familyId ?? ""}`;
 }
 
+/** Prepared Space rounds never fall back to another slide or a live-generated family. */
+export function preparedQuestionFamiliesForSlide(questions: QuestionVariant[], slideId?: string): QuestionVariant[][] {
+  const prepared = questions.filter(question => !["live_slide", "live_transcript", "student_question"].includes(question.familySource ?? "")
+    && question.reviewStatus !== "draft" && question.reviewStatus !== "rejected");
+  const assigned = prepared.filter(question => question.slideId === slideId && Boolean(slideId));
+  return groupQuestionFamilies(assigned.length ? assigned : prepared.filter(question => !question.slideId))
+    .filter(family => family.length === 4 && new Set(family.map(question => question.level)).size === 4);
+}
+
 // Eine Frage ist eine Familie aus je einer Variante pro Niveau. Varianten ohne
 // familyId bilden (je Folie) eine gemeinsame Familie, wie bei alten Vorlesungen.
 export function groupQuestionFamilies(questions: QuestionVariant[]): QuestionVariant[][] {

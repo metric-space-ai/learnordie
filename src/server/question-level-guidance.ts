@@ -1,11 +1,16 @@
 /** Shared cognitive contract for authors and the independent family reviewer. */
 export const QUESTION_LEVEL_GUIDANCE = [
-  "Die vier Stufen prüfen dieselbe fachliche Beziehung durch verschiedene Denkoperationen, nicht durch vier Umschreibungen derselben Lösung.",
-  "4.0 Wiedergeben: einen Begriff, ein Merkmal oder eine Zuordnung erkennen.",
-  "3.0 Verstehen: einen begründeten Ursache-Wirkungs-Zusammenhang erkennen; eine Definition mit einem Warum-Fragewort reicht nicht.",
-  "2.0 Anwenden: aus einer ausdrücklich beschriebenen Beobachtung oder veränderten Bedingung eine Folge ableiten. Ein bloß vorangestelltes Beispiel vor derselben Definitionsfrage reicht nicht. Qualitative Fälle sind vollwertig; erfinde keine Zahlen, wenn sie für die Lösung nichts leisten.",
-  "1.0 Übertragen/Bewerten: für ein genanntes Ziel eine Maßnahme auswählen, eine Behauptung anhand eines Gegenfalls prüfen oder zwei Bedingungen zusammenführen. Nenne Ziel, relevante Bedingungen und Entscheidungskriterium in der Frage. Nur ‚Bewerten Sie‘ vor der 2.0-Frage ist kein Transfer.",
-  "Vor Ausgabe die Stufen nebeneinander prüfen: Kann man 2.0 und 1.0 durch Kopieren der Definition aus 4.0 lösen, müssen diese Aufgaben neu konstruiert werden. Unterschiedliche Fachbegriffe, Szenennamen, Satzlängen oder Antwortreihenfolgen erhöhen die Schwierigkeit nicht.",
-  "Bestimme einen Betriebszustand nicht allein aus ‚langsam‘ oder einer frei gewählten Drehzahl. Nutze stattdessen ausdrücklich beschriebene Zustandsmerkmale, wenn die Quellen keinen vollständigen quantitativen Zusammenhang liefern.",
-  "Superlative und Rangfolgen wie ‚am kritischsten‘, ‚optimal‘ oder ‚am sichersten‘ benötigen eine definierte Vergleichsmenge und ein belegtes Kriterium. Aus ‚Zustand X ist kritisch‘ folgt kein Vergleich mit anderen Zuständen."
+  "Erstelle vier Fragen zum selben Lernziel mit steigender Denkaufgabe:",
+  "4.0 Wiedergeben: einen Begriff oder Zusammenhang erkennen.",
+  "3.0 Verstehen: den Zusammenhang erklären oder eine Ursache erkennen.",
+  "2.0 Anwenden: den Zusammenhang auf einen konkret beschriebenen Fall anwenden.",
+  "1.0 Übertragen/Bewerten: mit dem Zusammenhang eine neue Situation beurteilen oder eine begründete Entscheidung treffen.",
+  "Die Unterschiede liegen in der Denkaufgabe, nicht in komplizierter Sprache oder vier Umschreibungen derselben Frage. Qualitative Aufgaben sind auf allen Stufen möglich."
+].join(" ");
+
+/** Context sets the topic; it is not a closed inventory of permissible knowledge. */
+export const QUESTION_CONTEXT_GUIDANCE = [
+  "Skript, Folien und akzeptiertes Live-Transkript legen Thema und Unterrichtskontext fest. Nutze dazu gesichertes Fachwissen, um Zusammenhänge zu erklären und Aufgaben zu bilden; nicht jede Definition oder Herleitung muss im Material stehen.",
+  "Ein mündliches Beispiel ist auch ohne passende Folie oder Skriptstelle Vorlesungsstoff. Eine qualitative Aussage genügt als Ausgangspunkt. Ergänze keine erfundenen Messwerte, Quellen oder allgemeingültigen Grenzwerte.",
+  "Gib die für eine eindeutige Lösung nötigen Bedingungen im Aufgabentext an. Hypothetische Beispiele sind erlaubt; kennzeichne ihre Annahmen. Prüfe Rechnungen und Geltungsbedingungen."
 ].join(" ");

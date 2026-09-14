@@ -20,6 +20,6 @@ export type LiveSessionView = {
 export type LiveCommand =
   | { action: "start"; revision: number }
   | { action: "slide"; revision: number; slideIndex: number; showIntro: boolean }
-  | { action: "fire"; revision: number; familyIndex: number; durationSeconds: number; familyId?: string; sessionId?: string }
+  | { action: "fire"; revision: number; familyIndex: number; durationSeconds: number; familyId?: string; sessionId?: string; prepared?: boolean }
   | { action: "publishDraft"; revision: number; questionId: string }
   | { action: "close" | "end"; revision: number };

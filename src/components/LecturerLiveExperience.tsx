@@ -1,6 +1,6 @@
 "use client";
 
-import { groupQuestionFamilies, questionsForSlide } from "@/lib/questions";
+import { groupQuestionFamilies, preparedQuestionFamiliesForSlide, questionsForSlide } from "@/lib/questions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -69,10 +69,10 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const [statusClock, setStatusClock] = useState(0);
   const [questions, setQuestions] = useState(lecture.questions);
   const families = groupQuestionFamilies(questionsForSlide(questions, lecture.slides[slide]?.id));
-  const [liveQuestionsOn, setLiveQuestionsOn] = useState(true);
+  const [liveQuestionsOn, setLiveQuestionsOn] = useState(false);
   const [liveQuestionStatus, setLiveQuestionStatus] = useState<"idle" | "collecting" | "generating" | "error">("idle");
   const [liveQuestionMessage, setLiveQuestionMessage] = useState("");
-  const liveQuestionsOnRef = useRef(true);
+  const liveQuestionsOnRef = useRef(false);
   const pendingTranscriptRef = useRef("");
   const recentSpeechRef = useRef({ text: "", endedAt: 0 });
   const liveGeneratingRef = useRef(false);
@@ -84,7 +84,8 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const disposedRef = useRef(false);
   const transcriptionAbortRef = useRef<AbortController | null>(null);
   const slideRef = useRef(slide);
-  const dynamicRoundRef = useRef<((mode?: "transcript-only") => Promise<void>) | null>(null);
+  const dynamicRoundRef = useRef<((mode: "transcript-only") => Promise<void>) | null>(null);
+  const preparedRoundRef = useRef<(() => Promise<void>) | null>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   const sessionScopeRef = useRef(new LiveOperationScope());
   const activeSessionId = liveStatus === "active" ? live.state?.sessionId ?? null : null;
@@ -112,6 +113,15 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   // This handler is refreshed without capturing the slide while a provider is
   // in flight. Its result is explicitly bound to the original family/session.
   useEffect(() => {
+    preparedRoundRef.current = async () => {
+      if (showJoinIntro || liveStatus !== "active" || !live.connected || live.busy || questionOpen || liveGeneratingRef.current) return;
+      const prepared = preparedQuestionFamiliesForSlide(questions, lecture.slides[slide]?.id);
+      if (!prepared.length) { setRoundMessage("Für diese Folie ist keine vorbereitete Frage vorhanden."); return; }
+      const index = Math.min(familyIndex, prepared.length - 1);
+      setRoundMessage("");
+      const sent = await sendLive({action:"fire", prepared:true, familyIndex:index, familyId:prepared[index][0]?.familyId, sessionId:live.state?.sessionId ?? undefined, durationSeconds:60});
+      if (sent) setFamilyIndex((index + 1) % prepared.length);
+    };
     dynamicRoundRef.current = async (mode) => {
       if (showJoinIntro || liveStatus !== "active" || !live.connected || live.busy || questionOpen || liveGeneratingRef.current) return;
       const recentSpeech = recentSpeechRef.current;
@@ -430,7 +440,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
         }
         if (showJoinIntro) { next(); return; }
         setQuestionOrigin("space");
-        void dynamicRoundRef.current?.();
+        void preparedRoundRef.current?.();
       }
     };
 
@@ -674,7 +684,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
       </nav>
       <div className="live-controls">
         <button type="button" disabled={showJoinIntro || questionOpen || live.busy || !live.connected || liveStatus !== "active" || liveQuestionStatus === "generating"}
-          onClick={() => void dynamicRoundRef.current?.()}>Neue Frage · Leertaste</button>
+          onClick={() => void preparedRoundRef.current?.()}>Vorbereitete Frage · Leertaste</button>
         <button type="button" disabled={showJoinIntro || questionOpen || live.busy || !live.connected || liveQuestionStatus === "generating"}
           aria-keyshortcuts="Shift+Space"
           onClick={() => void dynamicRoundRef.current?.("transcript-only")}>Frage aus letzter Passage · Shift+Leertaste</button>
