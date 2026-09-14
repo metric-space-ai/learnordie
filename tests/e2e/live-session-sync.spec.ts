@@ -142,6 +142,9 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     const preview = teacher.locator("#presenter-question-preview");
     await previewToggle.click();
     await expect(preview.getByLabel("Quizfrage", { exact: true })).toBeVisible();
+    await expect(teacher.locator(".presenter-round-toast")).toBeHidden();
+    await expect(preview.locator(".question-drawer")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(preview.locator(".question")).toHaveCSS("font-family", '"Learnordie Sketch", cursive');
     for (const question of initial.round!.questions) {
       await preview.getByRole("button", { name: question.level, exact: true }).click();
       await expect(preview.locator(".question")).toHaveText(question.text);
