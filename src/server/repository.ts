@@ -64,6 +64,8 @@ export type SubmitChatQuestionInput = {
   text: string;
   pseudonym: string;
   anonymousKey?: string;
+  /** Server-derived accepted speech from the current active session only. */
+  currentTranscript?: string;
 };
 
 export type CountRecentStudentChatQuestionsInput = {

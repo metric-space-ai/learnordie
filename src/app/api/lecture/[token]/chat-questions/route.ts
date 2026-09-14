@@ -9,6 +9,8 @@ import { studentDraftDiagnostic } from "@/server/student-draft-error";
 import { studentDraftDeadline, STUDENT_DRAFT_STALE_MS } from "@/server/student-draft-limits";
 import { getStudentRepository } from "@/server/student-repository";
 import { getCurrentStudentProfile } from "@/server/student-session";
+import { acceptedTranscriptContext } from "@/server/question-generation";
+import { liveLecture, readLiveSession } from "@/server/live-session-repository";
 
 export const maxDuration = 120;
 
@@ -91,11 +93,14 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     );
   }
 
+  const live = await readLiveSession(await liveLecture(token), null, false);
+  const currentTranscript = live.status === "active" ? acceptedTranscriptContext(lecture, live.sessionStartedAt).accumulated : "";
   const chatQuestion = await repository.submitStudentChatQuestion({
     lectureToken: token,
     text: parsed.data.text,
     pseudonym: enrollment.displayName?.trim() || profile.pseudonym,
-    anonymousKey: profile.anonymousKey
+    anonymousKey: profile.anonymousKey,
+    currentTranscript
   });
 
   if (!chatQuestion) {

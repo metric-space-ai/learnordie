@@ -1281,7 +1281,7 @@ export class PostgresLectureRepository implements LectureRepository {
     if (!lecture) return null;
 
     const cleanText = input.text.replace(/\s+/g, " ").trim();
-    const moderation = await moderateChatQuestionWithProvider(lecture, cleanText);
+    const moderation = await moderateChatQuestionWithProvider(lecture, cleanText, input.currentTranscript);
     const participantSessionId = input.anonymousKey
       ? await this.findOrCreateParticipantSession({
           lectureId: lecture.id,

@@ -707,12 +707,12 @@ export class LocalLectureStore {
     }
   }
 
-  async submitStudentChatQuestion(input: { lectureToken: string; text: string; pseudonym: string; anonymousKey?: string }) {
+  async submitStudentChatQuestion(input: { lectureToken: string; text: string; pseudonym: string; anonymousKey?: string; currentTranscript?: string }) {
     const store = await readStore();
     const lecture = store.lectures.find((item) => item.publicToken === input.lectureToken);
     if (!lecture) return null;
 
-    const moderation = await moderateChatQuestionWithProvider(lecture, input.text);
+    const moderation = await moderateChatQuestionWithProvider(lecture, input.text, input.currentTranscript);
     const chatQuestion: StudentChatQuestion = {
       id: `chat_${crypto.randomUUID()}`,
       lectureId: lecture.id,

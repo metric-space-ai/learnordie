@@ -1,26 +1,6 @@
 import type { Lecture } from "@/lib/types";
 
-const DOMAIN_TERMS = [
-  "gleitlager",
-  "lager",
-  "mischreibung",
-  "stribeck",
-  "viskos",
-  "schmier",
-  "schmierfilm",
-  "reibung",
-  "welle",
-  "drehzahl",
-  "last",
-  "belastung",
-  "sommerfeld",
-  "anlauf",
-  "hydrodynam",
-  "festkörperkontakt",
-  "festkoerperkontakt",
-  "verschleiß",
-  "verschleiss"
-];
+const STOP_WORDS = new Set(["einer", "einen", "einem", "eines", "diese", "dieser", "diesem", "dieses", "werden", "welche", "welcher", "welches", "warum", "durch", "nicht", "kann", "konnen", "wird", "sind", "eine", "dass", "auch", "beim", "nach", "unter", "vorlesung", "thema"]);
 
 function normalize(value: string) {
   return value
@@ -30,10 +10,11 @@ function normalize(value: string) {
     .replace(/ß/g, "ss");
 }
 
-function lectureTerms(lecture: Lecture) {
+function lectureTerms(lecture: Lecture, currentTranscript: string) {
   const text = [
     lecture.title,
     lecture.seriesTitle,
+    currentTranscript,
     ...lecture.slides.flatMap((slide) => [slide.title, slide.topic, ...slide.copy]),
     ...lecture.questions.flatMap((question) => [question.text, question.explanation]),
     ...(lecture.materials ?? []).flatMap((material) => [material.originalName, material.extractedTextPreview ?? ""])
@@ -42,15 +23,14 @@ function lectureTerms(lecture: Lecture) {
   return new Set(
     normalize(text)
       .split(/[^a-z0-9äöü]+/i)
-      .filter((term) => term.length >= 5)
+      .filter((term) => term.length >= 4 && !STOP_WORDS.has(term))
   );
 }
 
-export function evaluateStudentChatQuestion(lecture: Lecture, text: string) {
+export function evaluateStudentChatQuestion(lecture: Lecture, text: string, currentTranscript = "") {
   const clean = text.replace(/\s+/g, " ").trim();
   const normalized = normalize(clean);
-  const terms = lectureTerms(lecture);
-  const domainMatches = DOMAIN_TERMS.filter((term) => normalized.includes(normalize(term)));
+  const terms = lectureTerms(lecture, currentTranscript);
   const lectureMatches = [...terms].filter((term) => normalized.includes(term)).slice(0, 4);
 
   if (clean.length < 12) {
@@ -62,17 +42,17 @@ export function evaluateStudentChatQuestion(lecture: Lecture, text: string) {
     };
   }
 
-  if (domainMatches.length === 0 && lectureMatches.length === 0) {
+  if (lectureMatches.length === 0) {
     return {
       status: "ignored" as const,
-      reason: "Kein Bezug zu Gleitlagerung, Schmierung oder den aktuellen Vorlesungsbegriffen erkannt.",
+      reason: "Kein Bezug zu den verfügbaren Vorlesungsinhalten oder dem aktuellen Live-Text erkannt.",
       sourceTopic: undefined,
       matches: []
     };
   }
 
-  const sourceTopic = domainMatches[0] ?? lectureMatches[0] ?? lecture.title;
-  const matches = [...domainMatches, ...lectureMatches].slice(0, 4);
+  const sourceTopic = lectureMatches[0] ?? lecture.title;
+  const matches = lectureMatches;
   return {
     status: "accepted" as const,
     reason: `Fachbezug erkannt: ${matches.slice(0, 3).join(", ") || lecture.title}.`,
