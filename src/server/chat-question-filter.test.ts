@@ -31,14 +31,35 @@ test("a student question about accepted current speech is admitted without a sta
   process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER = "local";
   try {
     assert.equal((await moderateStudentChatQuestion(lecture, question, speech)).status, "accepted");
-    assert.equal((await moderateStudentChatQuestion(lecture, question)).status, "ignored");
+    assert.equal((await moderateStudentChatQuestion(lecture, question)).status, "accepted", "missing lexical overlap is not a factual rejection");
   } finally {
     if (previous === undefined) delete process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER;
     else process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER = previous;
   }
 });
 
-test("old-session, rejected, and pre-restart audio cannot admit a current chat question", () => {
+test("admission does not let a second AI topic classifier discard paraphrases or spoken examples", async () => {
+  const previous = process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER;
+  const previousFetch = globalThis.fetch;
+  process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER = "ai";
+  let providerCalls = 0;
+  globalThis.fetch = async () => { providerCalls++; throw new Error("No admission-stage model request allowed"); };
+  try {
+    const admitted = await moderateStudentChatQuestion(lecture, question, speech);
+    assert.equal(admitted.status, "accepted");
+    assert.equal(admitted.confidence, 0, "admission is not factual confidence");
+    assert.ok(admitted.signals.includes("pending-source-review"));
+    assert.equal((await moderateStudentChatQuestion(lecture, "Was passiert, wenn das Bauteil elastischer wird?")).status, "accepted");
+    assert.equal((await moderateStudentChatQuestion(lecture, "Feder?")).status, "ignored");
+    assert.equal(providerCalls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previous === undefined) delete process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER;
+    else process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER = previous;
+  }
+});
+
+test("old-session, rejected, and pre-restart audio cannot supply a current chat topic", () => {
   const start = Date.parse("2026-09-14T01:00:00.000Z");
   const current = new Date(start + 20_000).toISOString();
   const old = new Date(start - 20_000).toISOString();
