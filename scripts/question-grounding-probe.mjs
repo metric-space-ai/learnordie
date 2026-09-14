@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // Known synthetic cases only. No database writes and no credential output.
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review]\nRuns actual MiniMax source and answer review on public synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance; never a release-gate pass. No database writes; not a browser acceptance test.");
+  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run [--production-env] [--diagnose-review | --diagnose-spoken-source | --diagnose-student-bearing]\nRuns actual MiniMax source and answer review on public synthetic fixtures. --production-env permits local execution via vercel env run -e production. --diagnose-review measures only the first review with a60s transport allowance. --diagnose-student-bearing measures one synthetic student bearing question with unchanged runtime deadlines and prompts. Diagnostic modes are never a release-gate pass. No database writes; not a browser acceptance test.");
   process.exit(0);
 }
 const localProductionEnv = process.argv.includes("--production-env");
 const diagnoseReview = process.argv.includes("--diagnose-review");
 const diagnoseSpokenSource = process.argv.includes("--diagnose-spoken-source");
+const diagnoseStudentBearing = process.argv.includes("--diagnose-student-bearing");
+if ([diagnoseReview, diagnoseSpokenSource, diagnoseStudentBearing].filter(Boolean).length > 1) {
+  console.error("Choose exactly one diagnostic mode.");
+  process.exit(1);
+}
 if (!process.argv.includes("--run") || (process.env.VERCEL_ENV !== "production" && !localProductionEnv)) {
   console.error("Run explicitly with --run inside Vercel production; not a browser acceptance test.");
   process.exit(1);
@@ -100,8 +105,28 @@ invalid[2] = { ...invalid[2], text:"Ein Gleitlager hat eine Sommerfeldzahl von 0
   {key:"C",text:"Der Schmierfilm bricht sofort zusammen.",correct:false},
   {key:"D",text:"Es liegt ausschließlich hydrostatische Schmierung vor.",correct:false}
 ], explanation:"Bei 0,9 ist die Schmierung noch ausreichend." };
-const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview || diagnoseSpokenSource,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
+const report = {model:provider.info.model, execution:localProductionEnv?"local-production-env":"vercel-production",diagnosticOnly:diagnoseReview || diagnoseSpokenSource || diagnoseStudentBearing,databaseWrites:false,browserTested:false,cases:[],reviewVerdicts};
 try {
+  if (diagnoseStudentBearing) {
+    // Exact public question composed by our browser acceptance harness, not
+    // a user's lecture/student payload. Do not fetch production DB contents.
+    const { demoLecture } = await import("@/lib/demo-data");
+    const { generateStudentExamDraft, liveQuestionSlideContext } = await import("@/server/question-generation");
+    const { STUDENT_DRAFT_GENERATION_BUDGET_MS } = await import("@/server/student-draft-limits");
+    const lecture = { ...demoLecture, title: "Synthetic bearing startup diagnosis", transcriptSegments: [] };
+    const started = Date.now();
+    const draft = await generateStudentExamDraft({
+      lecture, slide: liveQuestionSlideContext(lecture, lecture.slides[0].id), slideId: lecture.slides[0].id,
+      sourceQuestionId: "synthetic-bearing-startup",
+      studentQuestion: "Warum kann ein hydrodynamisches Gleitlager beim langsamen Anfahren noch Festkörperkontakt haben, obwohl bereits Öl vorhanden ist?",
+      transcriptContext: "", latestTranscript: "", scriptContext: "", deadlineAt: Date.now() + STUDENT_DRAFT_GENERATION_BUDGET_MS
+    }, provider);
+    if (!draft.supported || draft.variants.length !== 4) throw new Error("supported-student-fixture-rejected");
+    report.cases.push({ name: "student-bearing-startup", status: "pass", elapsedMs: Date.now() - started });
+    report.status = "diagnostic-complete-not-release-gate";
+    console.log(JSON.stringify(report, null, 2));
+    process.exit(0);
+  }
   if (!diagnoseReview) {
     // Browser regression: the slides discuss bearings, but accepted current
     // speech explains a spring. The student asks about the spoken topic. These
