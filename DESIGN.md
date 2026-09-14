@@ -6,17 +6,17 @@ product
 
 ## Visual Direction
 
-learnordie.app ist eine ruhige, technische Arbeitsbühne für Vorlesungsfolien. Wiedererkennung entsteht nicht durch Dekor, starke Farben oder zusätzliche Karten, sondern durch eine konsistente räumliche Logik: Die Folie ist der Anker, Bottom-Bar und foliennahe Werkzeuge sind Ursprünge, Fragen, Quellen, Chat, Evaluation und Analytics öffnen als fachliche Sheets aus diesen Ursprüngen.
+learnordie.app folgt der ruhigen Excalidraw-Sprache: Die Folie ist der Anker. Das Studio hat genau einen Header für Navigation, Speichern, Theme und Präsentieren; darunter eine einzige kombinierte Editierleiste. Es gibt keinen Studio-Footer. Zusätzliche Werkzeuge, Hotspots und fachliche Sheets beanspruchen nur geöffnet Platz und überdecken die Arbeitsfläche, statt weitere feste Leisten zu bilden.
 
 Die Wortmarke nutzt die Domain selbst als Hook. Offiziell ist die Lesart "Lernen im Norden"; visuell darf `nord` minimal hervortreten. Der versteckte "learn or die"-Eindruck bleibt ein Easter Egg der URL, nicht die sichtbare Tonalität der App. Das Markenzeichen ist ein ruhiger Loop mit Nordpunkt: Orientierung, Feedbackkreislauf und Lernsystem, ohne Totenkopf-, Warn- oder Survival-Ästhetik.
 
-Der visuelle Fingerabdruck ist eine präzise technische Bühnenlogik: Folienflächen tragen feine Registermarken, Arbeitsbühnen haben ein dezentes Konstruktionsraster, und aktive Ursprungslinien verbinden Bottom-Bar, Hotspots und Sheets. Diese Marker bleiben zurückhaltend und dürfen keine zusätzlichen Informationen oder Bedienelemente vortäuschen.
+Der Präsentationsmodus hat weder Header noch Footer. Die Folie füllt den Viewport; oben links liegt lediglich der kleine Teilnahmelink auf der Folie. Die Steuerung öffnet sich auf Wunsch als Overlay. Jede Präsentation beginnt mit großem QR-Code und ausgeschriebener URL. Die geschlossene Folienleiste kostet keinen Platz; auf kleinen Bildschirmen öffnet sie als Drawer und schließt nach der Auswahl wieder.
 
 ## Motion System
 
 Der verbindliche UI-Vertrag steht direkt in diesem Dokument und wird durch `npm run motion:contract` gegen die Produktoberflächen geprüft. Die wichtigsten Regeln:
 
-1. Große Wechsel nutzen Masken oder Sheet-Reveals, keine harten Mount-Sprünge.
+1. Navigation erfolgt direkt, ohne vorgeschaltete dekorative Übergangscover oder Wartezeiten.
 2. Inhalte erscheinen nach ihren Containern, Listen und Antworten gestaffelt.
 3. Folienwechsel halten die Folie stabil und bewegen nur den Inhalt kontrolliert.
 4. Drawer, Popover und Inspector-Panels nutzen gemeinsame Dauer-, Easing- und Radius-Tokens.
@@ -29,9 +29,10 @@ Der verbindliche UI-Vertrag steht direkt in diesem Dokument und wird durch `npm 
 - Keine Food-App-Optik.
 - Keine Hotspots, die dauerhaft pulsieren.
 - Playwright-Screenshots muessen zentrale Learn-, Live-, Studio- und Mobile-Zustaende belegen.
-- Die Startseite baut Card und Links gestaffelt auf.
+- Die Startseite bietet direkten Code-Einstieg; ein Vorlesungslink führt ohne Namenspflicht in die Live-Sitzung.
 - Der Frage-Drawer oeffnet nicht hart.
-- Das Referentenstudio oeffnet Tools aus der unteren Steuerung.
+- Das Referentenstudio öffnet zusätzliche Tools aus dem Header oder der kombinierten Editierleiste.
+- Live-Fragen verschwinden spätestens nach Ablauf ihrer serverseitigen Frist; eine Exit-Animation darf die Frist nicht verlängern.
 
 ## Tokens
 
@@ -54,7 +55,7 @@ Die Motion- und Radius-Tokens liegen in `src/app/globals.css` unter `--lb-*`.
 - `lb-enter-overlay`: rechte Inspector-Panels.
 - `lb-enter-panel`: Popover, kleinere Werkzeugflächen.
 - `lb-enter-row`: Antwortoptionen, Listen, Chatzeilen, Quellen, Analytics-Signale.
-- `lb-enter-control`: Bottom-Bar, Tool-Buttons, Navigation.
+- `lb-enter-control`: Tool-Buttons, Navigation und optionale Lernsteuerung; keine feste Präsentationsleiste.
 - `lb-enter-hotspot`: foliennahe Frage- und Werkzeuganker.
 
 ## Interaction Principles

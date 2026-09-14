@@ -1,0 +1,272 @@
+/* App chrome only. Native drawing UI and authored slide themes own their styles.
+   Keep this before ui-excalidraw.css and avoid universal descendant selectors. */
+@font-face {
+  font-family: "Learnordie Assistant";
+  src: url("/vendor/excalidraw/fonts/Assistant/Assistant-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Learnordie Assistant";
+  src: url("/vendor/excalidraw/fonts/Assistant/Assistant-Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Learnordie Assistant";
+  src: url("/vendor/excalidraw/fonts/Assistant/Assistant-SemiBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Learnordie Assistant";
+  src: url("/vendor/excalidraw/fonts/Assistant/Assistant-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --app-font: "Learnordie Assistant";
+  --app-background: #f8f9fa;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f1f0ff;
+  --app-surface-hover: #f1f3f5;
+  --app-text: #1b1b1f;
+  --app-text-muted: #60646c;
+  --app-border: #d8dbe0;
+  --app-input-border: #868b95;
+  --app-accent: #6965db;
+  --app-accent-ink: #4f4bb5;
+  --app-primary: #6965db;
+  --app-primary-hover: #5753c6;
+  --app-primary-text: #ffffff;
+  --app-success: #287347;
+  --app-success-soft: #e8f5ec;
+  --app-danger: #b32d3e;
+  --app-danger-soft: #fdecef;
+  --app-shadow: 0 1px 3px #1b1b1f0a, 0 6px 20px #1b1b1f08;
+  --app-shadow-panel: 0 2px 8px #1b1b1f0a, 0 12px 36px #1b1b1f12;
+
+  /* Compatibility tokens for existing application components. */
+  --slide: var(--app-background);
+  --stage: var(--app-background);
+  --panel: var(--app-surface);
+  --panel-soft: var(--app-surface-hover);
+  --ink: var(--app-text);
+  --muted: var(--app-text-muted);
+  --line: var(--app-border);
+  --accent: var(--app-accent);
+  --accent-soft: var(--app-surface-muted);
+  --excalidraw: var(--app-accent);
+  --island: var(--app-surface);
+  --island-ink: var(--app-text);
+  --brand-night: var(--app-text);
+  --brand-north: var(--app-text);
+  --brand-ember: var(--app-accent-ink);
+  --green: var(--app-success);
+  --green-soft: var(--app-success-soft);
+  --red: var(--app-danger);
+  --red-soft: var(--app-danger-soft);
+  --shadow: var(--app-shadow-panel);
+  --shadow-island: var(--app-shadow);
+  --lb-kinematic: var(--app-accent);
+  --lb-kinematic-soft: var(--app-surface-muted);
+  --lb-origin-amber: var(--app-accent);
+  --lb-origin-blue: var(--app-accent);
+  --lb-origin-green: var(--app-success);
+  --lb-stage-grid: transparent;
+  --lb-stage-grid-strong: transparent;
+  --lb-blueprint-line: transparent;
+  --lb-blueprint-line-soft: transparent;
+}
+
+/* The no-JS/first-paint OS default and explicit choice use identical tokens. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --app-background: #18191c;
+    --app-surface: #232329;
+    --app-surface-muted: #353253;
+    --app-surface-hover: #2e3036;
+    --app-text: #f1f0f5;
+    --app-text-muted: #b1b0bb;
+    --app-border: #46464f;
+    --app-input-border: #797984;
+    --app-accent: #a8a5ff;
+    --app-accent-ink: #c5c2ff;
+    --app-success: #83d7a1;
+    --app-success-soft: #213c2b;
+    --app-danger: #ffa0ac;
+    --app-danger-soft: #472930;
+    --app-shadow: 0 1px 4px #0003;
+    --app-shadow-panel: 0 4px 12px #0003, 0 16px 40px #0004;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --app-background: #18191c;
+  --app-surface: #232329;
+  --app-surface-muted: #353253;
+  --app-surface-hover: #2e3036;
+  --app-text: #f1f0f5;
+  --app-text-muted: #b1b0bb;
+  --app-border: #46464f;
+  --app-input-border: #797984;
+  --app-accent: #a8a5ff;
+  --app-accent-ink: #c5c2ff;
+  --app-success: #83d7a1;
+  --app-success-soft: #213c2b;
+  --app-danger: #ffa0ac;
+  --app-danger-soft: #472930;
+  --app-shadow: 0 1px 4px #0003;
+  --app-shadow-panel: 0 4px 12px #0003, 0 16px 40px #0004;
+}
+
+.app-theme-control {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 8;
+}
+/* A shell can place ThemeToggle in its menu/toolbar without a duplicate dock. */
+body:has(main .app-theme-toggle) > .app-theme-control,
+body:has(.lecturer-studio .app-theme-toggle) > .app-theme-control,
+/* Panels may live inside a lower stacking context than this body-level dock. */
+body:has(:is(.overlay-panel, .chat-question-panel, .transcript-panel, .question-drawer, [role="dialog"], [aria-modal="true"])) > .app-theme-control {
+  display: none;
+}
+.app-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: 600 14px/1.2 var(--app-font), system-ui, sans-serif;
+  box-shadow: var(--shadow-island);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.app-theme-toggle:hover { background: var(--panel-soft); }
+.app-theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.app-theme-moon { display: none; }
+:root[data-theme="dark"] .app-theme-sun { display: none; }
+:root[data-theme="dark"] .app-theme-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .app-theme-sun { display: none; }
+  :root:not([data-theme]) .app-theme-moon { display: block; }
+}
+
+/* Shared application controls. No element-only rule reaches drawing controls. */
+:is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .question-ai-link, .question-peek, .question-next-family):not(:where(.native-workspace *, .excalidraw *)) {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+:is(.home-app, .join-screen, .student-app, .mode-card, .overlay-panel, .transcript-panel, .chat-question-panel) .primary-button:not(:where(.native-workspace *, .excalidraw *)),
+.learn-shell .question-continue:not(:where(.native-workspace *, .excalidraw *)) {
+  min-height: 44px;
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+  color: var(--app-primary-text);
+  font-weight: 600;
+}
+:is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .question-ai-link, .question-peek, .question-next-family):hover:not(:disabled):not(:where(.native-workspace *, .excalidraw *)) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--app-accent-ink);
+}
+:is(.home-app, .join-screen, .student-app, .mode-card, .overlay-panel, .transcript-panel, .chat-question-panel) .primary-button:hover:not(:disabled):not(:where(.native-workspace *, .excalidraw *)),
+.learn-shell .question-continue:hover:not(:disabled):not(:where(.native-workspace *, .excalidraw *)) {
+  border-color: var(--app-primary-hover);
+  background: var(--app-primary-hover);
+  color: var(--app-primary-text);
+}
+:is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .answer, .hotspot, .question-next-family):focus-visible:not(:where(.native-workspace *, .excalidraw *)) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+:is(.icon-action, .pseudonym-suggestion, .hotspot)[aria-pressed="true"]:not(:where(.native-workspace *, .excalidraw *)) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--app-accent-ink);
+  box-shadow: none;
+}
+:is(.home-app, .join-screen, .mode-card, .student-app, .question-drawer, .overlay-panel, .transcript-panel, .chat-question-panel, .live-controls) :is(input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea, select):not(:where(.native-workspace *, .excalidraw *)) {
+  border: 1px solid var(--app-input-border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  caret-color: var(--accent);
+  font-family: inherit;
+}
+:is(.home-app, .join-screen, .mode-card, .student-app, .question-drawer, .overlay-panel, .transcript-panel, .chat-question-panel, .live-controls) :is(input, textarea, select):focus-visible:not(:where(.native-workspace *, .excalidraw *)) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:is(.home-app, .join-screen, .mode-card, .student-app, .question-drawer, .overlay-panel, .transcript-panel, .chat-question-panel) :is(input, textarea):not(:where(.native-workspace *, .excalidraw *))::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* Finite app motion: useful panel presence, no route curtains or ornaments.
+   Scope duration changes to these surfaces rather than the studio/drawing tree. */
+:is(.home-app, .join-screen, .mode-screen, .student-app, .question-drawer, .overlay-panel, .transcript-panel, .chat-question-panel) {
+  --lb-dur-panel: 160ms;
+  --lb-dur-mask: 160ms;
+  --lb-dur-route: 160ms;
+  --lb-stagger-row: 0ms;
+  --lb-stagger-panel: 0ms;
+}
+:is(.home-app, .join-screen, .mode-screen, .student-app) :is(.lb-enter-row, .lb-enter-control, .lb-enter-panel, .lb-enter-sheet),
+:is(.overlay-panel, .transcript-panel, .chat-question-panel):is(.lb-enter-panel, .lb-enter-overlay):not([data-state="exiting"]),
+:is(.overlay-panel, .transcript-panel, .chat-question-panel) :is(.lb-enter-row, .overlay-head),
+.question-drawer.lb-enter-sheet:not([data-state="exiting"]),
+.question-drawer .question.lb-enter-row,
+.question-drawer .answers .lb-enter-row,
+.question-drawer .levels.lb-enter-control,
+.question-ai-link.lb-enter-control {
+  animation: app-panel-enter 160ms ease-out both;
+}
+.native-workspace :is(.studio-tool-popover, .studio-slide-tool-overlay, .studio-slide-source-overlay) {
+  border-radius: 12px;
+  animation: app-panel-enter 160ms ease-out both;
+}
+.native-workspace .studio-tool-choice {
+  animation: none;
+}
+@keyframes app-panel-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (max-width: 900px) {
+  body:has(.slide-screen) > .app-theme-control { top: max(66px, calc(env(safe-area-inset-top) + 54px)); }
+  body:has(.slide-screen) > .app-theme-control .app-theme-toggle { padding: 8px; }
+  body:has(.slide-screen) > .app-theme-control .app-theme-toggle span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-theme-toggle,
+  :is(.plain-button, .primary-button, .icon-action, .pseudonym-suggestion, .answer, .hotspot, .question-next-family):not(:where(.native-workspace *, .excalidraw *)) { transition: none; }
+  :is(.home-app, .join-screen, .mode-screen, .student-app) :is(.lb-enter-row, .lb-enter-control, .lb-enter-panel, .lb-enter-sheet),
+  :is(.overlay-panel, .transcript-panel, .chat-question-panel):is(.lb-enter-panel, .lb-enter-overlay),
+  :is(.overlay-panel, .transcript-panel, .chat-question-panel) :is(.lb-enter-row, .overlay-head),
+  .question-drawer.lb-enter-sheet,
+  .question-drawer .question.lb-enter-row,
+  .question-drawer .answers .lb-enter-row,
+  .question-drawer .levels.lb-enter-control,
+  .question-ai-link.lb-enter-control { animation: none; }
+}

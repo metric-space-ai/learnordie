@@ -38,8 +38,7 @@ export default async function StudentEventPage({ params }: { params: Promise<{ l
       <article className="student-series lb-enter-panel">
         <header className="student-series-head">
           <div>
-            <p className="eyebrow">{lecture.seriesTitle}</p>
-            <h2>{lecture.title}</h2>
+            <h1>{lecture.title}</h1>
             <p className="student-series-meta">
               <span>Termin {formatDateTime(lecture.liveAt)}</span>
             </p>
@@ -48,27 +47,13 @@ export default async function StudentEventPage({ params }: { params: Promise<{ l
 
         {view.bucket === "live" && (
           <section className="student-block live">
-            <p className="student-block-label">● Live jetzt</p>
             <a className="primary-button" href={`/l/${lecture.publicToken}`}>Live teilnehmen</a>
           </section>
         )}
 
         {view.bucket === "learn" && (
           <section className="student-block">
-            <p className="student-block-label">Lernen</p>
-            <p className="student-empty-note">
-              {view.aiAccessActive
-                ? "Diese Veranstaltung ist im Lernmodus verfügbar — inklusive KI-Übung bis zum Prüfungstag."
-                : "Diese Veranstaltung ist im Lernmodus verfügbar. Die KI-Übung ist abgelaufen, der statische Lernmodus bleibt nutzbar."}
-            </p>
             <a className="primary-button" href={`/learn/${lecture.publicToken}`}>Lernmodus öffnen</a>
-          </section>
-        )}
-
-        {view.bucket === "upcoming" && (
-          <section className="student-block">
-            <p className="student-block-label">Geplant</p>
-            <p className="student-empty-note">Diese Veranstaltung hat noch nicht begonnen. Sie erscheint live, sobald dein:e Dozent:in startet.</p>
           </section>
         )}
       </article>

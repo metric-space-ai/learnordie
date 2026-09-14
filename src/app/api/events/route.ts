@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { seriesIdForLecture } from "@/lib/series";
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { getAnalyticsRepository } from "@/server/analytics-repository";
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
+import { getStudentRepository } from "@/server/student-repository";
 
 const MAX_PUBLIC_EVENT_BYTES = 16_384;
 const questionLevels: QuestionLevel[] = ["4.0", "3.0", "2.0", "1.0"];
@@ -15,7 +17,7 @@ const schema = z.object({
   eventType: z.enum(publicEventTypes),
   payload: z.record(z.string(), z.unknown()).default({}),
   anonymousKey: z.string().min(8).max(160),
-  pseudonym: z.string().min(1).max(80).optional()
+  pseudonym: z.string().min(1).max(40).optional()
 });
 
 function text(value: unknown, max = 160) {
@@ -59,7 +61,15 @@ function sanitizeAnswerSelectedPayload(lecture: Lecture, payload: Record<string,
   const selectedLevel = level(payload.level);
   if (!selectedLevel) return { error: "Ungültiges Frageniveau." };
 
-  const question = lecture.questions.find((candidate) => candidate.level === selectedLevel);
+  // Mehrere Fragen je Folie: zuerst ueber Familie, dann ueber den Fragetext, zuletzt
+  // (alte Vorlesungen mit einer Familie) nur ueber das Niveau zuordnen.
+  const familyId = text(payload.familyId, 120);
+  const questionText = text(payload.questionText, 400);
+  const sameLevel = lecture.questions.filter((candidate) => candidate.level === selectedLevel);
+  const question =
+    (familyId ? sameLevel.find((candidate) => candidate.familyId === familyId) : undefined) ??
+    (questionText ? sameLevel.find((candidate) => candidate.text === questionText) : undefined) ??
+    (sameLevel.length === 1 ? sameLevel[0] : undefined);
   if (!question) return { error: "Frage nicht gefunden." };
 
   const selectedKey = answerKey(payload.selectedAnswerKey) || answerKey(payload.selected);
@@ -74,6 +84,8 @@ function sanitizeAnswerSelectedPayload(lecture: Lecture, payload: Record<string,
     payload: {
       mode: mode(payload.mode),
       level: question.level,
+      ...(question.slideId ? { slideId: question.slideId } : {}),
+      ...(question.familyId ? { familyId: question.familyId } : {}),
       points: question.points,
       earnedPoints: correct ? question.points : 0,
       questionText: question.text,
@@ -153,6 +165,29 @@ export async function POST(request: Request) {
   const lecture = await getLectureRepository().getLectureByToken(parsed.data.lectureToken);
   if (!lecture) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
 
+  if (parsed.data.eventType === "answer_selected" && mode(parsed.data.payload.mode) === "live") {
+    return NextResponse.json({ error: "Live-Antworten müssen zur aktuellen Fragerunde gehören." }, { status: 409 });
+  }
+
+  const claimNeeded = parsed.data.eventType === "answer_selected" || parsed.data.eventType === "student_joined";
+  let claimName = parsed.data.pseudonym;
+  if (claimNeeded) {
+    const claim = await getStudentRepository().getClaimByAnonymousKey(
+      parsed.data.anonymousKey,
+      seriesIdForLecture(lecture)
+    );
+    if (!claim?.displayName || claim.status !== "active") {
+      return NextResponse.json(
+        {
+          error: "Bitte zuerst ein Pseudonym für diese Vorlesung wählen.",
+          code: "claim_required"
+        },
+        { status: 409 }
+      );
+    }
+    claimName = claim.displayName;
+  }
+
   const sanitized = sanitizePublicPayload(lecture, parsed.data.eventType, parsed.data.payload);
   if ("error" in sanitized) {
     return NextResponse.json({ error: sanitized.error }, { status: 400 });
@@ -160,6 +195,7 @@ export async function POST(request: Request) {
 
   const result = await getAnalyticsRepository().recordEvent({
     ...parsed.data,
+    pseudonym: claimName,
     payload: sanitized.payload
   });
   if (!result) return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });

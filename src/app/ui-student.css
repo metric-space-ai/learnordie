@@ -1,0 +1,122 @@
+/* UI overhaul: ui-student */
+
+/* Live join card: title, pseudonym fields, then a full-width "Teilnehmen" below them. */
+.student-gate-card h1 {
+  margin-bottom: 24px;
+}
+
+.student-gate-card .pseudonym-form {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.student-gate-card .pseudonym-form > .primary-button {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+/* Bottom-right action stack: short text buttons next to the "?" icon button. */
+.action-stack .icon-action.action-text {
+  width: auto;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .action-stack .icon-action.action-text {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+}
+
+/* "Pseudonym sichern?" nudge: one line of text plus its button. */
+.identity-save-nudge {
+  align-items: center;
+}
+
+.identity-save-nudge .plain-button {
+  white-space: nowrap;
+}
+
+/* AI chat: "Quellen" reads as the list's heading, not as an uppercase overline. */
+.chat-body .source-message > strong {
+  color: var(--ink);
+  font-size: 13px;
+  text-transform: none;
+}
+
+.student-app { padding-top: max(76px, calc(env(safe-area-inset-top) + 64px)); }
+.student-brand { font-weight: 700; }
+.student-id { border-radius: 8px; font-weight: 600; }
+.student-id-label,
+.student-block-label,
+.student-series-meta,
+.readiness-heading { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.student-addcode,
+.student-series,
+.student-emptystate,
+.readiness-panel { border-color: var(--line); border-radius: 12px; background: var(--panel); box-shadow: none; }
+.student-series-head h2,
+.student-emptystate h1 { font-weight: 700; }
+.student-emptystate p,
+.readiness-note,
+.readiness-action-detail { font-weight: 500; }
+.student-block { border-color: var(--line); border-radius: 8px; }
+.student-block.live { border-color: var(--accent); background: var(--accent-soft); }
+.student-event,
+.student-addcode-form input,
+.student-onboard-form input { color: var(--ink); font-weight: 500; }
+.student-event { border-color: var(--line); border-radius: 8px; }
+.readiness-action a:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.question-drawer,
+.question-drawer[data-level] {
+  --question-accent: var(--accent);
+  border-color: var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.question-drawer::before,
+.question-drawer::after,
+.drawer-main::before,
+.question-origin-trace { display: none; }
+.question { font-weight: 600; line-height: 1.35; }
+.question-feedback,
+.question-family-stepper { border-color: var(--line); border-radius: 8px; background: var(--panel-soft); }
+.levels { background: var(--panel-soft); }
+.levels button { min-width: 44px; min-height: 36px; color: var(--muted); font-weight: 600; }
+.levels button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--app-accent-ink); }
+.levels button:focus-visible,
+.question-family-stepper button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.question-family-stepper button:hover { background: var(--accent-soft); color: var(--app-accent-ink); }
+.answer { border-color: var(--app-input-border); border-radius: 8px; background: var(--panel); }
+.answer span:last-child { font-size: 14px; font-weight: 500; line-height: 1.45; }
+.answer:not(:disabled):hover { border-color: var(--accent); background: var(--accent-soft); }
+.answer .letter { border-radius: 6px; background: var(--panel-soft); color: var(--muted); font-weight: 600; }
+.answer.correct { border-color: var(--green); background: var(--green-soft); }
+.answer.wrong { border-color: var(--red); background: var(--red-soft); }
+.answer.correct .letter { background: var(--green); color: var(--panel); }
+.answer.wrong .letter { background: var(--red); color: var(--panel); }
+.leader-row { border-radius: 8px; background: var(--panel-soft); font-weight: 600; }
+.leader-row.self,
+.self,
+.toast-inline { background: var(--accent-soft); color: var(--app-accent-ink); }
+.identity-save-nudge { background: var(--panel); color: var(--ink); box-shadow: var(--shadow-island); backdrop-filter: none; }
+.identity-save-nudge strong { font-weight: 600; }
+.identity-save-nudge p { font-weight: 500; }
+.chat-message { background: var(--panel-soft); color: var(--ink); line-height: 1.5; }
+.chat-message strong { text-transform: none; font-weight: 600; }
+.chat-question-row { border-color: var(--line); background: var(--panel-soft); }
+.chat-question-row.accepted { border-color: var(--green); background: var(--green-soft); }
+.transcript-draft { background: var(--panel-soft); }
+.transcript-mini-list span { color: var(--green); }
+.transcript-mini-list span.ignored { color: var(--muted); }
+
+@media (pointer: coarse) {
+  .levels button { min-height: 44px; }
+}

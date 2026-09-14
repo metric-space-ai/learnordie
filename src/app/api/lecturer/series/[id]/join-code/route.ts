@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { seriesIdFromTitle } from "@/lib/series";
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
 import { readJsonBody } from "@/server/request-json";
-import { getLectureRepository } from "@/server/repository";
 import { isValidSeriesId } from "@/server/route-params";
 import { getStudentRepository } from "@/server/student-repository";
 
@@ -14,10 +12,9 @@ const schema = z.object({
   code: z.string().trim().min(1).max(120)
 });
 
-/** Ensure the signed-in lecturer actually owns this series. */
+/** Resolve canonical ID (or unambiguous legacy slug) AND verify its DB owner. */
 async function lecturerOwnsSeries(email: string, seriesId: string): Promise<boolean> {
-  const lectures = await getLectureRepository().listLectures(email);
-  return lectures.some((lecture) => seriesIdFromTitle(lecture.seriesTitle) === seriesId);
+  return Boolean(await getStudentRepository().getShareInfoForSeries(email, seriesId));
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {

@@ -20,7 +20,7 @@ export function clone<T>(value: T): T {
 export { seriesIdFromTitle as slugify } from "@/lib/series";
 
 export function normalizeExamDate(value: string | Date | null | undefined) {
-  if (!value) return "2026-07-24";
+  if (!value) return "2027-07-23";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return value.slice(0, 10);
 }
@@ -41,8 +41,8 @@ export type QuestionGenerationMetadata = {
 function learningObjectiveForLevel(level: QuestionVariant["level"]) {
   return ({
     "4.0": "Begriff und Zuordnung sicher erkennen.",
-    "3.0": "Bekannte Anwendungssituation einordnen.",
-    "2.0": "Ursache, Wirkung und Auslegungsentscheidung erklären.",
+    "3.0": "Ursache, Wirkung und fachliche Zusammenhänge verstehen.",
+    "2.0": "Eine Aussage oder Beziehung auf einen konkreten Fall anwenden.",
     "1.0": "Konzept auf einen neuen technischen Fall übertragen."
   } as const)[level];
 }
@@ -215,6 +215,7 @@ export function createReviewItemFromChatQuestion(lecture: Lecture, chatQuestion:
   return {
     id: `review_${crypto.randomUUID()}`,
     lectureId: lecture.id,
+    sourceStudentQuestionId: chatQuestion.id,
     sourceTitle,
     status: "draft",
     variants: generateReviewVariants(lecture, virtualMaterial),

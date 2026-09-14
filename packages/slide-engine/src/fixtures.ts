@@ -195,6 +195,29 @@ export const allBlockTypesSlideDocument: SlideDocument = parseSlideDocument({
           attribution: "learnordie Slide Engine Plan"
         }
       ]
+    },
+    {
+      id: "blocks-interactive",
+      title: "Nicht das Ding. Die Beziehung.",
+      layout: "technical_figure_right",
+      intent: "explanation",
+      sourceRefs: [
+        { id: "source-interactive", sourceType: "manual", label: "QA-Fixture interaktive Szene" }
+      ],
+      blocks: [
+        {
+          id: "interactive-paragraph",
+          type: "paragraph",
+          text: "Eine mathematische Beschreibung verknüpft Größen. Der Regler verändert die Steifigkeit k des idealisierten Oszillators."
+        },
+        {
+          id: "interactive-scene",
+          type: "scene3d",
+          sceneId: "modell.law",
+          altText: "Feder-Masse-Oszillator mit Zeitverlauf der Auslenkung x(t) bei einstellbarer Steifigkeit k.",
+          caption: "Idealisierter linearer Oszillator · m · ẍ + k · x = 0"
+        }
+      ]
     }
   ],
   createdBy: {

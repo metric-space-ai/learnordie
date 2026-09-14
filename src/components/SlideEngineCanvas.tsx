@@ -1,31 +1,62 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Slide } from "@/lib/types";
+import { participationUrl } from "@/lib/participation-url";
 import {
-  DeckRenderer,
-  legacyDiagramAssetId,
   legacySlidesToSlideDocument,
   type SlideDocument
 } from "@learnordie/slide-engine";
-import type { SlideAsset } from "@learnordie/slide-engine/components";
-import { Diagram } from "./Diagram";
+import { canvasSceneForSlide } from "@learnordie/slide-engine/excalidraw/scene";
+import { SlideReaderCanvas } from "./excalidraw/SlideReaderCanvas";
+import { LectureJoinSlide } from "./LectureJoinSlide";
 
 export function SlideEngineCanvas({
   slides,
   slideDocument: storedSlideDocument,
   current,
+  lectureToken,
+  participationPath,
+  lectureTitle,
+  showJoinIntro = false,
+  joinAction,
+  navigationDisabled = false,
+  showNavigation = true,
+  mobileReading = false,
+  overlay,
   onPrevious,
   onNext
 }: {
   slides: Slide[];
   slideDocument?: SlideDocument;
   current: number;
+  lectureToken?: string;
+  participationPath?: string;
+  lectureTitle?: string;
+  showJoinIntro?: boolean;
+  joinAction?: ReactNode;
+  navigationDisabled?: boolean;
+  showNavigation?: boolean;
+  mobileReading?: boolean;
+  overlay?: ReactNode;
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const [origin, setOrigin] = useState("");
+  const [qrOpen, setQrOpen] = useState(false);
+  const qrDialog = useRef<HTMLDialogElement>(null);
+  const participationButton = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  const lectureUrl = lectureToken ? participationUrl(participationPath ?? `/l/${encodeURIComponent(lectureToken)}`, process.env.NEXT_PUBLIC_APP_URL, origin) : "";
+  useEffect(() => {
+    const dialog = qrDialog.current;
+    if (qrOpen && dialog && !dialog.open) dialog.showModal();
+    if (!qrOpen && dialog?.open) dialog.close();
+  }, [qrOpen]);
+  const closeQr = () => { setQrOpen(false); participationButton.current?.focus(); };
   const currentSlide = slides[current];
   const previousCurrent = useRef(current);
   const [direction, setDirection] = useState<"initial" | "next" | "previous">("initial");
@@ -38,6 +69,9 @@ export function SlideEngineCanvas({
     }),
     [storedSlideDocument, slides]
   );
+  const canvasScene = useMemo(() => canvasSceneForSlide(
+    activeSlideDocument.slides[current] ?? activeSlideDocument.slides[0], activeSlideDocument.assets
+  ), [activeSlideDocument, current]);
 
   useEffect(() => {
     const previous = previousCurrent.current;
@@ -50,13 +84,16 @@ export function SlideEngineCanvas({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (navigationDisabled || qrOpen) return;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
       if (event.key === "ArrowLeft") onPrevious();
       if (event.key === "ArrowRight") onNext();
     };
 
     window.document.addEventListener("keydown", onKey);
     return () => window.document.removeEventListener("keydown", onKey);
-  }, [onNext, onPrevious]);
+  }, [onNext, onPrevious, navigationDisabled, qrOpen]);
 
   return (
     <>
@@ -64,28 +101,25 @@ export function SlideEngineCanvas({
         className="slide-engine-stage lb-enter-stage"
         data-direction={direction}
         data-slide-engine="v1"
-        data-slide-id={currentSlide.id}
+        data-slide-id={showJoinIntro ? "lecture-join" : currentSlide.id}
       >
-        <DeckRenderer
-          className="slide-engine-deck"
-          currentSlideId={currentSlide.id}
-          document={activeSlideDocument}
-          renderAsset={renderLegacyDiagramAsset}
-          renderMode="current"
-        />
+        {lectureUrl && <a ref={participationButton} className="slide-lecture-link" href={lectureUrl} aria-label={`Link zur Vorlesung: ${lectureUrl}`} title="Teilnahme-Link und QR-Code anzeigen" aria-haspopup="dialog" aria-expanded={qrOpen} onClick={(event) => { event.preventDefault(); setQrOpen(true); }}>{lectureUrl}</a>}
+        {showJoinIntro && lectureUrl ? (
+          <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Zur Vorlesung"} onStart={navigationDisabled ? undefined : onNext} action={joinAction} />
+        ) : <SlideReaderCanvas key={currentSlide.id} slideId={currentSlide.id} scene={canvasScene} assets={activeSlideDocument.assets} title={currentSlide.title} mobileReading={mobileReading} />}
+        {!showJoinIntro && overlay}
       </article>
-      <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
-        <button type="button" onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
-        <span className="slide-count">{current + 1} / {slides.length}</span>
-        <button type="button" onClick={onNext} aria-label="Nächste Folie">›</button>
-      </nav>
+      {lectureUrl && <dialog ref={qrDialog} className="lecture-qr-overlay" aria-label="Teilnahme-Link und QR-Code"
+        onCancel={(event) => { event.preventDefault(); closeQr(); }}
+        onClose={() => setQrOpen(false)} onKeyDown={(event) => event.stopPropagation()}>
+        <button className="qr-url-toggle" type="button" onClick={closeQr} aria-label="QR-Code schließen">{lectureUrl} · ×</button>
+        {qrOpen && <LectureJoinSlide url={lectureUrl} title={lectureTitle ?? "Vorlesung"} action={<button type="button" className="lecture-qr-close" onClick={closeQr}>Zurück zur Folie</button>} />}
+      </dialog>}
+      {showNavigation && <nav className="slide-nav slide-engine-nav lb-enter-control" aria-label="Foliennavigation">
+        <button type="button" disabled={navigationDisabled} onClick={onPrevious} aria-label="Vorherige Folie">‹</button>
+        <span className="slide-count">{showJoinIntro ? "Start" : `${current + 1} / ${slides.length}`}</span>
+        <button type="button" disabled={navigationDisabled} onClick={onNext} aria-label="Nächste Folie">›</button>
+      </nav>}
     </>
   );
-}
-
-function renderLegacyDiagramAsset(asset: SlideAsset): ReactNode {
-  if (asset.id === legacyDiagramAssetId("bearing")) return <Diagram type="bearing" />;
-  if (asset.id === legacyDiagramAssetId("formula")) return <Diagram type="formula" />;
-  if (asset.id === legacyDiagramAssetId("ramp")) return <Diagram type="ramp" />;
-  return null;
 }

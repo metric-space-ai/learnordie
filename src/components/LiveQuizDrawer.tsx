@@ -1,0 +1,75 @@
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { LiveAnswerReceipt, LiveSessionView } from "@/lib/live-session";
+import type { QuestionLevel } from "@/lib/types";
+import type { PresenceState } from "./Presence";
+
+const difficulty: Record<QuestionLevel, string> = { "4.0": "Wiedergeben", "3.0": "Verstehen", "2.0": "Anwenden", "1.0": "Übertragen" };
+
+/** A shared deadline and server receipt replace the local practice timer/scoring. */
+export function LiveQuizDrawer({ round, serverOffset, receipt, onAnswer, onClose, motionState = "open" }: {
+  round: NonNullable<LiveSessionView["round"]>; serverOffset: number; receipt: LiveAnswerReceipt | null;
+  onAnswer?: (level: QuestionLevel, selected: string) => Promise<LiveAnswerReceipt>;
+  onClose?: () => void; motionState?: PresenceState;
+}) {
+  const [level, setLevel] = useState<QuestionLevel>(receipt?.level ?? "2.0");
+  const [saved, setSaved] = useState(receipt);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [seconds, setSeconds] = useState(() => Math.max(0, Math.ceil((round.expiresAt - Date.now() - serverOffset) / 1000)));
+  const pendingRef = useRef(false);
+  const rootRef = useRef<HTMLElement>(null);
+  const titleId = `live-question-${round.id}`;
+  // Once displayed, a round's local deadline cannot move backwards even if a
+  // later network sample is faster or the device's wall clock changes.
+  const deadlineRef = useRef<number | null>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    root.focus();
+    return () => { if (root.contains(document.activeElement)) previous?.focus(); };
+  }, []);
+  useEffect(() => {
+    const sampledDeadline = performance.now() + round.expiresAt - Date.now() - serverOffset;
+    deadlineRef.current = Math.min(deadlineRef.current ?? sampledDeadline, sampledDeadline);
+    const tick = () => setSeconds(Math.max(0, Math.ceil(((deadlineRef.current ?? sampledDeadline) - performance.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 200);
+    return () => clearInterval(timer);
+  }, [round.expiresAt, serverOffset]);
+  const effectiveReceipt = saved ?? receipt;
+  const question = round.questions.find((item) => item.level === (effectiveReceipt?.level ?? level)) ?? round.questions[0];
+  const answer = useCallback(async (selected: string) => {
+    if (!onAnswer || pendingRef.current || effectiveReceipt || deadlineRef.current === null || performance.now() >= deadlineRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
+    setError("");
+    try { setSaved(await onAnswer(question.level, selected)); }
+    catch (error) { setError(error instanceof Error ? error.message : "Antwort nicht gespeichert. Erneut versuchen."); }
+    finally { pendingRef.current = false; setPending(false); }
+  }, [onAnswer, effectiveReceipt, question]);
+  // No exit-animation grace period in which an expired question remains answerable.
+  if (seconds === 0 || !question) return null;
+  return <section ref={rootRef} tabIndex={-1} role="region" className="question-drawer live-question-drawer lb-enter-sheet" aria-label="Quizfrage" aria-describedby={titleId} data-state={motionState} data-origin="control" data-level={question.level} data-round-id={round.id} data-answer-state={effectiveReceipt ? "answered" : "open"}>
+    <div className="drawer-main">
+      <div className="question-head">
+        <div className="levels" role="group" aria-label="Niveau">
+          {round.questions.map((item) => <button type="button" key={item.level} aria-label={item.level} title={`${difficulty[item.level]} · ${item.points} Punkte`} aria-pressed={question.level === item.level} disabled={pending || Boolean(effectiveReceipt)} onClick={() => setLevel(item.level)}>{item.level}<small>{difficulty[item.level]}</small></button>)}
+        </div>
+        {onClose && <button type="button" className="plain-button" onClick={onClose}>Frage schließen</button>}
+      </div>
+      <p className="live-difficulty-hint">{difficulty[question.level]} · {question.points} Punkte · eine Antwort pro Runde</p>
+      <p className="question" id={titleId}>{question.text}</p>
+      <div className="answers">
+        {question.answers.map((option) => <button className={`answer ${effectiveReceipt?.selected === option.key ? (effectiveReceipt.correct ? "correct" : "wrong") : ""}`} key={option.key} type="button" disabled={!onAnswer || pending || Boolean(effectiveReceipt)} onClick={() => void answer(option.key)}>
+          <span className="letter">{option.key}</span><span>{option.text}</span>
+        </button>)}
+      </div>
+      {effectiveReceipt && <div className="question-feedback" role="status"><p>{effectiveReceipt.correct ? "Richtig" : "Noch nicht richtig"} · {effectiveReceipt.points} Punkte</p><p className="question-explanation">{effectiveReceipt.explanation}</p></div>}
+      {pending && <p role="status">Antwort wird gespeichert …</p>}
+      {error && <p role="alert">{error}</p>}
+    </div>
+    <aside className="timer" aria-label="Timer"><strong>{String(seconds).padStart(2, "0")}</strong><span>schließt nach Ablauf</span></aside>
+  </section>;
+}

@@ -33,7 +33,6 @@ services:
       LEARNBUDDY_JOB_PROVIDER: database
       LEARNBUDDY_WORKER_SECRET: learnbuddy-self-host-worker-secret-change-before-use
       CRON_SECRET: learnbuddy-self-host-cron-secret-change-before-use
-      LEARNBUDDY_CHAT_MODERATION_PROVIDER: local
       LEARNBUDDY_STT_PROVIDER: local
     healthcheck:
       test:

@@ -29,7 +29,8 @@ export const SUPPORTED_SLIDE_BLOCK_TYPES = [
   "code",
   "quote",
   "quizAnchor",
-  "spacer"
+  "spacer",
+  "scene3d"
 ] as const;
 
 export type SupportedSlideBlockType = (typeof SUPPORTED_SLIDE_BLOCK_TYPES)[number];
@@ -52,6 +53,7 @@ export type CodeBlock = Extract<SchemaSlideBlock, { type: "code" }>;
 export type QuoteBlock = Extract<SchemaSlideBlock, { type: "quote" }>;
 export type QuizAnchorBlock = Extract<SchemaSlideBlock, { type: "quizAnchor" }>;
 export type SpacerBlock = Extract<SchemaSlideBlock, { type: "spacer" }>;
+export type Scene3DBlock = Extract<SchemaSlideBlock, { type: "scene3d" }>;
 
 export type SlideBlock = SchemaSlideBlock;
 export type SlideAsset = SlideAssetRef;

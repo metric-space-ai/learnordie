@@ -7,11 +7,15 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   production-smoke:
     name: Production smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -31,6 +35,9 @@ jobs:
     env:
       CI: "true"
       E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/learnordie_e2e_smoke
+      # Public client configuration is frozen at build time. Match the E2E
+      # server origin from the first build, not only when starting Next.js.
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3070"
 
     steps:
       - name: Checkout
@@ -54,8 +61,22 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Identity and test-account unit contracts
+        run: node scripts/run-unit-identity.mjs
+
+      - name: Continuous audio capture contracts
+        run: node --experimental-strip-types --import ./scripts/alias-register.mjs --test --test-concurrency=2 src/lib/audio-capture.test.ts src/lib/live-operation-scope.test.ts src/server/lecture-script-context.test.ts src/lib/learning-score.test.ts
+
+      - name: Synthetic provider transport contracts
+        run: node --test --test-concurrency=2 scripts/lib/e2e-provider-fixture.test.mjs
+
       - name: Lint
         run: npm run lint
+
+      - name: Atomic question wording migration contracts
+        run: node --test --test-concurrency=1 tests/integration/question-wording-postgres.test.mjs tests/integration/private-wording-backup.test.mjs
+        env:
+          QUESTION_REVIEW_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
 
       - name: Audit
         run: npm audit --audit-level=moderate
@@ -80,8 +101,46 @@ jobs:
         env:
           LEARNBUDDY_AI_PROVIDER: learnordie-responses
 
+      - name: Build E2E app
+        timeout-minutes: 8
+        run: npm run build
+
+      - name: Student draft race acceptance
+        timeout-minutes: 8
+        run: npx playwright test --config=playwright.config.ts --workers=1 tests/e2e/student-draft-postgres-races.spec.ts tests/e2e/student-question-ticker.spec.ts
+        env:
+          E2E_AI_PROVIDER: learnordie-responses
+          E2E_EVIDENCE_SCOPE: student-draft-races
+          E2E_STUDENT_DRAFT_DELAY_MS: "18000"
+          E2E_STUDENT_DRAFT_DELAY_MARKER: E2E_SLOW_STUDENT_DRAFT
+          LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW: "3"
+
+      - name: Retain student draft race evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-draft-race-evidence
+          path: |
+            playwright-report/student-draft-races/
+            test-results/student-draft-races/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Production smoke
-        run: npm run test:e2e
+        # Leave time for failure evidence to upload before the job deadline.
+        timeout-minutes: 16
+        run: npx playwright test --config=playwright.config.ts
+
+      - name: Retain browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Production preflight
         run: npm run admin -- preflight --profile production
@@ -105,14 +164,11 @@ jobs:
           LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: ai
           LEARNBUDDY_CHAT_MODERATION_PROVIDER: ai
           LEARNBUDDY_QUESTION_GENERATOR: ai
-          LEARNBUDDY_EMBEDDING_PROVIDER: openai-compatible
-          LEARNBUDDY_EMBEDDING_BASE_URL: "https://embedding.learnordie.app"
-          LEARNBUDDY_EMBEDDING_API_KEY: "emb_live_like_abcdefghijklmnopqrstuvwxyz123456"
+          LEARNBUDDY_EMBEDDING_PROVIDER: disabled
           LEARNBUDDY_OCR_PROVIDER: http
           LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnordie.app"
           LEARNBUDDY_OCR_API_KEY: "ocr_live_like_abcdefghijklmnopqrstuvwxyz123456"
           LEARNBUDDY_OCR_MODEL: "learnbuddy-ocr"
-          LEARNBUDDY_STT_PROVIDER: mistral-voxtral
-          LEARNBUDDY_STT_MODEL: voxtral-mini-latest
+          LEARNBUDDY_STT_PROVIDER: minimax
+          LEARNBUDDY_STT_MODEL: asr-1.0
           LEARNBUDDY_STT_LANGUAGE: de
-          MISTRAL_API_KEY: "mistral_live_like_abcdefghijklmnopqrstuvwxyz123456"

@@ -19,7 +19,6 @@ const REQUIRED_ENV = [
   "CRON_SECRET",
   "LEARNBUDDY_AI_PROVIDER",
   "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-  "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
   "LEARNBUDDY_QUESTION_GENERATOR",
   "LEARNBUDDY_EMBEDDING_PROVIDER",
   "LEARNBUDDY_EMBEDDING_BASE_URL",
@@ -46,7 +45,7 @@ const ALTERNATIVE_ENV_GROUPS = [
   },
   {
     id: "stt_provider_key",
-    description: "Mistral or self-hosted STT provider key",
+    description: "Selected speech-to-text provider key",
     anyOf: ["MISTRAL_API_KEY", "LEARNBUDDY_STT_API_KEY"]
   },
   {
@@ -129,17 +128,13 @@ const REQUIRED_ENV_GUIDANCE = {
     provider: "ai",
     purpose: "Set to ai for provider-backed lecturer assistant."
   },
-  LEARNBUDDY_CHAT_MODERATION_PROVIDER: {
-    provider: "ai",
-    purpose: "Set to ai for provider-backed student-question moderation."
-  },
   LEARNBUDDY_QUESTION_GENERATOR: {
     provider: "ai",
     purpose: "Set to ai so material-review questions are synthesized through the server-side AI provider."
   },
   LEARNBUDDY_EMBEDDING_PROVIDER: {
     provider: "embeddings",
-    purpose: "Set to openai-compatible for external embedding retrieval."
+    purpose: "Use disabled for PostgreSQL text retrieval without embedding APIs; external vectors are optional."
   },
   LEARNBUDDY_EMBEDDING_BASE_URL: {
     provider: "embeddings",
@@ -151,7 +146,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNBUDDY_OCR_PROVIDER: {
     provider: "ocr",
-    purpose: "Set to http for provider-backed OCR/vision extraction of scanned materials."
+    purpose: "Set to minimax for MiniMax-M3 vision OCR, or http for a dedicated OCR service."
   },
   LEARNBUDDY_OCR_BASE_URL: {
     provider: "ocr",
@@ -163,7 +158,7 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNBUDDY_STT_PROVIDER: {
     provider: "stt",
-    purpose: "Set to mistral-voxtral, openai-compatible, self-hosted-vllm or self-hosted-vllm-realtime for external STT."
+    purpose: "Set to minimax for MiniMax asr-1.0, or explicitly select another supported STT adapter."
   },
   MISTRAL_API_KEY: {
     provider: "stt",
@@ -171,11 +166,11 @@ const REQUIRED_ENV_GUIDANCE = {
   },
   LEARNORDIE_MINIMAX_API_KEY: {
     provider: "ai",
-    purpose: "Server-side MiniMax M3 upstream key for the llm.learnordie.app Responses proxy."
+    purpose: "Server-side MiniMax key for the M3 Responses proxy, M3 vision OCR and asr-1.0 transcription."
   },
   MINIMAX_API_KEY: {
     provider: "ai",
-    purpose: "Server-side MiniMax M3 upstream key for the llm.learnordie.app Responses proxy."
+    purpose: "Server-side MiniMax key for the M3 Responses proxy, M3 vision OCR and asr-1.0 transcription."
   },
   LEARNBUDDY_STT_API_KEY: {
     provider: "stt",
@@ -231,7 +226,6 @@ const DEPLOYMENT_PROVIDER_MODE_ENV = [
   "LEARNBUDDY_JOB_PROVIDER",
   "LEARNBUDDY_AI_PROVIDER",
   "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-  "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
   "LEARNBUDDY_QUESTION_GENERATOR",
   "LEARNBUDDY_EMBEDDING_PROVIDER",
   "LEARNBUDDY_OCR_PROVIDER",
@@ -658,16 +652,33 @@ async function pullVercelEnv(environment) {
 }
 
 function requiredEnvFor(environment) {
-  if (environment === "preview") {
-    return REQUIRED_ENV.filter((name) => !PREVIEW_RUNTIME_ENV.includes(name));
+  const optionalForSelectedProviders = [];
+  if (envValue("LEARNBUDDY_EMBEDDING_PROVIDER").toLowerCase() === "disabled") {
+    optionalForSelectedProviders.push("LEARNBUDDY_EMBEDDING_BASE_URL", "LEARNBUDDY_EMBEDDING_API_KEY");
   }
-  return REQUIRED_ENV;
+  if (envValue("LEARNBUDDY_OCR_PROVIDER").toLowerCase() === "minimax") {
+    optionalForSelectedProviders.push("LEARNBUDDY_OCR_BASE_URL", "LEARNBUDDY_OCR_API_KEY");
+  }
+  const required = REQUIRED_ENV.filter(name => !optionalForSelectedProviders.includes(name));
+  if (environment === "preview") {
+    return required.filter((name) => !PREVIEW_RUNTIME_ENV.includes(name));
+  }
+  return required;
 }
 
 function checkEnvSet(source, names) {
   const required = requiredEnvFor(environment);
   const missing = required.filter((name) => !names.has(name));
-  const missingGroups = ALTERNATIVE_ENV_GROUPS
+  const alternativeGroups = ALTERNATIVE_ENV_GROUPS.map((group) => (
+    group.id === "stt_provider_key" && envValue("LEARNBUDDY_STT_PROVIDER").toLowerCase() === "minimax"
+      ? {
+        ...group,
+        description: "MiniMax asr-1.0 speech-to-text provider key",
+        anyOf: ["LEARNORDIE_MINIMAX_API_KEY", "MINIMAX_API_KEY"]
+      }
+      : group
+  ));
+  const missingGroups = alternativeGroups
     .filter((group) => !group.anyOf.some((name) => names.has(name)))
     .map((group) => ({ id: group.id, description: group.description, anyOf: group.anyOf }));
   const forbidden = environment === "development"
@@ -678,7 +689,7 @@ function checkEnvSet(source, names) {
     pass("required_env", "All required deployment environment names are present.", {
       source,
       required: required.length,
-      alternativeGroups: ALTERNATIVE_ENV_GROUPS.length,
+      alternativeGroups: alternativeGroups.length,
       runtimeProvided: environment === "preview" ? PREVIEW_RUNTIME_ENV : []
     });
   } else {
@@ -1033,28 +1044,24 @@ function providerModeRules() {
       reason: "Lecturer assistant must use the server-side AI provider."
     },
     {
-      name: "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
-      allowed: ["ai"],
-      reason: "Student chat moderation must use the server-side AI provider."
-    },
-    {
       name: "LEARNBUDDY_QUESTION_GENERATOR",
       allowed: ["ai"],
       reason: "Material questions must be generated through the server-side AI provider."
     },
     {
       name: "LEARNBUDDY_EMBEDDING_PROVIDER",
-      allowed: ["openai-compatible", "http", "learnbuddy-local-hash-v1", "local-hash", "deterministic"],
-      reason: "Material retrieval in preview/production needs a configured embedding provider."
+      allowed: ["disabled", "openai-compatible", "http", "learnbuddy-local-hash-v1", "local-hash", "deterministic"],
+      reason: "Choose disabled for database text retrieval, or explicitly configure optional embedding retrieval."
     },
     {
       name: "LEARNBUDDY_OCR_PROVIDER",
-      allowed: ["http", "external", "vision", "ocr", "openai-compatible", "openai-vision", "vision-chat"],
+      allowed: ["minimax", "http", "external", "vision", "ocr", "openai-compatible", "openai-vision", "vision-chat"],
       reason: "Scanned material handling needs an external OCR/vision provider."
     },
     {
       name: "LEARNBUDDY_STT_PROVIDER",
       allowed: [
+        "minimax",
         "mistral",
         "mistral-voxtral",
         "voxtral",

@@ -1,0 +1,167 @@
+/* UI overhaul: ui-present */
+
+.slide-lecture-link {
+  position: absolute;
+  z-index: 12;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  max-width: min(70%, 900px);
+  padding: 7px 11px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: clamp(12px, 1.4vw, 22px);
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-island);
+}
+
+.lecture-join-slide {
+  width: 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 44%);
+  align-items: center;
+  gap: clamp(20px, 4vw, 80px);
+  padding: clamp(72px, 7vw, 120px) 7% 90px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.lecture-join-copy h1 { font-size: clamp(24px, 3.6vw, 60px); line-height: 1.1; margin: 12px 0 24px; }
+.lecture-join-copy p { font-size: clamp(16px, 1.6vw, 25px); }
+.lecture-join-url { display: block; margin: 20px 0; font-size: clamp(19px, 2.2vw, 36px); font-weight: 800; color: inherit; overflow-wrap: anywhere; }
+.lecture-join-copy .lecture-join-hint { font-size: clamp(14px, 1.2vw, 19px); margin-bottom: 24px; }
+.lecture-join-copy, .lecture-join-qr { min-width: 0; }
+.lecture-join-qr { width: 100%; max-width: min(52vh, 680px); justify-self: center; }
+/* qrcode writes inline pixel sizes; preserve its high-resolution bitmap while
+   sizing the displayed square to the available slide/phone width. */
+.lecture-join-qr canvas { display: block; width: 100% !important; height: auto !important; max-width: 100%; background: white; }
+.slide-engine-stage[data-slide-id="lecture-join"] { padding: 0; overflow: auto; }
+@media (max-width: 700px) {
+  .lecture-join-slide { grid-template-columns: 1fr; padding: 76px 20px 96px; gap: 16px; }
+  .lecture-join-qr { grid-row: 1; max-width: min(42vh, 300px); }
+  .lecture-join-copy h1 { margin: 8px 0 12px; }
+  .lecture-join-copy .eyebrow { display: none; }
+}
+
+/* Presentation view: "Beenden" text button in the action stack, same chrome as the icon buttons. */
+.action-stack .live-back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: var(--shadow-island);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color var(--lb-dur-control) var(--lb-ease-standard),
+    border-color var(--lb-dur-control) var(--lb-ease-standard);
+}
+
+.action-stack .live-back-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Transcript sheet: no decorative handle bar. */
+.transcript-panel::before {
+  content: none;
+  display: none;
+}
+
+/* A tiny, always available status light, not a presentation toolbar. */
+.presentation-screen .transcript-indicator {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  z-index: 85;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+.transcript-indicator span { width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 45% 55% 48% 52%; }
+.transcript-indicator[data-status="confirmed"] { color: #2f9e44; }
+.transcript-indicator[data-status="pending"] { color: #b7791f; }
+.transcript-indicator[data-status="error"] { color: #e03131; }
+.transcript-indicator:not([data-status="off"]) span { background: currentColor; }
+.transcript-indicator[data-status="pending"] span { animation: transcript-pulse 1.6s ease-in-out infinite; }
+.transcript-indicator:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@keyframes transcript-pulse { 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .transcript-indicator span { animation: none !important; } }
+
+/* Transcript sheet: toggles show their state instead of flipping their label. */
+.transcript-panel .plain-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--app-accent-ink);
+}
+
+/* Slide editor: the AI proposal text is content, not a caption. */
+.studio-agent-popover .studio-agent-proposal {
+  max-height: 180px;
+  overflow: auto;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Presentation chrome, never the drawing surface or authored slide contents. */
+.slide-screen { background: var(--app-background); }
+.slide-screen::before { content: none; }
+.slide-nav,
+.learn-bar,
+.learn-more summary,
+.learn-more-panel,
+.slide-peek-return {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-island);
+  backdrop-filter: none;
+}
+.action-stack { box-shadow: none; }
+.slide-nav button,
+.slide-count { color: var(--ink); font-weight: 600; }
+.slide-nav button:hover:not(:disabled) { background: var(--accent-soft); color: var(--app-accent-ink); }
+.slide-nav button:focus-visible,
+.learn-more summary:focus-visible,
+.overlay-head button:focus-visible,
+.action-stack .live-back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.slide-nav button:disabled { opacity: 0.45; cursor: default; }
+.learn-more summary { font-weight: 600; }
+.hotspot { border-radius: 8px; border-color: var(--line); background: var(--panel); color: var(--ink); box-shadow: var(--shadow-island); }
+.hotspot::before,
+.hotspot::after { content: none; }
+.hotspot-level { padding-left: 0; font-weight: 600; }
+.overlay-panel,
+.transcript-panel,
+.chat-question-panel { border-color: var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+.overlay-head { border-bottom: 1px solid var(--line); }
+.overlay-head h2 { font-weight: 600; }
+.overlay-head button { min-width: 36px; min-height: 36px; background: var(--panel); color: var(--ink); font-weight: 500; }
+.overlay-head button:hover { background: var(--panel-soft); }
+.lecture-join-copy h1 { font-weight: 700; }
+.lecture-join-url { font-weight: 600; }
+
+@media (pointer: coarse) {
+  .overlay-head button { min-width: 44px; min-height: 44px; }
+}

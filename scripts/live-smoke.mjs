@@ -6,7 +6,9 @@ const DEFAULT_LECTURE_TOKEN = "gleitlagerung-demo";
 const HELP_TEXT = `
 Usage: npm run smoke:live -- [options]
 
-Runs a public browser smoke against Health, Student Live, Learn and optional lecturer/AI paths.
+Runs a public browser smoke against Health, read-only Live viewing, Learn and optional lecturer/AI paths.
+Live answers/control are NOT exercised against an arbitrary classroom. Use smoke:live-load
+with an authenticated owner session and --own-test-lecture for real live rounds.
 
 Options:
   --url <app-url>                   Public app URL. Required unless LEARNBUDDY_LIVE_SMOKE_URL is set.
@@ -365,31 +367,57 @@ async function checkHealth(timeoutMs) {
   }
 }
 
+async function waitForNativeCanvas(page, timeoutMs) {
+  const canvas = page.locator('[data-canvas-engine="excalidraw"][data-canvas-ready="true"]');
+  await canvas.waitFor({ state: "visible", timeout: timeoutMs });
+  await canvas.locator("canvas").first().waitFor({ state: "visible", timeout: timeoutMs });
+}
+
+async function waitForLiveSurface(page, timeoutMs) {
+  // The QR welcome slide intentionally precedes native content. Do not claim
+  // that its QR canvas proves the Excalidraw engine loaded.
+  const native = page.locator('[data-canvas-engine="excalidraw"][data-canvas-ready="true"]');
+  const intro = page.locator(".lecture-join-qr canvas");
+  await native.or(intro).first().waitFor({ state: "visible", timeout: timeoutMs });
+  if (await native.isVisible()) {
+    await waitForNativeCanvas(page, timeoutMs);
+    return "excalidraw";
+  }
+  return "join-intro";
+}
+
 async function checkStudentLive(page, token, timeoutMs) {
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl(`/l/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.getByText("Pseudonym für diese Runde").waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByLabel("Pseudonym-Vorschläge").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByPlaceholder("z. B. Lagerstern-42").fill(`Smoke ${Date.now().toString(36)}`);
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
-  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
-  await page.getByLabel("Quizfrage").waitFor({ state: "visible", timeout: timeoutMs });
-  await page.locator(".question-drawer .answer").first().click();
-  await page.locator(".toast-inline").waitFor({ state: "visible", timeout: timeoutMs });
+  const initialSurface = await waitForLiveSurface(page, timeoutMs);
+  if (await visible(page.getByRole("button", { name: "Teilnehmen", exact: true }), 500)) throw new Error("Live viewing unexpectedly requires an identity gate.");
+  await page.locator(".slide-lecture-link").waitFor({ state: "visible", timeout: timeoutMs });
+  const response = await page.request.get(appUrl(`/api/lecture/${token}/live`));
+  if (!response.ok()) throw new Error("Authoritative live state unavailable; this is not a successful live smoke.");
+  const liveState = await response.json();
+  if (!["waiting", "active", "ended"].includes(liveState.status)) throw new Error("Invalid authoritative live status.");
+  await page.locator(`main[data-live-status='${liveState.status}']`).waitFor({ state: "visible", timeout: timeoutMs });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
+  const reloadedSurface = await waitForLiveSurface(page, timeoutMs);
 
-  const leaderboardButton = page.getByRole("button", { name: "Leaderboard anzeigen" });
+  const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
   if (leaderboardAvailable) {
     await leaderboardButton.click();
-    await page.getByRole("complementary", { name: "Leaderboard" }).waitFor({ state: "visible", timeout: timeoutMs });
+    await page.getByRole("complementary", { name: "Rangliste" }).waitFor({ state: "visible", timeout: timeoutMs });
   }
 
   if (!failOnDiagnostics("student_live_browser", problems)) return;
-  pass("student_live_browser", "Student Live flow works in a fresh browser context.", {
+  pass("student_live_browser", "Fresh student entry, authoritative state and reload verified. Does not verify answering/presentation control; use owned live-session suite.", {
     lectureToken: token,
-    slideEngine: "v1",
-    leaderboardChecked: leaderboardAvailable
+    slideEngine: reloadedSurface,
+    initialSurface,
+    nativeCanvasChecked: initialSurface === "excalidraw" || reloadedSurface === "excalidraw",
+    leaderboardChecked: leaderboardAvailable,
+    liveStatus: liveState.status,
+    answersSubmitted: 0,
+    controlVerified: false
   });
 }
 
@@ -398,10 +426,16 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
   let aiState = null;
   await page.goto(appUrl(`/learn/${token}`), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await waitForInteractivePage(page, timeoutMs);
-  await page.locator('[data-slide-engine="v1"]').waitFor({ state: "visible", timeout: timeoutMs });
-  const hotspot = page.getByLabel(/Frage Niveau .* anzeigen/).first();
-  await page.getByLabel("Fragen-Hotspots").locator("button").first().waitFor({ state: "visible", timeout: timeoutMs });
-  await openQuizDrawer(page, hotspot, timeoutMs);
+  await waitForNativeCanvas(page, timeoutMs);
+  const hotspot = page.getByLabel("Fragen-Spots auf der Folie", { exact: true }).locator("button").first();
+  const learnMenu = page.locator(".learn-more");
+  if (await hotspot.isVisible()) {
+    await openQuizDrawer(page, hotspot, timeoutMs);
+  } else {
+    if (await learnMenu.getAttribute("open") === null) await learnMenu.locator("summary").click();
+    await openQuizDrawer(page, page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }), timeoutMs);
+  }
+  if (await learnMenu.getAttribute("open") !== null) await learnMenu.locator("summary").click();
   await page.locator(".question-drawer .answer").first().click();
   await page.locator(".question-drawer[data-answer-state='answered']").waitFor({ state: "visible", timeout: timeoutMs });
   await page.getByRole("button", { name: "KI fragen" }).click();
@@ -443,25 +477,32 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
       fail("learn_ai_markdown_browser", "Learn AI chat rendered raw Markdown markers.", markdownState);
       return;
     }
-    await page.locator(".chat-body").getByText(/Tokens|Quelle|Mock-Erklärung|Antwort|Praxisbeispiel/i).first().waitFor({
+    await page.locator(".chat-body").getByText(/KI-Kontingent|Quelle|Mock-Erklärung|Antwort|Praxisbeispiel/i).first().waitFor({
       state: "visible",
       timeout: Math.min(timeoutMs, 5000)
     });
   }
   await page.getByLabel("Chat schließen").click();
   await page.getByLabel("KI Chat").waitFor({ state: "hidden", timeout: timeoutMs });
+  // Closing chat restores the answered question. Dismiss it before operating
+  // the underlying slide toolbar; do not force-click through the question.
+  await page.keyboard.press("Escape");
+  await page.locator(".question-drawer").waitFor({ state: "hidden", timeout: timeoutMs });
 
-  const leaderboardButton = page.getByRole("button", { name: "Leaderboard anzeigen" });
+  const leaderboardButton = page.getByRole("button", { name: "Rangliste" });
+  if (await leaderboardButton.count() && !await leaderboardButton.isVisible()) {
+    await learnMenu.locator("summary").click();
+  }
   const leaderboardAvailable = await visible(leaderboardButton, 2000);
   if (leaderboardAvailable) {
     await leaderboardButton.click();
-    await page.getByRole("complementary", { name: "Leaderboard" }).waitFor({ state: "visible", timeout: timeoutMs });
+    await page.getByRole("complementary", { name: "Rangliste" }).waitFor({ state: "visible", timeout: timeoutMs });
   }
 
   if (!failOnDiagnostics("learn_browser", problems)) return;
   pass("learn_browser", "Learn mode flow works in a fresh browser context.", {
     lectureToken: token,
-    slideEngine: "v1",
+    slideEngine: "excalidraw",
     aiRequested: includeAI,
     requireAIProvider,
     aiAnswerState: aiState?.answerState ?? null,
@@ -474,17 +515,21 @@ async function checkLearn(page, token, timeoutMs, includeAI, requireAIProvider) 
 
 async function checkLecturerAssistant(page, timeoutMs, requireProvider) {
   const panel = page.getByLabel("Planungsassistent direkt an der Folie");
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  const openAssistant = async () => {
+    await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
+    await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Assistent/ }).click();
+  };
+  await openAssistant();
   await panel.waitFor({ state: "visible", timeout: timeoutMs });
   await panel.getByLabel("Nachricht an den Planungsassistenten").fill("Live-Smoke: Welche Erklärung passt direkt auf diese Folie?");
   await panel.getByRole("button", { name: "Senden" }).click();
   await panel.locator(".assistant-message.assistant").last().waitFor({ state: "visible", timeout: timeoutMs });
   await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openAssistant();
   await panel.waitFor({ state: "visible", timeout: timeoutMs });
   await panel.locator(".assistant-message.assistant").last().waitFor({ state: "visible", timeout: timeoutMs });
 
-  const providerVisible = await visible(panel.getByText("AIProvider genutzt").last(), 1500);
+  const providerVisible = await visible(panel.locator('.assistant-message.assistant[data-ai-provider-used="true"]').last(), 1500);
   if (requireProvider && !providerVisible) {
     fail("lecturer_assistant_browser", "Lecturer assistant answered, but provider-backed Agent step was not visible.");
     return;
@@ -497,11 +542,15 @@ async function checkLecturerAssistant(page, timeoutMs, requireProvider) {
 
 async function waitForLecturerStudio(page, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
-  const editorTitle = page.getByRole("textbox", { name: "Folientitel" });
-  const createDialog = page.getByRole("dialog", { name: "Neue Vorlesung als Folie anlegen" });
+  const editor = page.locator('.native-studio-frame [data-canvas-engine="excalidraw"][data-canvas-ready="true"]');
+  const createDialog = page.getByRole("dialog", { name: "Neue Vorlesung anlegen" });
 
   while (Date.now() < deadline) {
-    if (await visible(editorTitle, 500)) return "lecture-editor";
+    if (await visible(editor, 500)) {
+      await editor.locator("canvas").first().waitFor({ state: "visible", timeout: Math.max(1, deadline - Date.now()) });
+      await page.getByRole("toolbar", { name: "Folienelemente", exact: true }).waitFor({ state: "visible", timeout: Math.max(1, deadline - Date.now()) });
+      return "lecture-editor";
+    }
     if (await visible(createDialog, 500)) {
       await page.getByRole("textbox", { name: "Titel" }).waitFor({ state: "visible", timeout: 2_000 });
       return "create-lecture";
@@ -515,12 +564,12 @@ async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth,
   const problems = attachBrowserDiagnostics(page);
   await page.goto(appUrl("/lecturer/login"), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   if (email) {
-    await page.getByLabel("E-Mail").fill(email);
-    await page.getByRole("button", { name: "Magic Link senden" }).click();
+    await page.getByLabel("E-Mail", { exact: true }).fill(email);
+    await page.getByRole("button", { name: "Code senden", exact: true }).click();
   }
 
   let link = magicLink;
-  const localLink = page.getByRole("link", { name: "Referentenbereich öffnen" });
+  const localLink = page.getByRole("link", { name: "Direkt zum Dozentenbereich", exact: true });
   if (!link && await visible(localLink, 1500)) {
     const href = await localLink.getAttribute("href");
     if (href) link = new URL(href, page.url()).toString();
@@ -567,7 +616,7 @@ async function checkLecturerAuth(page, timeoutMs, email, magicLink, requireAuth,
   }
 
   await page.getByLabel("Studio-Menü").click();
-  await page.getByRole("link", { name: "Logout" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
   await page.waitForURL((url) => url.pathname === "/" || url.pathname === "/lecturer/login", { timeout: timeoutMs });
   await page.goto(appUrl("/lecturer"), { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await page.waitForURL(/\/lecturer\/login/, { timeout: timeoutMs });

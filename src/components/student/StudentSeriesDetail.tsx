@@ -32,18 +32,17 @@ export function StudentSeriesDetail({ series }: { series: StudentDashboardSeries
       <article className="student-series lb-enter-panel">
         <header className="student-series-head">
           <div>
-            <h2>{series.seriesTitle}</h2>
-            <p className="student-series-meta">
-              {series.joinCode && <span>Code {series.joinCode}</span>}
-              {series.examDate && <span>Prüfung {formatDate(series.examDate)}</span>}
-              <span>{series.events.length} Termine</span>
-            </p>
+            <h1>{series.seriesTitle}</h1>
+            {series.examDate && (
+              <p className="student-series-meta">
+                <span>Prüfung {formatDate(series.examDate)}</span>
+              </p>
+            )}
           </div>
         </header>
 
         {series.liveNow.length > 0 && (
           <section className="student-block live">
-            <p className="student-block-label">● Live jetzt</p>
             <ul className="student-event-list">
               {series.liveNow.map((event) => (
                 <li key={event.lectureId}>
@@ -54,19 +53,20 @@ export function StudentSeriesDetail({ series }: { series: StudentDashboardSeries
           </section>
         )}
 
-        <section className="student-block">
-          <p className="student-block-label">Alle Termine</p>
-          <ul className="student-event-list">
-            {series.events.map((event) => (
-              <li key={event.lectureId} className="student-event">
-                <a className="student-event-title" href={`/student/events/${event.lectureId}`}>{event.title}</a>
-                <span className="student-event-when">
-                  {event.bucket === "live" ? "Live" : event.bucket === "upcoming" ? formatDateTime(event.liveAt) : "Lernmodus"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {series.events.length > 0 && (
+          <section className="student-block">
+            <ul className="student-event-list">
+              {series.events.map((event) => (
+                <li key={event.lectureId} className="student-event">
+                  <a className="student-event-title" href={`/student/events/${event.lectureId}`}>{event.title}</a>
+                  <span className="student-event-when">
+                    {event.bucket === "live" ? "Live" : event.bucket === "upcoming" ? formatDateTime(event.liveAt) : "Lernmodus"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <ReadinessPanel readiness={series.readiness} />
       </article>

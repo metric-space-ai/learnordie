@@ -37,7 +37,11 @@ const noStoreHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   devIndicators: false,
+  experimental: { cpus: 2 },
   transpilePackages: ["@learnordie/slide-engine"],
+  outputFileTracingIncludes: {
+    "/api/lecture/*/export": ["./public/vendor/excalidraw/**/*"]
+  },
   async headers() {
     return [
       {

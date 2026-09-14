@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { LoginForm } from "./LoginForm";
+import { TestAccountForm } from "./TestAccountForm";
+import { configuredTestAccounts } from "@/server/test-accounts";
 
 export default async function LecturerLoginPage({
   searchParams
@@ -13,23 +16,20 @@ export default async function LecturerLoginPage({
     errorCode === "invalid-email"
       ? "Bitte eine gültige E-Mail eingeben."
       : errorCode === "invalid-token"
-        ? "Dieser Anmeldelink ist abgelaufen oder wurde bereits verwendet."
+        ? "Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an."
       : errorCode === "rate-limited"
         ? "Zu viele Anfragen. Bitte später erneut versuchen."
       : errorCode === "send-failed"
-        ? "Anmeldelink konnte nicht versendet werden."
+        ? "Code konnte nicht gesendet werden. Versuche es gleich noch einmal."
         : "";
 
   return (
-    <main className="mode-screen lb-motion-root">
-      <section className="mode-card lb-enter-sheet">
-        <p className="eyebrow">Dozentenbereich</p>
-        <h1>Einloggen oder Konto erstellen</h1>
-        <p>
-          Eine dienstliche E-Mail reicht. Ist die Adresse neu, wird dein Dozentenkonto
-          nach der Link-Bestätigung erstellt; ist sie bekannt, wirst du direkt angemeldet.
-        </p>
+    <main className="join-screen app-canvas login-screen lb-motion-root">
+      <section className="join-card app-island login-card lb-enter-sheet">
+        <h1>Anmelden</h1>
         <LoginForm initialMagicLink={magicLink} sent={sent} initialError={errorMessage} />
+        {configuredTestAccounts().length > 0 && <TestAccountForm />}
+        <Link className="join-back" href="/">Zur Startseite</Link>
       </section>
     </main>
   );

@@ -21,6 +21,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "output/**",
     "packages/slide-engine/vendor/**",
+    "public/vendor/excalidraw/**",
     "test-results/**"
   ])
 ]);

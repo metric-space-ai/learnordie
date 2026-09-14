@@ -80,7 +80,9 @@ const [
   leaderboardModal,
   homePage,
   homeLanding,
-  motionUtils
+  motionUtils,
+  presentationCss,
+  nativeCss
 ] = await Promise.all([
   readText("src/app/globals.css"),
   readText("DESIGN.md"),
@@ -94,12 +96,14 @@ const [
   readText("src/components/LeaderboardModal.tsx"),
   readText("src/app/page.tsx"),
   readText("src/components/HomeLanding.tsx"),
-  readText("src/lib/motion.ts")
+  readText("src/lib/motion.ts"),
+  readText("src/app/ui-presentation-stage.css"),
+  readText("src/app/ui-excalidraw.css")
 ]);
 
 expectContains("design_context", design, [
   "Folie ist der Anker",
-  "Bottom-Bar",
+  "genau einen Header",
   "Hotspots",
   "Sheets",
   "lb-enter-stage",
@@ -109,9 +113,9 @@ expectContains("design_context", design, [
   "Keine Food-App-Optik",
   "Keine Hotspots, die dauerhaft pulsieren",
   "Playwright-Screenshots",
-  "Startseite baut Card und Links gestaffelt auf",
+  "Startseite bietet direkten Code-Einstieg",
   "Frage-Drawer oeffnet nicht hart",
-  "Referentenstudio oeffnet Tools aus der unteren Steuerung",
+  "Präsentationsmodus hat weder Header noch Footer",
   "prefers-reduced-motion"
 ], "DESIGN.md");
 
@@ -240,14 +244,13 @@ expectNotContains("home_not_demo_launch_contract", homePage, [
   "mode-list"
 ], "src/app/page.tsx");
 
-expectContains("home_route_cover_contract", homeLanding, [
-  "data-route-cover={routeCover ? \"active\" : \"idle\"}",
-  "home-route-cover lb-route-cover",
-  "navigateWithCover",
-  "followWithCover",
-  "prefersReducedMotion()",
-  "setRouteCover(target)",
-  "router.push(href)"
+expectContains("home_direct_entry_contract", homeLanding, [
+  "home-app app-canvas lb-motion-root",
+  "home-join-form",
+  "joinCodeFromInput(codeInput)",
+  "router.push(`/join/${encodeURIComponent(code)}`)",
+  "href=\"/lecturer/login\"",
+  "role=\"alert\""
 ], "src/components/HomeLanding.tsx");
 
 expectContains("presence_contract", presence, [
@@ -261,7 +264,7 @@ expectContains("quiz_drawer_contract", quizDrawer, [
   "motionState?: PresenceState",
   "data-state={motionState}",
   "data-origin={origin}",
-  "data-answer-state={revealed ? \"answered\" : \"open\"}",
+  "data-answer-state={revealed ? \"answered\" : timedOut ? \"expired\" : \"open\"}",
   "\"--lb-i\"",
   "onExpired?.()"
 ], "src/components/QuizDrawer.tsx");
@@ -270,14 +273,15 @@ expectContains("learn_mode_contract", learnExperience, [
   "animateHotspotToDrawerSharedElement",
   "hotspotButtonRefs",
   "pendingHotspotSharedRef",
-  "className={`slide-screen lb-motion-root",
+  "className={`slide-screen learn-shell lb-motion-root",
   "data-question-origin={questionOrigin}",
   "\"--origin-x\"",
   "inspectorOpen",
   "question-origin-trace",
   "hotspot lb-enter-hotspot",
-  "learn-bar lb-enter-control",
-  "action-stack lb-enter-control",
+  "learner-workspace-toolbar lb-enter-control",
+  "learner-control-menu-panel",
+  "showNavigation={false}",
   "question-ai-link",
   "<Presence show={questionOpen}>",
   "<Presence show={lecture.leaderboardEnabled && leaderboardOpen}>",
@@ -288,24 +292,42 @@ expectContains("learn_mode_contract", learnExperience, [
 ], "src/components/LearnExperience.tsx");
 
 expectContains("student_live_contract", studentLiveExperience, [
-  "className={`slide-screen lb-motion-root",
-  "prefersReducedMotion()",
-  "joining",
-  "student-gate-cover",
-  "data-joining={joining ? \"true\" : \"false\"}",
-  "chat-question-panel lb-enter-overlay",
+  "className={`slide-screen learn-shell lb-motion-root",
+  "data-live-status=",
+  "ensureStudentEnrollment",
+  "showJoinIntro={live.state?.showIntro ?? true}",
+  "navigationDisabled",
   "data-panel-origin=\"chat-question\"",
-  "<Presence show={questionOpen}>",
+  "{round && <LiveQuizDrawer",
+  "aria-label=\"Pseudonym sichern\"",
   "<Presence show={lecture.leaderboardEnabled && leaderboardOpen}>"
 ], "src/components/StudentLiveExperience.tsx");
 
+expectRegex("student_live_animated_panel", studentLiveExperience, [
+  { label: "chat_panel_keeps_overlay_motion", pattern: /className="[^"]*\bchat-question-panel\b[^"]*\blb-enter-overlay\b[^"]*"/ }
+], "src/components/StudentLiveExperience.tsx");
+
+// The learner workspace must not reintroduce the two legacy control bands.
+for (const [name, content] of [["LearnExperience", learnExperience], ["StudentLiveExperience", studentLiveExperience]]) {
+  expectNotContains(`no_legacy_learner_chrome_${name}`, content, [
+    'className="learn-bar ', 'className="action-stack '
+  ], `src/components/${name}.tsx`);
+}
+
 expectContains("lecturer_live_contract", lecturerLiveExperience, [
-  "className={`slide-screen lb-motion-root",
+  "className=\"slide-screen presentation-screen lb-motion-root\"",
   "transcript-panel lb-enter-overlay",
   "data-panel-origin=\"transcript\"",
-  "question-drawer compact lb-enter-sheet",
+  "<PresenterRoundStatus",
   "<Presence show={transcriptVisible}>",
-  "<Presence show={questionOpen}>"
+  "void preparedRoundRef.current?.()",
+  "void dynamicRoundRef.current?.(\"transcript-only\")",
+  "<details className=\"presentation-controls\"",
+  "aria-label=\"Präsentationssteuerung\""
+], "src/components/LecturerLiveExperience.tsx");
+
+expectNotContains("non_disruptive_presenter", lecturerLiveExperience, [
+  "<LiveQuizDrawer", "question-open"
 ], "src/components/LecturerLiveExperience.tsx");
 
 expectContains("studio_contract", lecturerDashboard, [
@@ -320,8 +342,7 @@ expectContains("studio_contract", lecturerDashboard, [
   "data-open={toolMenuOpen ? \"true\" : \"false\"}",
   "<Presence show={toolMenuOpen} exitMs={200}>",
   "data-state={motionState}",
-  "studio-bottom-bar lb-enter-control",
-  "studio-hotspot lb-enter-hotspot",
+  "studio-top-actions",
   "style={{ \"--lb-i\": index } as MotionStyle}",
   "studio-context-drawer materials",
   "studio-context-drawer questions",
@@ -334,13 +355,36 @@ expectContains("studio_contract", lecturerDashboard, [
   "studio-slide-source-overlay",
   "studio-slide-assistant-overlay",
   "data-slide-id={slide.id}",
-  "data-slide-id={studioSlide.id}",
   "<Presence show={workspaceTool === \"materials\"}>",
   "<Presence show={workspaceTool === \"assistant\"}>",
   "<Presence show={workspaceTool === \"questions\"}>",
   "<Presence show={workspaceTool === \"evaluation\"}>",
   "<Presence show={workspaceTool === \"analytics\"}>"
 ], "src/components/LecturerDashboard.tsx");
+
+// The legacy bottom bar and route-cover gates were deliberately replaced by
+// native editing and link-only enrollment. Prevent their accidental return.
+expectNotContains("no_legacy_studio_footer", lecturerDashboard, [
+  'className="studio-bottom-bar', '<footer className="studio-'
+], "src/components/LecturerDashboard.tsx");
+expectNotContains("no_presentation_chrome", lecturerLiveExperience, [
+  '<header', '<footer', 'className="learn-bar', 'className="presentation-topbar'
+], "src/components/LecturerLiveExperience.tsx");
+expectNotContains("no_guest_registration_gate", studentLiveExperience, [
+  'student-gate-cover', 'data-joining=', 'className="student-gate-screen'
+], "src/components/StudentLiveExperience.tsx");
+expectContains("full_viewport_presentation", presentationCss, [
+  'height: 100dvh', 'padding: 0', 'position: absolute; inset: 0',
+  '.presentation-controls:not([open]) > .presentation-control-panel { display: none; }',
+  'width: min(360px, calc(100vw - 24px))', '.presentation-screen .slide-lecture-link'
+], "src/app/ui-presentation-stage.css");
+expectContains("one_combined_editor_tool_row", nativeCss, [
+  '.native-studio-editor:has(.native-canvas-edit) { padding-top: 48px; }',
+  '.native-studio-tools { position: absolute; top: 0',
+  '.native-insert-options { position: absolute;',
+  '.native-studio-editor[data-actions-open="false"]',
+  '@media (max-width: 700px)'
+], "src/app/ui-excalidraw.css");
 
 expectContains("slide_transition_contract", slideCanvas, [
   "data-direction={direction}",

@@ -6,14 +6,18 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
-import { expect, type Browser, type Page, test } from "@playwright/test";
+import { expect, request, type Browser, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { openStudioActions } from "./studio-controls";
+import type { Lecture } from "../../src/lib/types";
+import { seriesIdForLecture } from "../../src/lib/series";
 
 import { audioFileExtension, encodePcm16Wav } from "../../src/lib/audio-capture";
 
 const execFileAsync = promisify(execFile);
 const e2eDatabaseUrl = process.env.E2E_DATABASE_URL ?? "postgres://michaelwelsch@127.0.0.1:55432/learnbuddy_e2e_smoke";
-const e2eAuthSecret = "learnbuddy-e2e-secret-with-more-than-32-characters";
+// Exact isolated fixture secret configured by scripts/e2e-server.mjs.
+const e2eAuthSecret = "learnordie-e2e-secret-with-more-than-32-characters";
 const lecturerSessionCookie = "lb_lecturer_session";
 const e2eBaseUrl = process.env.E2E_BASE_URL ?? `http://${process.env.E2E_HOST ?? "127.0.0.1"}:${process.env.E2E_PORT ?? "3070"}`;
 const e2eBaseOrigin = new URL(e2eBaseUrl).origin;
@@ -43,11 +47,17 @@ function attachBrowserDiagnostics(page: Page) {
   return () => expect(problems, problems.join("\n")).toEqual([]);
 }
 
+async function openStudioTool(page: Page, name: "Assistent" | "Fragen" | "Quellen" | "Auswertung" | "Evaluation") {
+  await openStudioActions(page);
+  await page.getByRole("button", { name: "Folienwerkzeuge öffnen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: new RegExp(`^${name}`) }).click();
+}
+
 async function requestMagicLink(page: Page, email = "e2e@example.test") {
   await page.goto("/lecturer/login");
-  await page.getByLabel("E-Mail").fill(email);
-  await page.getByRole("button", { name: "Magic Link senden" }).click();
-  const href = await page.getByRole("link", { name: "Referentenbereich öffnen" }).getAttribute("href");
+  await page.getByLabel("E-Mail", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Code senden" }).click();
+  const href = await page.getByRole("link", { name: "Direkt zum Dozentenbereich" }).getAttribute("href");
   if (!href) throw new Error("Magic link was not rendered in local mail mode.");
   return new URL(href, page.url()).toString();
 }
@@ -56,8 +66,35 @@ async function loginLecturer(page: Page) {
   const magicLink = await requestMagicLink(page);
   await page.goto(magicLink);
   await expect(page).toHaveURL(/\/lecturer$/);
-  await expect(page.getByRole("textbox", { name: "Folientitel" })).toContainText("Hydrodynamische Gleitlagerung");
+  await expectDemoStudio(page);
   return magicLink;
+}
+
+async function expectNativeCanvas(page: Page, editable = false) {
+  const canvas = editable
+    ? page.getByLabel("Excalidraw-Folieneditor", { exact: true })
+    : page.locator('[data-canvas-engine="excalidraw"]');
+  await expect(canvas).toHaveAttribute("data-canvas-ready", "true");
+  await expect(canvas.locator("canvas").first()).toBeVisible();
+  if (editable) await expect(page.getByRole("toolbar", { name: "Folienelemente" })).toBeVisible();
+  return canvas;
+}
+
+async function expectDemoStudio(page: Page) {
+  await expectNativeCanvas(page, true);
+  // Canvas text is not a DOM textbox. Correlate the visible filmstrip selection
+  // with the actual owner-scoped document instead of asserting removed markup.
+  const response = await page.request.get(new URL("/api/lectures", page.url()).href);
+  expect(response.ok()).toBe(true);
+  const { lectures } = await response.json() as { lectures: Lecture[] };
+  const lecture = lectures.find((item) => item.publicToken === "gleitlagerung-demo");
+  expect(lecture).toBeTruthy();
+  expect(lecture!.slides[0].title).toBe("Hydrodynamische Gleitlagerung");
+  expect(lecture!.seriesTitle).toBe("Maschinenelemente I");
+  const active = page.locator('.studio-filmstrip-list button[aria-current="true"]');
+  await expect(active).toHaveAttribute("data-slide-id", lecture!.slides[0].id);
+  await expect(active).toContainText(lecture!.slides[0].title);
+  return lecture!;
 }
 
 async function lecturerCsrfToken(page: Page) {
@@ -72,7 +109,7 @@ async function expectMagicLinkCannotBeReused(browser: Browser, magicLink: string
   try {
     await page.goto(magicLink);
     await expect(page).toHaveURL(/\/lecturer\/login\?error=invalid-token$/);
-    await expect(page.getByText("Dieser Magic Link ist abgelaufen oder wurde bereits verwendet.")).toBeVisible();
+    await expect(page.getByText("Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an.")).toBeVisible();
   } finally {
     await context.close();
   }
@@ -300,27 +337,45 @@ async function expectExpiredSessionCookieIsRejected(page: Page) {
   await expect(page).toHaveURL(/\/lecturer\/login$/);
 }
 
-async function setRangeValue(page: Page, selector: string, value: string) {
-  await page.locator(selector).evaluate((element, nextValue) => {
-    if (!(element instanceof HTMLInputElement)) throw new Error(`${selector} is not an input.`);
-    element.value = nextValue;
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-  }, value);
+async function createSmokeLecture(page: Page) {
+  const nonce = Date.now().toString(36);
+  await page.goto(await requestMagicLink(page, `live-fixture-${nonce}@example.test`));
+  await expect(page).toHaveURL(/\/lecturer$/);
+  const csrf = await lecturerCsrfToken(page);
+  const response = await page.request.post("/api/lectures", { headers: { "x-learnbuddy-csrf": csrf }, data: {
+    title: `Gleitlagerung Smoke ${nonce}`, seriesTitle: `Smoke Reihe ${nonce}`, liveAt: "2026-09-12T10:00:00Z", examDate: "2026-12-01"
+  } });
+  expect(response.status()).toBe(201);
+  const { lecture } = await response.json() as { lecture: Lecture };
+  const command = async (body: Record<string, unknown>) => {
+    const current = await (await page.request.get(`/api/lecture/${lecture.publicToken}/live`)).json();
+    const result = await page.request.post(`/api/lectures/${lecture.id}/live-session`, { headers: { "x-learnbuddy-csrf": csrf }, data: { ...body, revision: current.revision } });
+    expect(result.ok()).toBe(true);
+    return result.json();
+  };
+  return { lecture, csrf, command };
 }
 
-async function seedLiveLeaderboardLoad(page: Page, runId: string) {
+async function enrollSmokeParticipant(page: Page, lecture: Pick<Lecture, "id" | "seriesTitle" | "seriesId">, participant: { anonymousKey: string; pseudonym: string }) {
+  // Each simulated participant owns a distinct cookie jar. Profile POST must
+  // not rotate the authenticated identity of a previously created student.
+  const student = await request.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+  const profile = await student.post("/api/student/profile", { data: participant });
+  expect(profile.ok(), await profile.text()).toBe(true);
+  const enrollment = await student.post("/api/student/enrollments", { data: {
+    seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_learn_link", displayName: participant.pseudonym
+  } });
+  expect(enrollment.ok(), await enrollment.text()).toBe(true);
+  } finally { await student.dispose(); }
+}
+
+async function seedPracticeLeaderboardLoad(page: Page, runId: string, lecture: Lecture) {
   const levelsByPoints: Record<number, string> = {
     1: "4.0",
     2: "3.0",
     3: "2.0",
     4: "1.0"
-  };
-  const correctKeyByLevel: Record<string, string> = {
-    "4.0": "B",
-    "3.0": "A",
-    "2.0": "B",
-    "1.0": "A"
   };
   const participants = Array.from({ length: 30 }, (_, index) => {
     const rank = index + 1;
@@ -332,35 +387,38 @@ async function seedLiveLeaderboardLoad(page: Page, runId: string) {
     };
   });
 
-  await Promise.all(participants.map(async (participant) => {
+  for (const participant of participants) {
+    await enrollSmokeParticipant(page, lecture, participant);
+    const questions = lecture.questions.filter((question) => question.level === levelsByPoints[participant.points]);
+    expect(questions.length).toBeGreaterThan(0);
     for (let answerIndex = 0; answerIndex < participant.answerCount; answerIndex += 1) {
+      // Keep repeated practice attempts, but never invent new family IDs:
+      // the ranking must award this learning objective only once.
+      const question = questions[0];
+      const correctAnswer = question.answers.find((answer) => answer.correct)!;
+      expect(question.points).toBe(participant.points);
       const response = await page.request.post("/api/events", {
         data: {
-          lectureToken: "gleitlagerung-demo",
+          lectureToken: lecture.publicToken,
           eventType: "answer_selected",
           anonymousKey: participant.anonymousKey,
           pseudonym: participant.pseudonym,
           payload: {
-            mode: "live",
-            level: levelsByPoints[participant.points],
-            points: participant.points,
-            questionText: `30er Live-Smoke ${runId}: Mischreibung`,
-            selected: correctKeyByLevel[levelsByPoints[participant.points]],
-            selectedAnswerKey: correctKeyByLevel[levelsByPoints[participant.points]],
-            selectedAnswerText: "Startphase entlasten oder zusätzliche Schmierfilmversorgung vorsehen.",
-            correctAnswerKey: correctKeyByLevel[levelsByPoints[participant.points]],
-            correctAnswerText: "Startphase entlasten oder zusätzliche Schmierfilmversorgung vorsehen.",
-            correct: true,
-            smokeRunId: runId,
-            answerIndex
+            mode: "learn",
+            level: question.level,
+            familyId: question.familyId,
+            questionText: question.text,
+            selectedAnswerKey: correctAnswer.key
           }
         }
       });
       expect(response.ok()).toBe(true);
-      const payload = await response.json() as { ok?: boolean };
+      const payload = await response.json() as { ok?: boolean; event?: { payload?: { earnedPoints?: number; correct?: boolean } } };
       expect(payload.ok).toBe(true);
+      expect(payload.event?.payload?.earnedPoints).toBe(participant.points);
+      expect(payload.event?.payload?.correct).toBe(true);
     }
-  }));
+  }
 
   return participants;
 }
@@ -420,7 +478,7 @@ async function runAdminCommandAllowFailure(args: string[], extraEnv: Record<stri
     });
     return JSON.parse(result.stdout) as {
       ok: boolean;
-      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string }>;
+      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
       blockers?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
     };
   } catch (error) {
@@ -428,7 +486,7 @@ async function runAdminCommandAllowFailure(args: string[], extraEnv: Record<stri
     if (!stdout) throw error;
     return JSON.parse(stdout) as {
       ok: boolean;
-      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string }>;
+      checks?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
       blockers?: Array<{ id?: string; status?: string; severity?: string; message?: string; details?: Record<string, unknown> }>;
     };
   }
@@ -1082,7 +1140,7 @@ test("Production-Mailprovider blockiert reservierte Absenderdomain zur Laufzeit"
     });
     expect(response.status()).toBe(502);
     const payload = await response.json() as { error?: string; magicLink?: string };
-    expect(payload.error).toBe("Magic Link konnte nicht versendet werden.");
+    expect(payload.error).toBe("Code konnte nicht gesendet werden. Versuche es gleich noch einmal.");
     expect(payload.magicLink).toBeUndefined();
   } finally {
     await app.close();
@@ -1091,7 +1149,17 @@ test("Production-Mailprovider blockiert reservierte Absenderdomain zur Laufzeit"
 
 test("Operative CLI-Hilfe startet keine Checks", async () => {
   const helpContracts = [
-    ["scripts/admin.mjs", "LearnBuddy Admin CLI"],
+    ["scripts/alias-loader.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
+    ["scripts/alias-register.mjs", "Usage: node --import ./scripts/alias-register.mjs"],
+    ["scripts/apply-question-wording.mjs", "Usage: node scripts/apply-question-wording.mjs"],
+    ["scripts/attach-model-manuscript.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/attach-model-manuscript.mjs"],
+    ["scripts/audio-transcription-probe.mjs", "Usage: audio-transcription-probe.mjs"],
+    ["scripts/create-test-account.mjs", "Usage: node scripts/create-test-account.mjs"],
+    ["scripts/identity-gates.mjs", "Usage: node scripts/identity-gates.mjs"],
+    ["scripts/import-model-original.mjs", "Usage: node scripts/import-model-original.mjs"],
+    ["scripts/patch-excalidraw-image-import.mjs", "Usage: node scripts/patch-excalidraw-image-import.mjs"],
+    ["scripts/run-unit-identity.mjs", "Usage: node scripts/run-unit-identity.mjs"],
+    ["scripts/admin.mjs", "learnordie.app Admin CLI"],
     ["scripts/backup-restore-smoke.mjs", "Usage: npm run smoke:backup-restore -- [options]"],
     ["scripts/deploy-readiness.mjs", "Usage: npm run deploy:readiness -- [options]"],
     ["scripts/e2e-server.mjs", "Usage: node scripts/e2e-server.mjs"],
@@ -1099,11 +1167,15 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     ["scripts/live-smoke.mjs", "Usage: npm run smoke:live -- [options]"],
     ["scripts/motion-design-contract.mjs", "Usage: npm run motion:contract"],
     ["scripts/provider-smoke.mjs", "Usage: npm run provider:smoke -- [options]"],
+    ["scripts/question-grounding-probe.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs"],
+    ["scripts/production-release-probe.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/production-release-probe.mjs --run"],
+    ["scripts/production-schema.mjs", "Usage: node scripts/production-schema.mjs"],
     ["scripts/release-gate.mjs", "Usage: npm run release:gate -- [options]"],
     ["scripts/script-syntax-check.mjs", "Usage: npm run scripts:check"],
     ["scripts/slide-engine-qa-contract.mjs", "Usage: node scripts/slide-engine-qa-contract.mjs"],
     ["scripts/slide-engine-vendor-check.mjs", "Usage: node scripts/slide-engine-vendor-check.mjs"],
     ["scripts/vendor-reveal-core.mjs", "Usage: node scripts/vendor-reveal-core.mjs"],
+    ["scripts/upgrade-dt01-slides.mjs", "Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/upgrade-dt01-slides.mjs"],
     ["scripts/worker-smoke.mjs", "Usage: npm run smoke:worker -- [options]"],
     ["scripts/self-host-smoke.mjs", "Usage: npm run smoke:self-host -- [options]"]
   ] as const;
@@ -1148,6 +1220,76 @@ test("Operative CLI-Hilfe startet keine Checks", async () => {
     expect(check?.message, script).toContain("syntax and help contract");
     expect(check?.details?.helpFirstLine, script).toContain(usage.split("\n")[0]);
   }
+});
+
+test("OpenAI-kompatible OCR-Aliase bestehen Preflight und pruefen Chat-Completions gegen den Providervertrag", async () => {
+  const ocrEnv = {
+    NEXT_PUBLIC_APP_URL: "https://learnordie.app",
+    LEARNBUDDY_DEPLOYMENT_ENV: "production",
+    LEARNBUDDY_OCR_BASE_URL: "https://ocr.learnbuddy.cloud",
+    LEARNBUDDY_OCR_API_KEY: "ocr-contract-secret"
+  };
+  const aliases = ["openai-compatible", "openai-vision", "vision-chat"];
+
+  for (const provider of aliases) {
+    const preflight = await runAdminCommandAllowFailure(["preflight", "--profile", "production"], {
+      ...ocrEnv,
+      LEARNBUDDY_OCR_PROVIDER: provider
+    });
+    const preflightCheck = preflight.checks?.find((check) => check.id === "ocr_provider");
+    expect(preflightCheck?.status, `admin preflight: ${provider}`).toBe("pass");
+
+    const smoke = await runProviderSmokeAllowFailure([
+      "--profile", "production",
+      "--mock",
+      "--only", "ocr"
+    ], { LEARNBUDDY_OCR_PROVIDER: provider });
+    const smokeCheck = smoke.checks?.find((check) => check.id === "ocr");
+    expect(smoke.ok, `provider contract smoke: ${provider}`).toBe(true);
+    expect(smokeCheck?.status, `provider contract smoke: ${provider}`).toBe("pass");
+    expect(smokeCheck?.details?.provider, `provider contract smoke: ${provider}`).toBe(provider);
+    expect(smokeCheck?.details?.requestFormat, `provider contract smoke: ${provider}`).toBe("openai-compatible-chat-completions");
+  }
+
+  for (const [missingName, overrides] of [
+    ["base URL", { LEARNBUDDY_OCR_BASE_URL: "" }],
+    ["API key", { LEARNBUDDY_OCR_API_KEY: "" }]
+  ] as const) {
+    const preflight = await runAdminCommandAllowFailure(["preflight", "--profile", "production"], {
+      ...ocrEnv,
+      ...overrides,
+      LEARNBUDDY_OCR_PROVIDER: "openai-compatible"
+    });
+    const blocker = preflight.blockers?.find((item) => item.id === "ocr_provider");
+    expect(blocker, `admin preflight must reject missing ${missingName}`).toBeTruthy();
+    expect(JSON.stringify(blocker?.details), `admin preflight must identify missing ${missingName}`).toContain(
+      missingName === "base URL" ? "LEARNBUDDY_OCR_BASE_URL" : "LEARNBUDDY_OCR_API_KEY"
+    );
+
+    const smoke = await runProviderSmokeAllowFailure(["--profile", "production", "--only", "ocr"], {
+      ...ocrEnv,
+      ...overrides,
+      LEARNBUDDY_OCR_PROVIDER: "openai-compatible"
+    });
+    expect(smoke.blockers?.find((item) => item.id === "ocr")?.message, `provider smoke must reject missing ${missingName}`).toContain(
+      missingName === "base URL" ? "LEARNBUDDY_OCR_BASE_URL is missing" : "LEARNBUDDY_OCR_API_KEY is missing"
+    );
+  }
+});
+
+test("Explizit deaktivierte Embeddings brauchen keine API-Konfiguration", async () => {
+  const env = {
+    LEARNBUDDY_EMBEDDING_PROVIDER: "disabled",
+    LEARNBUDDY_EMBEDDING_BASE_URL: "",
+    LEARNBUDDY_EMBEDDING_API_KEY: ""
+  };
+  const preflight = await runAdminCommandAllowFailure(["preflight", "--profile", "production"], env);
+  const check = preflight.checks?.find(item => item.id === "embedding_provider");
+  expect(check?.status).toBe("pass");
+  expect(check?.details?.retrieval).toBe("text");
+  const smoke = await runProviderSmokeAllowFailure(["--profile", "production", "--only", "embedding"], env);
+  expect(smoke.ok).toBe(true);
+  expect(smoke.checks?.find(item => item.id === "embedding")?.details?.externalRequestMade).toBe(false);
 });
 
 test("Browser-STT-Capture erzeugt providerkompatible WAV-Segmente", async () => {
@@ -1446,12 +1588,15 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   });
   expect(learnordieResponsesMockSmoke.ok).toBe(true);
   expect(learnordieResponsesMockSmoke.blockers).toEqual([]);
-  for (const checkId of ["ai", "lecturer_assistant", "chat_moderation", "question_generator"]) {
+  for (const checkId of ["ai", "lecturer_assistant", "question_generator"]) {
     const check = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === checkId);
     expect(check?.status, checkId).toBe("pass");
     expect(check?.details?.provider, checkId).toBe("learnordie-responses");
   }
   const learnordieAiCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "ai");
+  const admissionCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "chat_moderation");
+  expect(admissionCheck?.status).toBe("warn");
+  expect(admissionCheck?.details?.externalRoundtrip).toBe(false);
   expect((learnordieAiCheck?.details?.stream as { provider?: string } | undefined)?.provider).toBe("learnordie-responses");
   const learnordieLecturerAssistantCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "lecturer_assistant");
   expect((learnordieLecturerAssistantCheck?.details?.toolPlan as { actions?: string[] } | undefined)?.actions).toContain("evaluation_focus");
@@ -1633,7 +1778,6 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
     "LEARNBUDDY_JOB_PROVIDER",
     "LEARNBUDDY_AI_PROVIDER",
     "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-    "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
     "LEARNBUDDY_QUESTION_GENERATOR",
     "LEARNBUDDY_EMBEDDING_PROVIDER",
     "LEARNBUDDY_OCR_PROVIDER",
@@ -1657,7 +1801,15 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
     "--skip-worker"
   ], {
     NEXT_PUBLIC_APP_URL: "https://learnbuddy-preview.learnbuddy.cloud",
-    LEARNBUDDY_DEPLOYMENT_ENV: "production"
+    LEARNBUDDY_DEPLOYMENT_ENV: "production",
+    // Provider-Keys aus der Shell des Entwicklers duerfen dieses Szenario nicht verfaelschen.
+    LEARNORDIE_LLM_PROXY_API_KEY: "",
+    LEARNBUDDY_LLM_PROXY_API_KEY: "",
+    CTOX_LLM_PROXY_API_KEY: "",
+    LEARNORDIE_MINIMAX_API_KEY: "",
+    MINIMAX_API_KEY: "",
+    MISTRAL_API_KEY: "",
+    LEARNBUDDY_STT_API_KEY: ""
   });
   expect(missingEnvReleaseGate.ok).toBe(false);
   expect(missingEnvReleaseGate.releaseReady).toBe(false);
@@ -2309,7 +2461,7 @@ MISTRAL_API_KEY=replace-with-mistral-key
 
   await page.goto(`/auth/magic?token=${"x".repeat(2000)}`);
   await expect(page).toHaveURL(/\/lecturer\/login\?error=invalid-token$/);
-  await expect(page.getByText("Dieser Magic Link ist abgelaufen oder wurde bereits verwendet.")).toBeVisible();
+  await expect(page.getByText("Dieser Link ist abgelaufen oder wurde schon verwendet. Fordere einen Code an.")).toBeVisible();
 
   const oversizedPublicEvent = await page.request.post("/api/events", {
     data: {
@@ -2326,6 +2478,15 @@ MISTRAL_API_KEY=replace-with-mistral-key
     }
   });
   expect(oversizedPublicEvent.status()).toBe(413);
+  const claimSql = postgres(e2eDatabaseUrl, { max: 1, prepare: false });
+  try {
+    const [fixture] = await claimSql<{ id: string; seriesId: string }[]>`select id, series_id as "seriesId" from lectures where public_token = 'gleitlagerung-demo'`;
+    await enrollSmokeParticipant(page, { ...fixture, seriesTitle: "Maschinenelemente I" }, { anonymousKey: "spoofed-answer-e2e", pseudonym: "Event Guard" });
+  } finally { await claimSql.end(); }
+  const legacyLiveAnswer = await page.request.post("/api/events", { data: {
+    lectureToken: "gleitlagerung-demo", eventType: "answer_selected", anonymousKey: "spoofed-answer-e2e", payload: { mode: "live", level: "4.0", selected: "A", correct: true, points: 999 }
+  } });
+  expect(legacyLiveAnswer.status()).toBe(409);
   const spoofedAnswer = await page.request.post("/api/events", {
     data: {
       lectureToken: "gleitlagerung-demo",
@@ -2333,7 +2494,7 @@ MISTRAL_API_KEY=replace-with-mistral-key
       anonymousKey: "spoofed-answer-e2e",
       pseudonym: "Event Guard",
       payload: {
-        mode: "live",
+        mode: "learn",
         level: "4.0",
         selected: "A",
         selectedAnswerKey: "A",
@@ -2400,7 +2561,8 @@ MISTRAL_API_KEY=replace-with-mistral-key
   expect(sessionPayload.expiresAt).toBeGreaterThan(Date.now() + 29 * 24 * 60 * 60 * 1000);
   await expectMagicLinkCannotBeReused(browser, magicLink);
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Vorlesungsreihe" })).toContainText("Maschinenelemente I");
+  const reloadedLecture = await expectDemoStudio(page);
+  expect(reloadedLecture.seriesTitle).toBe("Maschinenelemente I");
 
   const lecturesResponse = await page.request.get("/api/lectures");
   expect(lecturesResponse.ok()).toBe(true);
@@ -2576,39 +2738,34 @@ MISTRAL_API_KEY=replace-with-mistral-key
   const assistantPayload = await assistantResponse.json() as { lecture?: typeof lecture };
   const assistantMessage = assistantPayload.lecture?.assistantMessages?.find((message) => message.role === "assistant");
   expect(assistantMessage?.metadata?.provider).toBe("openai-compatible");
-  expect(assistantMessage?.metadata?.model).toBe("mock-e2e-chat");
+  expect(assistantMessage?.metadata?.model).toBe("MiniMax-M3");
   expect(assistantMessage?.metadata?.toolPlan?.[0]?.action).toBe("slide_point");
   expect(assistantMessage?.metadata?.toolPlan?.[1]?.action).toBe("review_draft");
   expect(assistantMessage?.content).toContain("Mock-Erklärung");
 
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openStudioTool(page, "Assistent");
   await expect(page.getByLabel("Planungsassistent direkt an der Folie")).toBeVisible();
   await page.getByLabel("Nachricht an den Planungsassistenten").fill("Welche Erklärung passt direkt auf diese Folie?");
   await page.getByRole("button", { name: "Senden" }).click();
   await expect(page.getByText("Mock-Erklärung").last()).toBeVisible();
-  await expect(page.getByLabel("Agent-Schritte").last()).toContainText("AIProvider genutzt");
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("1. Folienpunkt übernehmen");
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("2. Fragenentwurf anlegen");
-  await expect(page.getByRole("button", { name: "Toolkette ausführen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Alle ausführen" })).toBeVisible();
   await expect(page.getByRole("button", { name: "1. Folienpunkt übernehmen" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "2. Fragenentwurf" })).toBeVisible();
-  await page.getByRole("button", { name: "Toolkette ausführen" }).click();
+  await expect(page.getByRole("button", { name: "2. Frage entwerfen" })).toBeVisible();
+  await page.getByRole("button", { name: "Alle ausführen" }).click();
   await expect(page.getByText("Ich habe diesen Folienpunkt").last()).toBeVisible();
   await expect(page.getByText("Ich habe einen Fragenentwurf").last()).toBeVisible();
   await page.getByLabel("Nachricht an den Planungsassistenten").fill("Bitte schärfe die Evaluation auf diese Folie.");
   await page.getByRole("button", { name: "Senden" }).click();
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("1. Evaluation schärfen");
   await page.getByRole("button", { name: "1. Evaluation schärfen" }).click();
   await expect(page.getByText("Ich habe die Evaluation").last()).toBeVisible();
   await expect(page.getByLabel("Evaluation direkt auf der Folie")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Evaluationstitel" })).toHaveValue(/Evaluation: Stribeck-Kurve/);
   await page.getByRole("button", { name: "Evaluation schließen" }).click();
   await expect(page.getByLabel("Evaluation direkt auf der Folie")).toBeHidden();
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openStudioTool(page, "Assistent");
   await expect(page.getByLabel("Planungsassistent direkt an der Folie")).toBeVisible();
   await page.getByLabel("Nachricht an den Planungsassistenten").fill("Bitte erhöhe die Fragedichte im Learn-Modus für die Nacharbeit.");
   await page.getByRole("button", { name: "Senden" }).click();
-  await expect(page.getByLabel("Nächste Agent-Aktionen").last()).toContainText("1. Learn-Fragedichte setzen");
   await expect(page.getByRole("button", { name: "1. Fragedichte setzen" })).toBeVisible();
   await page.getByRole("button", { name: "1. Fragedichte setzen" }).click();
   await expect(page.getByText("Ich habe die Learn-Fragedichte auf 6").last()).toBeVisible();
@@ -2629,22 +2786,22 @@ MISTRAL_API_KEY=replace-with-mistral-key
   });
   expect(resetLearnDensityResponse.ok()).toBe(true);
   await page.reload();
-  await page.getByRole("button", { name: "Assistent an dieser Folie" }).click();
+  await openStudioTool(page, "Assistent");
   await expect(page.getByText("Mock-Erklärung").last()).toBeVisible();
   await expect(page.getByLabel("Planungsassistent direkt an der Folie")).toContainText("Ich habe die Learn-Fragedichte auf 6");
   await page.getByLabel("Assistent schließen").click();
-  await page.getByRole("button", { name: "Evaluation im Learn-Modus" }).click();
+  await openStudioTool(page, "Evaluation");
   await expect(page.getByRole("textbox", { name: "Evaluationstitel" })).toHaveValue(/Evaluation: Stribeck-Kurve/);
   await page.getByLabel("Evaluation schließen").click();
 
-  await page.getByRole("button", { name: /Fragen auf dieser Folie/ }).click();
+  await openStudioTool(page, "Fragen");
   await expect(page.getByLabel("Fragen direkt auf der Folie")).toBeVisible();
   await expect(page.getByLabel("Fragenvorschläge").getByText("Assistent: Hydrodynamische Gleitlagerung")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Fragetext Niveau 2.0" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Fragetext Niveau 2.0" })).toContainText(/Warum ist Mischreibung beim Anlauf eines Gleitlagers kritisch/);
 
   await page.getByLabel("Studio-Menü").click();
-  await page.getByRole("link", { name: "Logout" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/\/$/);
 
   await page.goto("/lecturer");
@@ -2682,7 +2839,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
   expect(manifest.selfContained).toBe(true);
   expect(manifest.externalAssetCount).toBe(0);
   expect(manifest.slideEngine).toMatchObject({
-    renderer: "learnordie-slide-standalone-v1",
+    renderer: "learnordie-slide-standalone-v2",
     slideDocumentSchemaVersion: "learnordie.slide.v1"
   });
   expect(manifest.slideEngine?.slideDocumentId).toMatch(/^lecture:[^:]+:deck$/);
@@ -2748,7 +2905,7 @@ test("Standalone-ZIP-Manifest passt zu allen Archiv-Einträgen", async ({ page }
 
   const html = entries.get("index.html")?.toString("utf8") ?? "";
   expect(html).toContain('id="learnbuddy-data"');
-  expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v1"');
+  expect(html).toContain('data-slide-engine="learnordie-slide-standalone-v2"');
   expect(html).toContain('data-slide-document-version="learnordie.slide.v1"');
   expect(html).toContain('data-print-profile="browser-pdf-a4"');
   expect(html).toContain("Self-contained: ja, externe Assets: 0");
@@ -2777,7 +2934,7 @@ test("Magic-Link-Rate-Limit blockiert zu viele Anfragen", async ({ page }) => {
   expect(blocked.status()).toBe(429);
   expect(blocked.headers()["retry-after"]).toBeTruthy();
   const payload = await blocked.json() as { error?: string; retryAfterSeconds?: number };
-  expect(payload.error).toBe("Zu viele Magic-Link-Anfragen. Bitte später erneut versuchen.");
+  expect(payload.error).toBe("Zu viele Anfragen. Bitte in ein paar Minuten erneut versuchen.");
   expect(payload.retryAfterSeconds).toBeGreaterThan(0);
   assertClean();
 });
@@ -2961,7 +3118,7 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
   const pptxName = "robuste-gleitlagerung.pptx";
 
   await loginLecturer(page);
-  await page.getByLabel("Quellen für diese Folie").click();
+  await openStudioTool(page, "Quellen");
   await expect(page.getByLabel("Quellen direkt an der Folie")).toBeVisible();
   const sourceFileInput = () => page
     .getByLabel("Quellen direkt an der Folie")
@@ -2997,7 +3154,7 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
   const sql = postgres(e2eDatabaseUrl, { max: 1, prepare: false });
   try {
     await page.getByRole("button", { name: "Link" }).click();
-    await page.getByLabel("URL").fill(blockedLoopbackUrlText);
+    await page.getByLabel("Weblink").fill(blockedLoopbackUrlText);
     const urlResponsePromise = page.waitForResponse((response) => (
       response.url().includes("/api/lectures/") &&
       response.url().endsWith("/materials") &&
@@ -3016,10 +3173,9 @@ test("Materialupload extrahiert PDF- und PPTX-Fachtext robust", async ({ page })
     await page.getByRole("button", { name: "Fragen aktualisieren" }).click();
     await processingResponse;
     await expect(page.getByText("Materialverarbeitung abgeschlossen.")).toBeVisible();
-    await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("Materialien");
+    await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("Quellen");
     await expect(page.getByLabel("Letzte Materialverarbeitung")).toContainText("URL-Abruf blockiert");
-    await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Assets");
-    await expect(page.getByLabel("Asset-Bibliothek")).toContainText("Quelle");
+    await expect(page.getByLabel("Erkannte Inhalte")).toContainText("Quelle");
 
     const chunks = await sql<{ content: string; source_ref: string }[]>`
       select ac.content, ac.source_ref
@@ -3208,7 +3364,7 @@ test("Materialverarbeitung lehnt doppelte KI-Fragevarianten ab", async ({ page }
     }]);
 
     await page.goto(`${app.url}/lecturer`);
-    await expect(page.getByRole("textbox", { name: "Folientitel" })).toContainText("Hydrodynamische Gleitlagerung");
+    await expectDemoStudio(page);
     const csrfToken = await lecturerCsrfToken(page);
     const lecturesResponse = await page.request.get(`${app.url}/api/lectures`);
     expect(lecturesResponse.ok()).toBe(true);
@@ -3247,19 +3403,25 @@ test("Materialverarbeitung lehnt doppelte KI-Fragevarianten ab", async ({ page }
   }
 });
 
-test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", async ({ page }) => {
+test("Student Live: Teilnahme ohne Account, serverseitige Antwort und Live-Rangliste", async ({ page, browser }) => {
+  test.setTimeout(120000);
+  const teacherContext = await browser.newContext();
+  const teacher = await teacherContext.newPage();
+  const { lecture, command } = await createSmokeLecture(teacher);
+  try {
+  await command({ action: "start" });
+  await command({ action: "slide", slideIndex: 0, showIntro: false });
+  await command({ action: "fire", familyIndex: 0, durationSeconds: 180 });
   const assertClean = attachBrowserDiagnostics(page);
-  const chatQuestionUrl = "/api/lecture/gleitlagerung-demo/chat-questions";
+  const chatQuestionUrl = `/api/lecture/${lecture.publicToken}/chat-questions`;
 
-  await page.goto("/l/gleitlagerung-demo");
-  await expect(page.locator(".pseudonym-suggestion")).toHaveCount(3);
-  await page.getByLabel("Eigenes Pseudonym").fill("E2E Lager");
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await page.goto(`/l/${lecture.publicToken}`);
+  await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
+  await expectNativeCanvas(page);
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
 
-  await page.getByRole("button", { name: "Chatfrage stellen" }).click();
-  await page.getByPlaceholder("Fachliche Frage zur Vorlesung stellen ...").fill("Wie verändert Viskosität die Stribeck-Kurve?");
+  await page.getByRole("button", { name: "Frage stellen" }).click();
+  await page.getByLabel("Deine Frage").fill("Wie verändert Viskosität die Stribeck-Kurve?");
   const chatResponsePromise = page.waitForResponse((response) => (
     response.url().includes(chatQuestionUrl) &&
     response.request().method() === "POST"
@@ -3269,6 +3431,7 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   const chatPayload = await chatResponse.json() as {
     accepted?: boolean;
     chatQuestion?: {
+      id?: string;
       moderationProvider?: string;
       moderationModel?: string;
       moderationConfidence?: number;
@@ -3276,10 +3439,23 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
     };
   };
   expect(chatPayload.accepted).toBe(true);
-  expect(chatPayload.chatQuestion?.moderationProvider).toBe("openai-compatible");
-  expect(chatPayload.chatQuestion?.moderationModel).toBe("mock-e2e-chat");
-  expect(chatPayload.chatQuestion?.moderationConfidence).toBeGreaterThanOrEqual(90);
-  expect(chatPayload.chatQuestion?.moderationSignals).toContain("Stribeck");
+  expect(chatPayload.chatQuestion?.moderationProvider).toBeUndefined();
+  expect(chatPayload.chatQuestion?.moderationModel).toBeUndefined();
+  expect(chatPayload.chatQuestion?.moderationConfidence).toBeUndefined();
+  expect(chatPayload.chatQuestion?.moderationSignals).toBeUndefined();
+  if (!new URL(e2eDatabaseUrl).pathname.includes("e2e")) throw new Error("Moderation assertions require the isolated E2E database.");
+  const moderationSql = postgres(e2eDatabaseUrl, { max: 1, prepare: false });
+  try {
+    const [moderation] = await moderationSql`
+      select moderation_provider, moderation_model, moderation_confidence, moderation_signals
+      from student_chat_questions where id=${chatPayload.chatQuestion!.id!} and lecture_id=${lecture.id}
+    `;
+    // Admission queues the student's question; it is not a model's factual approval.
+    expect(moderation.moderation_provider).toBe("learnordie-admission");
+    expect(moderation.moderation_model).toBe("bounded-admission-v2");
+    expect(moderation.moderation_confidence).toBe(0);
+    expect(moderation.moderation_signals).toContain("pending-source-review");
+  } finally { await moderationSql.end(); }
   await expect(page.getByText("Frage wurde an den Referenten weitergeleitet.")).toBeVisible();
   await page.getByRole("button", { name: "Schließen" }).click();
 
@@ -3289,7 +3465,10 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
       pseudonym: "Ohne Key"
     }
   });
-  expect(missingKeyResponse.status()).toBe(400);
+  // Identity is taken from the signed participant session, never a body key.
+  expect(missingKeyResponse.status()).toBe(200);
+  const sessionIdentityPayload = await missingKeyResponse.json();
+  expect(sessionIdentityPayload.chatQuestion.pseudonym).not.toBe("Ohne Key");
 
   const oversizedResponse = await page.request.post(chatQuestionUrl, {
     data: {
@@ -3301,47 +3480,52 @@ test("Student Live: Teilnahme ohne Account, Sofortfeedback und Leaderboard", asy
   expect(oversizedResponse.status()).toBe(413);
 
   const rateLimitKey = `chat-rate-${Date.now().toString(36)}`;
-  for (let index = 0; index < 3; index += 1) {
-    const response = await page.request.post(chatQuestionUrl, {
-      data: {
-        text: `Wie verändert Viskosität die Stribeck-Kurve bei Mischreibung ${index}?`,
-        pseudonym: "Rate Limit",
-        anonymousKey: rateLimitKey
-      }
-    });
-    expect(response.ok()).toBe(true);
-  }
+  // The UI submission and keyless submission already consumed two attempts.
+  const lastAllowedResponse = await page.request.post(chatQuestionUrl, {
+    data: {
+      text: "Wie verändert Viskosität die Stribeck-Kurve bei Mischreibung?",
+      pseudonym: "Rate Limit",
+      anonymousKey: rateLimitKey
+    }
+  });
+  expect(lastAllowedResponse.ok()).toBe(true);
   const blockedResponse = await page.request.post(chatQuestionUrl, {
     data: {
       text: "Wie verändert Viskosität die Stribeck-Kurve beim nächsten Versuch?",
       pseudonym: "Rate Limit",
-      anonymousKey: rateLimitKey
+      anonymousKey: `${rateLimitKey}-spoofed-new-identity`
     }
   });
   expect(blockedResponse.status()).toBe(429);
   expect(blockedResponse.headers()["retry-after"]).toBe("900");
 
-  await page.getByRole("button", { name: /Es treten gleichzeitig Schmierfilmanteile/ }).click();
-  await expect(page.getByText("Antwort gespeichert: richtig.")).toBeVisible();
-  await expect(page.getByText("+3 Punkte")).toBeVisible();
+  await page.getByRole("button", { name: /Ein Schmierfilm trägt teilweise/ }).click();
+  await expect(page.locator(".question-feedback")).toContainText("Richtig · 3 Punkte");
+  await command({ action: "close" });
+  await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
+  await page.getByRole("button", { name: "Pseudonym", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Pseudonym sichern" })).toBeVisible();
+  await page.getByLabel("Eigenes Pseudonym", { exact: true }).fill("E2E Lager");
   await page.getByRole("button", { name: "Sichern" }).click();
-  await expect(page.getByText("Pseudonym gesichert. Die Vorlesung liegt jetzt in deinem Dashboard.")).toBeVisible();
+  await expect(page.getByText("Pseudonym gesichert")).toBeVisible();
 
-  await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
-  await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Rangliste" }).click();
+  await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.getByText(/1 · E2E Lager/)).toBeVisible();
   await expect(page.locator(".leader-row.self").filter({ hasText: "E2E Lager" })).toContainText("3");
   assertClean();
+  } finally { await command({ action: "end" }); await teacherContext.close(); }
 });
 
-test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({ page }) => {
+test("Historische Lern-Rangliste: 30 Studierende, Wiederholungen ohne Zusatzpunkte, Top10 und eigene Position", async ({ page }) => {
+  test.setTimeout(120000);
   const assertClean = attachBrowserDiagnostics(page);
   const runId = Date.now().toString(36);
-  const participants = await seedLiveLeaderboardLoad(page, runId);
+  const { lecture } = await createSmokeLecture(page);
+  const participants = await seedPracticeLeaderboardLoad(page, runId, lecture);
   const topParticipant = participants[0];
 
-  const apiResponse = await page.request.get(`/api/lecture/gleitlagerung-demo/leaderboard?anonymousKey=${encodeURIComponent(topParticipant.anonymousKey)}`);
+  const apiResponse = await page.request.get(`/api/lecture/${lecture.publicToken}/leaderboard?anonymousKey=${encodeURIComponent(topParticipant.anonymousKey)}`);
   expect(apiResponse.ok()).toBe(true);
   const leaderboardPayload = await apiResponse.json() as {
     enabled?: boolean;
@@ -3359,13 +3543,13 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
   expect(leaderboardPayload.entries?.[0]).toMatchObject({
     rank: 1,
     name: "Load 01",
-    points: 12,
-    correct: 3,
-    answers: 3,
+    points: 4,
+    correct: 1,
+    answers: 1,
     self: true
   });
   const lowerParticipant = participants[29];
-  const lowerResponse = await page.request.get(`/api/lecture/gleitlagerung-demo/leaderboard?anonymousKey=${encodeURIComponent(lowerParticipant.anonymousKey)}`);
+  const lowerResponse = await page.request.get(`/api/lecture/${lecture.publicToken}/leaderboard?anonymousKey=${encodeURIComponent(lowerParticipant.anonymousKey)}`);
   expect(lowerResponse.ok()).toBe(true);
   const lowerPayload = await lowerResponse.json() as typeof leaderboardPayload;
   const lowerSelf = lowerPayload.entries?.find((entry) => entry.self);
@@ -3379,27 +3563,35 @@ test("Student Live: Leaderboard bleibt bei 30 Studierenden konsistent", async ({
   });
   expect(lowerSelf?.rank).toBeGreaterThan(10);
 
-  await page.goto("/l/gleitlagerung-demo");
-  await page.getByLabel("Eigenes Pseudonym").fill(`Viewer ${runId}`);
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
-  await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
-  await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
+  await page.goto(`/learn/${lecture.publicToken}`);
+  await expectNativeCanvas(page);
+  await page.locator(".learn-more summary").click();
+  await page.getByRole("button", { name: "Rangliste" }).click();
+  await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
   await expect(page.locator(".leader-row")).toHaveCount(10);
   await expect(page.locator(".leader-row").first()).toContainText("1 · Load 01");
-  await expect(page.locator(".leader-row").first()).toContainText("12");
+  await expect(page.locator(".leader-row").first().locator("strong")).toHaveText("4");
   assertClean();
 });
 
-test("Live-Load-Smoke prueft 30 pseudonyme Teilnahmen ueber oeffentliche APIs", async () => {
-  const result = await runLiveLoadSmokeAllowFailure([
+test("Live-Load-Smoke prueft 30 pseudonyme Teilnahmen mit authentifizierter Test-Vorlesung", async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  const { lecture, csrf } = await createSmokeLecture(page);
+  const sessionFile = testInfo.outputPath("owner-session.json");
+  const cookie = (await page.context().cookies()).filter((item) => item.name === lecturerSessionCookie).map((item) => `${item.name}=${item.value}`).join("; ");
+  await mkdir(path.dirname(sessionFile), { recursive: true });
+  await writeFile(sessionFile, JSON.stringify({ cookie, csrfToken: csrf }), { mode: 0o600 });
+  let result: Awaited<ReturnType<typeof runLiveLoadSmokeAllowFailure>>;
+  try { result = await runLiveLoadSmokeAllowFailure([
     "--url", e2eBaseOrigin,
-    "--lecture-token", "gleitlagerung-demo",
+    "--lecture-token", lecture.publicToken,
+    "--own-test-lecture", "--session-file", sessionFile,
     "--participants", "30",
-    "--concurrency", "10",
+    "--concurrency", "2",
     "--timeout-ms", "60000"
-  ]);
+  ]); } finally { await rm(sessionFile, { force: true }); }
 
-  expect(result.ok).toBe(true);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
   const passed = new Set(
     (result.checks ?? [])
       .filter((check) => check.status === "pass")
@@ -3432,24 +3624,21 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
 
-  const hotspots = page.getByLabel("Fragen-Hotspots").locator("button");
-  await expect(hotspots).toHaveCount(4);
-  await setRangeValue(page, ".learn-bar input", "1");
+  const hotspots = page.getByLabel("Fragen-Spots auf der Folie").locator("button");
   await expect(hotspots).toHaveCount(1);
-  await setRangeValue(page, ".learn-bar input", "7");
-  await expect(hotspots).toHaveCount(7);
 
-  await page.getByLabel("Frage Niveau 1.0 anzeigen").first().click();
+  await hotspots.first().click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
-  await expect(page.getByText("Eine schwer belastete Welle läuft häufig langsam an.")).toBeVisible();
+  await page.getByLabel("Quizfrage").getByRole("button", { name: "1.0", exact: true }).click();
+  await expect(page.getByText("Eine stark belastete Welle läuft häufig langsam an. Welche Maßnahme schützt das Gleitlager beim Start am besten?", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "KI fragen" }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
   await expect(page.getByRole("heading", { name: "KI-Assistent" })).toBeVisible();
-  await page.getByRole("button", { name: "Senden" }).click();
+  await page.getByRole("button", { name: "Begriffe klären" }).click();
   await expect(page.getByText("Mock-Erklärung")).toBeVisible();
-  await expect(page.getByText(/Tokens heute verfügbar/)).toBeVisible();
+  await expect(page.getByText(/KI-Kontingent heute/)).toBeVisible();
   const aiChat = page.getByLabel("KI Chat");
   await expect(aiChat).toHaveAttribute("data-ai-answer-state", "answered");
   await expect(aiChat).toHaveAttribute("data-ai-stream-source", "provider");
@@ -3490,79 +3679,55 @@ test("Learn-Modus: Fragedichte, KI-Chat-Link, Leaderboard und Mobile-Fit", async
     "--require-ai-provider",
     "--timeout-ms", "45000"
   ]);
-  expect(liveAiProviderSmoke.ok).toBe(true);
+  expect(liveAiProviderSmoke.ok, JSON.stringify(liveAiProviderSmoke)).toBe(true);
   const learnSmokeCheck = liveAiProviderSmoke.checks?.find((check) => check.id === "learn_browser");
   expect(learnSmokeCheck?.status).toBe("pass");
   expect(learnSmokeCheck?.details?.aiStreamSource).toBe("provider");
   expect(learnSmokeCheck?.details?.aiProvider).toBe("openai-compatible");
   await page.getByLabel("Chat schließen").click();
 
-  await page.getByRole("button", { name: "Leaderboard anzeigen" }).click();
-  await expect(page.getByRole("complementary", { name: "Leaderboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Folie ansehen", exact: true }).click();
+  await page.getByLabel("Weitere Aktionen", { exact: true }).filter({ hasText: "Mehr" }).click();
+  await page.getByRole("button", { name: "Rangliste" }).click();
+  await expect(page.getByRole("complementary", { name: "Rangliste" })).toBeVisible();
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   assertClean();
 });
 
-test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows", async ({ page }) => {
+test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows", async ({ page }, testInfo) => {
   const assertClean = attachBrowserDiagnostics(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Vorlesungscode rein, Lernrunde starten" })).toBeVisible();
-  await expect(page.getByText("LERNEN IM NORDEN")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer");
+  await expect(page.getByRole("heading", { name: "Vorlesung beitreten" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Dozentenlogin" })).toHaveAttribute("href", "/lecturer/login");
   await expect(page.getByText("Hydrodynamische Gleitlagerung")).toHaveCount(0);
   await page.getByRole("link", { name: "Dozentenlogin" }).click();
-  await expect(page.locator(".home-route-cover[data-route='lecturer']")).toBeAttached();
-  const homeRouteCoverMotion = await page.evaluate(() => {
-    const cover = document.querySelector<HTMLElement>(".home-route-cover");
-    if (!cover) throw new Error("Home route cover missing.");
-    return {
-      route: cover.dataset.route,
-      animationName: getComputedStyle(cover).animationName,
-      originY: getComputedStyle(cover).transformOrigin.split(" ")[1],
-      grid: getComputedStyle(cover).backgroundImage
-    };
-  });
-  expect(homeRouteCoverMotion.route).toBe("lecturer");
-  expect(homeRouteCoverMotion.animationName).toContain("lb-route-cover-in");
-  expect(Number.parseFloat(homeRouteCoverMotion.originY)).toBeGreaterThan(400);
-  expect(homeRouteCoverMotion.grid).toContain("linear-gradient");
+  await expect(page.locator(".home-route-cover")).toHaveCount(0);
   await expect(page).toHaveURL(/\/lecturer\/login$/);
   await page.goto("/l/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/l\/gleitlagerung-demo$/);
-  await page.getByLabel("Eigenes Pseudonym").fill("Motion Gate");
-  await page.getByRole("button", { name: "Teilnehmen" }).click();
-  await expect(page.locator(".student-gate-screen")).toHaveAttribute("data-joining", "true");
-  const studentGateMotion = await page.evaluate(() => {
-    const cover = document.querySelector<HTMLElement>(".student-gate-cover");
-    const card = document.querySelector<HTMLElement>(".student-gate-card");
-    if (!cover) throw new Error("Student gate cover missing.");
-    if (!card) throw new Error("Student gate card missing.");
-    const coverBox = cover.getBoundingClientRect();
-    const coverOriginParts = getComputedStyle(cover).transformOrigin.split(" ");
-    const coverOriginY = Number.parseFloat(coverOriginParts[1] ?? "0");
-    return {
-      coverAnimation: getComputedStyle(cover).animationName,
-      coverOriginYRatio: coverOriginY / coverBox.height,
-      cardState: card.dataset.joining,
-      coverGrid: getComputedStyle(cover).backgroundImage
-    };
-  });
-  expect(studentGateMotion.coverAnimation).toContain("lb-student-gate-cover-in");
-  expect(studentGateMotion.coverOriginYRatio).toBeGreaterThan(0.95);
-  expect(studentGateMotion.cardState).toBe("true");
-  expect(studentGateMotion.coverGrid).toContain("linear-gradient");
+  // The retired mandatory gate has no animation anymore: the actual join slide
+  // is immediately available and the live canvas keeps its entry motion.
+  await expect(page.locator(".student-gate-screen")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
+  await expect(page.locator(".lecture-join-qr canvas")).toBeVisible();
+  await expect(page.locator(".slide-lecture-link")).toHaveAttribute("href", /\/l\/ME1-GL-2026$/);
+  const liveEntry = await page.locator('[data-slide-engine="v1"]').evaluate((element) => ({
+    animation: getComputedStyle(element).animationName, motionRoot: Boolean(element.closest(".lb-motion-root"))
+  }));
+  expect(liveEntry.motionRoot).toBe(true);
+  expect(liveEntry.animation).not.toBe("none");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
-  await expect(page.getByLabel("Quizfrage")).toBeVisible();
+  await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
 
   await page.goto("/learn/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expectNativeCanvas(page);
 
-  await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
+  await page.getByLabel("Fragen-Spots auf der Folie", { exact: true }).getByRole("button").first().click();
   await expect(page.locator(".learn-hotspot-shared-ghost[data-shared-element='learn-hotspot']")).toBeAttached();
   const hotspotSharedMotion = await page.evaluate(() => {
     const ghost = document.querySelector<HTMLElement>(".learn-hotspot-shared-ghost");
@@ -3577,7 +3742,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(hotspotSharedMotion.sharedElement).toBe("learn-hotspot");
-  expect(hotspotSharedMotion.level).toBe("3.0");
+  expect(hotspotSharedMotion.level).toBe("2.0");
   expect(hotspotSharedMotion.hasSharedClass).toBe(true);
   expect(hotspotSharedMotion.duration).toBe(620);
   expect(hotspotSharedMotion.radius).toBe("999px");
@@ -3614,9 +3779,10 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       drawerAnimation: getComputedStyle(drawer).animationName,
       drawerRadius: getComputedStyle(drawer).borderTopLeftRadius,
       drawerOriginRatio,
+      originTraceHidden: !originTrace || getComputedStyle(originTrace).display === "none",
+      drawerMarkerHidden: getComputedStyle(drawer, "::before").display === "none",
       drawerHasTechnicalGrid: getComputedStyle(drawer).backgroundImage.includes("linear-gradient"),
       originTraceSocketAnimation: originTrace ? getComputedStyle(originTrace, "::before").animationName : "",
-      slideAxisAnimation: getComputedStyle(slideScreen, "::after").animationName,
       answerDelays: answers.map((answer) => toMs(getComputedStyle(answer).animationDelay)),
       hotspotHasOvershoot: cssText.includes("scale(1.05)")
     };
@@ -3624,19 +3790,18 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(learnMotion.panelDurationMs).toBe(420);
   expect(learnMotion.sheetRadius).toBe("18px");
   expect(learnMotion.drawerOrigin).toBe("hotspot");
-  expect(learnMotion.drawerAnimation).toContain("lb-drawer-rise");
-  expect(learnMotion.drawerRadius).toBe("18px");
-  expect(learnMotion.drawerOriginRatio).toBeGreaterThan(0.7);
-  expect(learnMotion.drawerHasTechnicalGrid).toBe(true);
-  expect(learnMotion.originTraceSocketAnimation).toContain("lb-origin-socket-in");
-  expect(learnMotion.slideAxisAnimation).toContain("lb-stage-axis-in");
+  expect(learnMotion.drawerAnimation).toContain("app-panel-enter");
+  expect(learnMotion.drawerRadius).toBe("12px");
+  expect(learnMotion.drawerMarkerHidden).toBe(true);
+  expect(learnMotion.drawerHasTechnicalGrid).toBe(false);
+  expect(learnMotion.originTraceHidden).toBe(true);
   expect(learnMotion.answerDelays).toHaveLength(4);
-  expect(learnMotion.answerDelays[1]).toBeGreaterThan(learnMotion.answerDelays[0]);
-  expect(learnMotion.answerDelays[3]).toBeGreaterThan(learnMotion.answerDelays[2]);
+  expect(learnMotion.answerDelays).toEqual([0, 0, 0, 0]);
   expect(learnMotion.hotspotHasOvershoot).toBe(false);
   await expect(page.locator(".learn-hotspot-shared-ghost")).toHaveCount(0, { timeout: 1500 });
 
-  await page.getByRole("button", { name: "KI fragen" }).click();
+  await page.locator(".learn-more summary").click();
+  await page.getByLabel("Lernsteuerung").getByRole("button", { name: "KI fragen", exact: true }).click();
   await expect(page.getByLabel("KI Chat")).toBeVisible();
   const chatMotion = await page.evaluate(() => {
     const panel = document.querySelector<HTMLElement>(".overlay-panel.tall");
@@ -3644,21 +3809,21 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     return {
       origin: panel.dataset.panelOrigin,
       animationName: getComputedStyle(panel).animationName,
-      radius: getComputedStyle(panel).borderTopLeftRadius,
-      railBackground: getComputedStyle(panel, "::after").backgroundImage
+      radius: getComputedStyle(panel).borderTopLeftRadius
     };
   });
   expect(chatMotion.origin).toBe("chat");
-  expect(chatMotion.animationName).toContain("lb-inspector-right-in");
-  expect(chatMotion.radius).toBe("18px");
-  expect(chatMotion.railBackground).toContain("linear-gradient");
+  expect(chatMotion.animationName).toContain("app-panel-enter");
+  expect(chatMotion.radius).toBe("12px");
   await page.getByLabel("Chat schließen").click();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/learn/gleitlagerung-demo");
-  await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
-  await page.getByLabel("Frage Niveau 3.0 anzeigen").first().click();
+  await expectNativeCanvas(page);
+  await page.locator(".learn-more summary").click();
+  await page.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
   await expect(page.getByLabel("Quizfrage")).toBeVisible();
+  await expect(page.locator(".learn-more")).not.toHaveAttribute("open", "");
   const mobileLearnFit = await page.evaluate(() => {
     const drawer = document.querySelector<HTMLElement>(".question-drawer");
     const slide = document.querySelector<HTMLElement>(".slide-screen");
@@ -3682,24 +3847,24 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await loginLecturer(page);
+  const studioLecture = await expectDemoStudio(page);
   const studioStageMotion = await page.evaluate(() => {
     const stage = document.querySelector<HTMLElement>(".studio-slide-stage");
     if (!stage) throw new Error("Studio stage missing.");
     return {
-      axisAnimation: getComputedStyle(stage, "::after").animationName,
       hasTechnicalGrid: getComputedStyle(stage).backgroundImage.includes("linear-gradient")
     };
   });
-  expect(studioStageMotion.axisAnimation).toContain("lb-stage-axis-in");
-  expect(studioStageMotion.hasTechnicalGrid).toBe(true);
+  expect(studioStageMotion.hasTechnicalGrid).toBe(false);
 
-  const filmstripButtons = page.getByLabel("Folie auswählen").getByRole("button");
+  await page.getByLabel("Folienübersicht", { exact: true }).click();
+  const filmstripButtons = page.locator(".studio-filmstrip-list").getByRole("button");
   await expect(filmstripButtons.nth(1)).toBeVisible();
   await filmstripButtons.nth(1).click();
   await expect(page.locator(".studio-slide-shared-ghost")).toBeAttached();
   const studioSharedSlideMotion = await page.evaluate(() => {
     const ghost = document.querySelector<HTMLElement>(".studio-slide-shared-ghost");
-    const stage = document.querySelector<HTMLElement>(".dashboard-slide-preview[data-slide-id]");
+    const stage = document.querySelector<HTMLElement>('.native-studio-frame [data-canvas-engine="excalidraw"]');
     const active = document.querySelector<HTMLButtonElement>(".studio-filmstrip-list button[aria-current='true']");
     if (!ghost) throw new Error("Studio shared slide ghost missing.");
     if (!stage) throw new Error("Studio stage slide missing.");
@@ -3711,6 +3876,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       duration: timing?.duration,
       activeSlideId: active.dataset.slideId,
       stageSlideId: stage.dataset.slideId,
+      stageEngine: stage.dataset.canvasEngine,
       ghostRadius: getComputedStyle(ghost).borderTopLeftRadius,
       ghostGrid: getComputedStyle(ghost).backgroundImage.includes("linear-gradient")
     };
@@ -3718,11 +3884,17 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSharedSlideMotion.sharedElement).toBe("studio-slide");
   expect(studioSharedSlideMotion.hasSharedClass).toBe(true);
   expect(studioSharedSlideMotion.duration).toBe(620);
-  expect(studioSharedSlideMotion.activeSlideId).toBe(studioSharedSlideMotion.stageSlideId);
+  expect(studioSharedSlideMotion.activeSlideId).toBe(studioLecture.slides[1].id);
+  expect(studioSharedSlideMotion.stageSlideId).toBe(studioSharedSlideMotion.activeSlideId);
+  expect(studioSharedSlideMotion.stageEngine).toBe("excalidraw");
   expect(studioSharedSlideMotion.ghostRadius).toBe("18px");
   expect(studioSharedSlideMotion.ghostGrid).toBe(true);
   await expect(page.locator(".studio-slide-shared-ghost")).toHaveCount(0, { timeout: 1500 });
+  await expectNativeCanvas(page, true);
+  await expect(page.locator('.studio-filmstrip-list button[aria-current="true"]')).toContainText(studioLecture.slides[1].title);
+  await testInfo.attach("native-filmstrip-selection", { body: await page.screenshot(), contentType: "image/png" });
 
+  await openStudioActions(page);
   await page.getByLabel("Folienwerkzeuge öffnen").click();
   await expect(page.getByLabel("Folienwerkzeuge", { exact: true })).toBeVisible();
   await page.waitForTimeout(500);
@@ -3745,14 +3917,11 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
       choiceDelays: choices.map((choice) => toMs(getComputedStyle(choice).animationDelay))
     };
   });
-  expect(toolMotion.popoverAnimation).toContain("lb-popover-from-control");
-  expect(toolMotion.popoverOriginMarkerContent).toBe("\"\"");
-  expect(toolMotion.popoverOriginMarkerBottom).toBeLessThanOrEqual(-5);
-  expect(toolMotion.popoverOriginMarkerBottom).toBeGreaterThanOrEqual(-12);
-  expect(toolMotion.popoverOriginMarkerWidth).toBe("58px");
-  expect(toolMotion.choiceDelays[4]).toBeGreaterThan(toolMotion.choiceDelays[0]);
+  expect(toolMotion.popoverAnimation).toContain("app-panel-enter");
+  expect(toolMotion.popoverOriginMarkerContent).toBe("none");
+  expect(toolMotion.choiceDelays).toEqual([0, 0, 0, 0, 0]);
 
-  await page.getByRole("button", { name: "Material zu dieser Folie hinzufügen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Quellen/ }).click();
   await expect(page.getByLabel("Quellen direkt an der Folie")).toBeVisible();
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toBeAttached();
   const studioSourceMotion = await page.evaluate(() => {
@@ -3776,13 +3945,14 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioSourceMotion.sharedElement).toBe("studio-sources");
   expect(studioSourceMotion.tool).toBe("materials");
   expect(studioSourceMotion.durations).toContain(560);
-  expect(studioSourceMotion.sheetAnimation).toContain("lb-tool-sheet-in");
-  expect(studioSourceMotion.sheetRadius).toBe("18px");
+  expect(studioSourceMotion.sheetAnimation).toContain("app-panel-enter");
+  expect(studioSourceMotion.sheetRadius).toBe("12px");
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-sources']")).toHaveCount(0, { timeout: 1500 });
   await page.getByLabel("Quellen schließen").click();
 
+  await openStudioActions(page);
   await page.getByLabel("Folienwerkzeuge öffnen").click();
-  await page.getByRole("button", { name: "Lernstand und offene Punkte dieser Folie ansehen" }).click();
+  await page.getByLabel("Folienwerkzeuge").getByRole("button", { name: /^Auswertung/ }).click();
   await expect(page.getByLabel("Auswertung direkt an der Folie")).toBeVisible();
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toBeAttached();
   const studioAnalyticsMotion = await page.evaluate(() => {
@@ -3806,13 +3976,12 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   expect(studioAnalyticsMotion.sharedElement).toBe("studio-analytics");
   expect(studioAnalyticsMotion.tool).toBe("analytics");
   expect(studioAnalyticsMotion.durations).toContain(560);
-  expect(studioAnalyticsMotion.sheetAnimation).toContain("lb-inspector-right-in");
-  expect(studioAnalyticsMotion.sheetRadius).toBe("18px");
+  expect(studioAnalyticsMotion.sheetAnimation).toContain("app-panel-enter");
+  expect(studioAnalyticsMotion.sheetRadius).toBe("12px");
   await expect(page.locator(".studio-tool-shared-ghost[data-shared-element='studio-analytics']")).toHaveCount(0, { timeout: 1500 });
   await page.getByLabel("Auswertung schließen").click();
 
-  await page.getByLabel("Folienwerkzeuge öffnen").click();
-  await page.getByRole("button", { name: "Fragen auf dieser Folie" }).click();
+  await openStudioTool(page, "Fragen");
   await expect(page.getByLabel("Fragen direkt auf der Folie")).toBeVisible();
   const studioSheetMotion = await page.evaluate(() => {
     const sheet = document.querySelector<HTMLElement>(".studio-slide-question-overlay");
@@ -3824,20 +3993,26 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(studioSheetMotion.isContextDrawer).toBe(true);
-  expect(studioSheetMotion.animationName).toContain("lb-tool-sheet-in");
-  expect(studioSheetMotion.radius).toBe("18px");
+  expect(studioSheetMotion.animationName).toContain("app-panel-enter");
+  expect(studioSheetMotion.radius).toBe("12px");
 
   await page.goto("/lecturer/live/gleitlagerung-demo");
   await expect(page.locator('[data-slide-engine="v1"]')).toBeVisible();
+  await expect(page.getByRole("region", { name: "Vorlesung beitreten", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Präsentation starten", exact: true }).click();
+  await expectNativeCanvas(page);
+  await expect(page.getByLabel("Transkriptstatus")).toHaveCount(0);
+  await page.getByLabel("Präsentationssteuerung", { exact: true }).click();
+  await page.getByRole("button", { name: "Transkript und Mikrofon" }).click();
   await expect(page.getByLabel("Transkriptstatus")).toBeVisible();
-  await expect(page.getByRole("button", { name: "STT starten" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Passage transkribieren" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Auto-Segmente" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Mikrofon an" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Jetzt transkribieren", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Automatisch", exact: true })).toBeDisabled();
   await page.waitForTimeout(600);
   const lecturerLiveSttMotion = await page.evaluate(() => {
     const panel = document.querySelector<HTMLElement>(".transcript-panel");
     const autoButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".transcript-actions button"))
-      .find((button) => button.textContent?.includes("Auto-Segmente"));
+      .find((button) => button.textContent?.trim() === "Automatisch");
     if (!panel) throw new Error("Transkriptpanel fehlt.");
     if (!autoButton) throw new Error("Auto-Segment-Button fehlt.");
     const panelBox = panel.getBoundingClientRect();
@@ -3852,12 +4027,14 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
     };
   });
   expect(lecturerLiveSttMotion.panelOrigin).toBe("transcript");
-  expect(lecturerLiveSttMotion.animationName).toContain("lb-inspector-right-in");
+  expect(lecturerLiveSttMotion.animationName).toContain("app-panel-enter");
   expect(lecturerLiveSttMotion.autoDisabled).toBe(true);
   expect(lecturerLiveSttMotion.actionColumns).toBe(2);
   expect(lecturerLiveSttMotion.overflowX).toBeLessThanOrEqual(1);
   expect(lecturerLiveSttMotion.panelWidth).toBeLessThanOrEqual(420);
   expect(lecturerLiveSttMotion.panelRight).toBeGreaterThanOrEqual(-4);
 
+  await page.getByRole("button", { name: "Beenden", exact: true }).click();
+  await expect(page).toHaveURL(/\/lecturer$/);
   assertClean();
 });

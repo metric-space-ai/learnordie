@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
+import type { LiveAnswerReceipt } from "@/lib/live-session";
+import type { StudentExamDraftStatus } from "@/lib/types";
+import type { StoredLiveRound } from "../live-session-repository";
 import {
   boolean,
   integer,
+  index,
   jsonb,
   pgEnum,
   pgTable,
@@ -31,7 +35,7 @@ export const enrollmentSource = pgEnum("enrollment_source", [
   "direct_learn_link",
   "lecturer_invite"
 ]);
-export const enrollmentStatus = pgEnum("enrollment_status", ["active", "removed"]);
+export const enrollmentStatus = pgEnum("enrollment_status", ["active", "removed", "anonymized"]);
 export const agentThreadStatus = pgEnum("agent_thread_status", [
   "draft",
   "running",
@@ -191,12 +195,13 @@ export const questionReviewItems = pgTable("question_review_items", {
   id: uuid("id").defaultRandom().primaryKey(),
   lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
   sourceMaterialId: uuid("source_material_id").references(() => lectureAssets.id),
+  sourceStudentQuestionId: text("source_student_question_id"),
   sourceTitle: text("source_title").notNull(),
   status: questionReviewStatus("status").notNull().default("draft"),
   variantsJson: jsonb("variants_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true })
-});
+}, (table) => [uniqueIndex("question_review_items_student_question_idx").on(table.lectureId, table.sourceStudentQuestionId)]);
 
 export const participantSessions = pgTable(
   "participant_sessions",
@@ -228,8 +233,27 @@ export const studentChatQuestions = pgTable("student_chat_questions", {
   moderationModel: text("moderation_model"),
   moderationConfidence: integer("moderation_confidence"),
   moderationSignals: jsonb("moderation_signals"),
+  examDraftStatus: text("exam_draft_status").$type<StudentExamDraftStatus>().notNull().default("not_applicable"),
+  examDraftError: text("exam_draft_error"),
+  examDraftRoundId: text("exam_draft_round_id"),
+  examDraftAttemptAt: timestamp("exam_draft_attempt_at", { withTimezone: true }),
+  examDraftAttemptId: text("exam_draft_attempt_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
+
+export const studentExamDraftAttempts = pgTable("student_exam_draft_attempts", {
+  id: uuid("id").primaryKey(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  chatQuestionId: uuid("chat_question_id").references(() => studentChatQuestions.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [index("student_exam_draft_attempts_lecture_created_idx").on(table.lectureId, table.createdAt)]);
+
+export const studentChatQuestionAttempts = pgTable("student_chat_question_attempts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lectureId: uuid("lecture_id").references(() => lectures.id).notNull(),
+  studentProfileId: uuid("student_profile_id").references(() => studentProfiles.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [index("student_chat_question_attempts_profile_lecture_created_idx").on(table.studentProfileId, table.lectureId, table.createdAt)]);
 
 export const transcriptSegments = pgTable("transcript_segments", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -404,6 +428,8 @@ export const studentEnrollments = pgTable(
     joinCodeId: uuid("join_code_id").references(() => joinCodes.id),
     source: enrollmentSource("source").notNull().default("code"),
     status: enrollmentStatus("status").notNull().default("active"),
+    displayName: text("display_name").notNull().default(""),
+    displayNameNormalized: text("display_name_normalized").notNull().default(""),
     addedAt: timestamp("added_at", { withTimezone: true }).defaultNow().notNull(),
     lastOpenedAt: timestamp("last_opened_at", { withTimezone: true })
   },
@@ -411,9 +437,36 @@ export const studentEnrollments = pgTable(
     // One active enrollment per (student, series).
     uniqueIndex("student_enrollments_active_series_idx")
       .on(table.studentProfileId, table.seriesId)
-      .where(sql`${table.status} = 'active'`)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("student_enrollments_active_name_idx")
+      .on(table.seriesId, table.displayNameNormalized)
+      .where(sql`${table.status} = 'active' AND ${table.displayNameNormalized} <> ''`)
   ]
 );
+
+export const liveSessions = pgTable("live_sessions", {
+  lectureId: uuid("lecture_id").primaryKey().references(() => lectures.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull(),
+  revision: integer("revision").notNull(),
+  status: text("status").$type<"active" | "ended">().notNull(),
+  slideIndex: integer("slide_index").notNull().default(0),
+  showIntro: boolean("show_intro").notNull().default(true),
+  round: jsonb("round").$type<StoredLiveRound | null>(),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+});
+
+export const liveAnswers = pgTable("live_answers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lectureId: uuid("lecture_id").notNull().references(() => lectures.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull(),
+  roundId: uuid("round_id").notNull(),
+  studentProfileId: uuid("student_profile_id").notNull().references(() => studentProfiles.id, { onDelete: "cascade" }),
+  points: integer("points").notNull(),
+  correct: boolean("correct").notNull(),
+  receipt: jsonb("receipt").$type<LiveAnswerReceipt>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+}, (table) => [uniqueIndex("live_answers_round_profile_idx").on(table.roundId, table.studentProfileId)]);
 
 export const studentReadinessSnapshots = pgTable("student_readiness_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),

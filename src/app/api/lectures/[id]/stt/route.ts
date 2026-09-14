@@ -7,11 +7,14 @@ import { getLectureRepository } from "@/server/repository";
 import { checkContentLength } from "@/server/request-size";
 import { isValidRouteEntityId } from "@/server/route-params";
 import { normalizeTranscriptTimeRange } from "@/server/transcript-time";
+import { LiveSessionError, liveLecture, readLiveSession } from "@/server/live-session-repository";
 
 const MAX_STT_AUDIO_BYTES = 5_000_000;
+export const maxDuration = 60;
 const MAX_STT_FORM_BYTES = MAX_STT_AUDIO_BYTES + 64 * 1024;
 const sttMetaSchema = z.object({
-  slideTopic: z.string().max(120).optional()
+  slideTopic: z.string().max(120).optional(),
+  sessionId: z.string().uuid().optional()
 });
 
 function isFileLike(value: FormDataEntryValue | null): value is File {
@@ -54,7 +57,8 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   }
 
   const meta = sttMetaSchema.safeParse({
-    slideTopic: formData.get("slideTopic")?.toString()
+    slideTopic: formData.get("slideTopic")?.toString(),
+    sessionId: formData.get("sessionId")?.toString()
   });
   if (!meta.success) {
     return NextResponse.json({ error: "Ungültige STT-Metadaten." }, { status: 400 });
@@ -68,6 +72,18 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   }, fallbackEndedAt);
   if (!timeRange.ok || !timeRange.startedAt || !timeRange.endedAt) {
     return NextResponse.json({ error: "Ungültige STT-Metadaten." }, { status: 400 });
+  }
+
+  if (meta.data.sessionId) {
+    try {
+      const liveContext = await liveLecture(lecture.publicToken, session.email);
+      const live = await readLiveSession(liveContext, null, false);
+      if (live.sessionId !== meta.data.sessionId || live.status !== "active") {
+        return NextResponse.json({ error: "Die Live-Sitzung hat sich geändert. Bitte erneut versuchen." }, { status: 409 });
+      }
+    } catch (error) {
+      return NextResponse.json({ error: "Die aktuelle Live-Sitzung ist nicht verfügbar." }, { status: error instanceof LiveSessionError ? error.status : 503 });
+    }
   }
 
   let result;
@@ -89,6 +105,7 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     ...result,
     startedAt: timeRange.startedAt,
     endedAt: timeRange.endedAt,
+    sessionId: meta.data.sessionId,
     status: "transcribed"
   });
 }

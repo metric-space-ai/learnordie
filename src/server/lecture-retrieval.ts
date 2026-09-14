@@ -67,7 +67,25 @@ function compactSourceContent(value: string) {
 }
 
 async function postgresSources(lectureId: string, query: string, limit: number) {
-  const embedding = await getEmbeddingProvider().embedText(query);
+  const provider = getEmbeddingProvider();
+  if (!provider) {
+    const document = sql`to_tsvector('german', ${assetChunks.content})`;
+    const search = sql`plainto_tsquery('german', ${query})`;
+    const rank = sql<number>`ts_rank_cd(${document}, ${search})`;
+    const rows = await getDb()
+      .select({ id: assetChunks.id, sourceRef: assetChunks.sourceRef, content: assetChunks.content, score: rank })
+      .from(assetChunks)
+      .where(and(eq(assetChunks.lectureId, lectureId), sql`${document} @@ ${search}`))
+      .orderBy(sql`${rank} desc`, assetChunks.id)
+      .limit(limit);
+    return rows.map(row => ({
+      ...row,
+      content: compactSourceContent(row.content),
+      score: Number(row.score),
+      retrievalMethod: "text" as const
+    }));
+  }
+  const embedding = await provider.embedText(query);
   const vectorLiteral = `[${embedding.join(",")}]`;
   const distanceSql = sql<number>`${assetChunks.embedding} <=> ${vectorLiteral}::vector`;
   const rows = await getDb()

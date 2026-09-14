@@ -7,6 +7,7 @@ import {
   type SlideThemeId,
   validateSlideDocument
 } from "./schema";
+import { canvasTextForBlock } from "./excalidraw/scene";
 
 export type LegacySlide = {
   id: string;
@@ -52,23 +53,26 @@ const legacyDiagramMetadata: Record<LegacyDiagram, LegacyDiagramMetadata> = {
 
 export function legacySlideToSlideNode(slide: LegacySlide, index = 0): SlideNode {
   const slideNumber = index + 1;
-  const paragraphBlocks = slide.copy.map((text, copyIndex) => ({
+  const title = slide.title.trim() || `Folie ${slideNumber}`;
+  // Empty draft fields are valid while editing. Omit empty optional blocks
+  // rather than feeding them into the non-empty persisted document schema.
+  const paragraphBlocks = slide.copy.flatMap((text, copyIndex) => text.trim() ? [{
     id: `${slide.id}-copy-${copyIndex + 1}`,
     type: "paragraph" as const,
     text
-  }));
+  }] : []);
   const figureBlockId = `${slide.id}-diagram`;
 
   return {
     id: slide.id,
-    title: slide.title,
+    title,
     layout: "technical_figure_right",
     intent: "concept",
     blocks: [
       {
         id: `${slide.id}-heading`,
         type: "heading",
-        text: slide.title,
+        text: title,
         level: 1
       },
       ...paragraphBlocks,
@@ -77,7 +81,7 @@ export function legacySlideToSlideNode(slide: LegacySlide, index = 0): SlideNode
         type: "figure",
         assetId: legacyDiagramAssetId(slide.diagram),
         altText: legacyDiagramMetadata[slide.diagram].altText,
-        caption: slide.topic,
+        caption: slide.topic.trim() || undefined,
         fit: "contain"
       }
     ],
@@ -108,7 +112,7 @@ export function legacySlidesToSlideDocument(
   const document: SlideDocument = {
     schemaVersion: SLIDE_DOCUMENT_SCHEMA_VERSION,
     id: options.id ?? "legacy-slide-deck",
-    title: options.title ?? "Legacy Slide Deck",
+    title: options.title?.trim() || "Legacy Slide Deck",
     language: options.language ?? "de",
     aspect: options.aspect ?? "16:9",
     theme: options.theme ?? "learnordie-technical",
@@ -143,7 +147,7 @@ export function slideDocumentToLegacySlides(
     const figureBlock = slide.blocks.find((block) => block.type === "figure");
     const copy = slide.blocks
       .filter((block) => block.type === "paragraph")
-      .map((block) => block.text.trim())
+      .map((block) => (canvasTextForBlock(slide, block.id) ?? block.text).trim())
       .filter(Boolean)
       .slice(0, 4);
 
@@ -152,7 +156,7 @@ export function slideDocumentToLegacySlides(
       eyebrow: fallback?.eyebrow?.trim() || legacyEyebrowFromSlide(slide, index),
       title: slide.title.trim() || fallback?.title || `Folie ${index + 1}`,
       topic: figureBlock?.caption?.trim() || fallback?.topic || slide.title.trim() || `Folie ${index + 1}`,
-      copy: copy.length > 0 ? copy : fallback?.copy ?? [" "],
+      copy: slide.canvas ? copy : copy.length > 0 ? copy : fallback?.copy ?? [" "],
       diagram: legacyDiagramFromSlideNode(slide, fallback?.diagram ?? "bearing")
     };
   });

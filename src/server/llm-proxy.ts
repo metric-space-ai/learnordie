@@ -7,6 +7,9 @@ export const MINIMAX_RESPONSES_INPUT_TOKENS_URL = "https://api.minimax.io/v1/res
 
 const DEFAULT_MAX_BODY_CHARS = 200_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 1200;
+// A complete four-level question family needs up to 4,200 output tokens.
+// Keep the small default for unspecified requests, not as a hidden hard cap.
+const DEFAULT_OUTPUT_TOKEN_LIMIT = 8192;
 const MINIMAX_INPUT_ITEM_TYPES = new Set(["message", "function_call", "function_call_output", "reasoning"]);
 
 type JsonObject = Record<string, unknown>;
@@ -43,7 +46,7 @@ export function learnordieLlmProxyMaxBodyChars() {
 }
 
 export function learnordieLlmProxyMaxOutputTokens() {
-  return envInt("LEARNORDIE_LLM_PROXY_MAX_OUTPUT_TOKENS", envInt("LEARNBUDDY_LLM_PROXY_MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS));
+  return envInt("LEARNORDIE_LLM_PROXY_MAX_OUTPUT_TOKENS", envInt("LEARNBUDDY_LLM_PROXY_MAX_OUTPUT_TOKENS", DEFAULT_OUTPUT_TOKEN_LIMIT));
 }
 
 export function configuredLearnordieProxyClientTokens() {
@@ -193,9 +196,12 @@ export function prepareLearnordieResponsesRequest(raw: unknown) {
 
   const cap = learnordieLlmProxyMaxOutputTokens();
   const requested = Number(raw.max_output_tokens);
-  const maxOutputTokens = Number.isFinite(requested) && requested > 0
-    ? Math.min(Math.floor(requested), cap)
-    : cap;
+  if (raw.max_output_tokens !== undefined && (!Number.isInteger(requested) || requested <= 0 || requested > cap)) {
+    throw new LearnordieLlmProxyError(400, `max_output_tokens must be an integer from 1 to ${cap}; the proxy never silently truncates the requested budget.`, "max_output_tokens");
+  }
+  const maxOutputTokens = raw.max_output_tokens === undefined
+    ? Math.min(DEFAULT_MAX_OUTPUT_TOKENS, cap)
+    : requested;
 
   return sanitizedMiniMaxPayload({
     ...raw,

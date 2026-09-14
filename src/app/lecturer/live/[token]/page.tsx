@@ -4,6 +4,7 @@ import { LecturerLiveExperience } from "@/components/LecturerLiveExperience";
 import { createLecturerCsrfToken, getLecturerSession } from "@/server/auth";
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
+import { withParticipationPath } from "@/server/lecture-participation";
 
 export default async function LecturerLivePage({ params }: { params: Promise<{ token: string }> }) {
   const session = await getLecturerSession();
@@ -12,8 +13,8 @@ export default async function LecturerLivePage({ params }: { params: Promise<{ t
   const { token } = await params;
   if (!isValidPublicLectureToken(token)) notFound();
 
-  const lecture = await getLectureRepository().getLectureByToken(token);
+  const lecture = (await getLectureRepository().listLectures(session.email)).find((item) => item.publicToken === token);
   if (!lecture) notFound();
 
-  return <LecturerLiveExperience lecture={lecture} csrfToken={createLecturerCsrfToken(session)} />;
+  return <LecturerLiveExperience lecture={await withParticipationPath(lecture)} csrfToken={createLecturerCsrfToken(session)} />;
 }

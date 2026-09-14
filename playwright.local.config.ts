@@ -18,7 +18,10 @@ export default defineConfig({
     baseURL: process.env.LOCAL_E2E_BASE_URL ?? "http://localhost:3099",
     trace: "off",
     screenshot: "only-on-failure",
-    video: "off"
+    video: "off",
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: ["--no-sandbox", "--disable-gpu"] }
+      : { args: ["--no-sandbox", "--disable-gpu"] }
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }]
 });

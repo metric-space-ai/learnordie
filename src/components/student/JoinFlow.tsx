@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { getOrCreateStudentKey, saveProfile } from "@/lib/student-client";
-import { suggestPseudonyms } from "@/lib/student-pseudonym";
+import { suggestionsWithoutRejected } from "@/lib/student-pseudonym";
 import type { ResolvedJoinTarget } from "@/lib/types";
 import { PseudonymChooser } from "./PseudonymChooser";
 
@@ -13,6 +13,7 @@ type JoinFlowProps = {
   code: string;
   target: ResolvedJoinTarget | null;
   hasProfile: boolean;
+  hasClaim?: boolean;
   pseudonym?: string;
 };
 
@@ -26,19 +27,62 @@ function redirectAfterJoin(target: ResolvedJoinTarget): string {
   return `/student?series=${encodeURIComponent(target.seriesId)}`;
 }
 
-export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps) {
+function useIslandFocus(active: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    const root = ref.current;
+    if (!root) return;
+    const focusable = () =>
+      Array.from(root.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])"));
+    const first = focusable()[0];
+    first?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        window.location.href = "/";
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const start = items[0]!;
+      const end = items[items.length - 1]!;
+      if (event.shiftKey && document.activeElement === start) {
+        event.preventDefault();
+        end.focus();
+      } else if (!event.shiftKey && document.activeElement === end) {
+        event.preventDefault();
+        start.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active]);
+  return ref;
+}
+
+export function JoinFlow({ code, target, hasClaim = false, pseudonym }: JoinFlowProps) {
   const router = useRouter();
   const [retryCode, setRetryCode] = useState("");
-  const [pseudonymInput, setPseudonymInput] = useState(() => pseudonym ?? suggestPseudonyms(code)[0]);
+  const [pseudonymInput, setPseudonymInput] = useState(pseudonym ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [takenSuggestions, setTakenSuggestions] = useState<string[] | undefined>();
+  const dialogRef = useIslandFocus(true);
 
   if (!target) {
     return (
-      <main className="join-screen lb-motion-root" aria-label="Code nicht gefunden">
-        <section className="join-card lb-enter-panel">
+      <main className="join-screen app-canvas lb-motion-root" aria-label="Code nicht gefunden">
+        <section
+          ref={dialogRef}
+          className="join-card app-island lb-enter-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="join-unknown-title"
+        >
           <p className="eyebrow">Code prüfen</p>
-          <h1>Diesen Code kennen wir nicht</h1>
+          <h1 id="join-unknown-title">Diesen Code kennen wir nicht</h1>
           <p className="join-lead">
             Der Code „{code}“ gehört zu keiner Vorlesung. Bitte prüfe die Schreibweise und versuche es erneut.
           </p>
@@ -55,7 +99,6 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
               <input
                 value={retryCode}
                 onChange={(event) => setRetryCode(event.target.value)}
-                placeholder="z. B. ME1-GL-2026"
                 autoComplete="off"
                 autoCapitalize="characters"
               />
@@ -68,24 +111,27 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
     );
   }
 
-  async function enroll() {
+  async function enroll(displayName = pseudonymInput.trim() || undefined) {
     setBusy(true);
     setError("");
     try {
       const response = await fetch("/api/student/enrollments", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ joinCodeId: target!.joinCode.id, source: "code" })
+        body: JSON.stringify({ joinCodeId: target!.joinCode.id, source: "code", displayName })
       });
       if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        const data = (await response.json().catch(() => ({}))) as { error?: string; suggestions?: string[] };
         setError(data.error ?? "Konnte nicht beitreten. Bitte erneut versuchen.");
+        if (data.suggestions?.length) {
+          setTakenSuggestions(suggestionsWithoutRejected(data.suggestions, pseudonymInput));
+        }
         setBusy(false);
         return;
       }
       router.push(redirectAfterJoin(target!));
     } catch {
-      setError("Netzwerkfehler. Bitte erneut versuchen.");
+      setError("Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen.");
       setBusy(false);
     }
   }
@@ -93,59 +139,84 @@ export function JoinFlow({ code, target, hasProfile, pseudonym }: JoinFlowProps)
   async function submitPseudonym(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const clean = pseudonymInput.trim();
-    if (clean.length < 1) {
+    if (clean.length < 2) {
       setError("Bitte ein Pseudonym wählen.");
       return;
     }
     setBusy(true);
     setError("");
-    getOrCreateStudentKey();
-    const profile = await saveProfile(clean);
-    if (!profile) {
-      setError("Profil konnte nicht gespeichert werden.");
+    try {
+      getOrCreateStudentKey();
+      const result = await saveProfile(clean);
+      if (!result.ok) {
+        setError(result.error);
+        if (result.suggestions?.length) {
+          setTakenSuggestions(suggestionsWithoutRejected(result.suggestions, clean));
+        }
+        setBusy(false);
+        return;
+      }
+      await enroll();
+    } catch {
+      setError("Netzwerkfehler. Eingabe bleibt stehen — bitte erneut versuchen.");
       setBusy(false);
-      return;
     }
-    await enroll();
+  }
+
+  async function joinWithoutName() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const result = await saveProfile();
+    if (!result.ok) { setError(result.error); setBusy(false); return; }
+    await enroll(result.profile.pseudonym);
   }
 
   const targetLabel = target.scope === "lecture" && target.lectureTitle ? target.lectureTitle : target.seriesTitle;
 
   return (
-    <main className="join-screen lb-motion-root" aria-label="Vorlesung beitreten">
-      <section className="join-card lb-enter-panel">
+    <main className="join-screen app-canvas lb-motion-root" aria-label="Vorlesung beitreten">
+      <section
+        ref={dialogRef}
+        className="join-card app-island lb-enter-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="join-title"
+      >
         <p className="eyebrow">Vorlesung gefunden</p>
-        <h1>{targetLabel}</h1>
+        <h1 id="join-title">{targetLabel}</h1>
         <p className="join-lead">
           {target.scope === "lecture"
             ? `Einzeltermin aus „${target.seriesTitle}".`
             : "Vorlesungsreihe — du siehst danach alle Termine in deinem Dashboard."}
         </p>
 
-        {hasProfile ? (
+        {hasClaim ? (
           <>
             <p className="join-note">Angemeldet als <strong>{pseudonym}</strong>.</p>
-            <p className="join-hint">Deine Punkte sind an deinen anonymen Browser-Schlüssel gebunden, nicht nur an den Anzeigenamen.</p>
+            <p className="join-hint">Punkte hängen an diesem Browser. Der Anzeigename ist in dieser Vorlesung eindeutig.</p>
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="primary-button" type="button" onClick={enroll} disabled={busy}>
+            <button className="primary-button" type="button" onClick={() => enroll()} disabled={busy}>
               {busy ? "Wird hinzugefügt …" : "Zu meinen Vorlesungen hinzufügen"}
             </button>
           </>
         ) : (
           <form className="join-form" onSubmit={submitPseudonym}>
+            <button className="primary-button" type="button" onClick={joinWithoutName} disabled={busy}>
+              {busy ? "Trete bei …" : "Direkt teilnehmen"}
+            </button>
+            <p className="join-hint">Ohne Konto. Dein Pseudonym kannst du auch später sichern.</p>
             <PseudonymChooser
               value={pseudonymInput}
               onChange={setPseudonymInput}
-              seed={code}
               disabled={busy}
-              label="Wähle ein Pseudonym"
+              label="Pseudonym (optional)"
+              seriesId={target.seriesId}
+              suggestions={takenSuggestions}
             />
-            <p className="join-hint">
-              Punkte und Dashboard-Zugriff hängen an diesem Browser-Schlüssel. Jemand mit gleichem Pseudonym übernimmt deine Punkte nicht.
-            </p>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button" type="submit" disabled={busy}>
-              {busy ? "Trete bei …" : "Pseudonym wählen und beitreten"}
+              {busy ? "Trete bei …" : "Beitreten"}
             </button>
           </form>
         )}

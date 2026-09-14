@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createMagicLoginLink, createMagicToken, MagicLinkRateLimitError } from "@/server/auth";
+import { createLoginChallenge, createMagicLoginLink, MagicLinkRateLimitError } from "@/server/auth";
 import { getMailProvider } from "@/server/providers/mail";
 
 const MAX_MAGIC_LINK_REQUEST_BYTES = 2048;
@@ -29,17 +29,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const token = await createMagicToken(parsed.data.email);
+    const { token, code } = await createLoginChallenge(parsed.data.email);
     const magicLink = createMagicLoginLink(request, token);
-    const delivery = await getMailProvider().sendMagicLink({ email: parsed.data.email, magicLink });
+    const delivery = await getMailProvider().sendMagicLink({ email: parsed.data.email, magicLink, code });
     return NextResponse.json({
       sent: true,
-      ...(delivery.delivery === "local" ? { magicLink: delivery.magicLink } : {})
+      ...(delivery.delivery === "local" ? { magicLink: delivery.magicLink, code: delivery.code } : {})
     });
   } catch (error) {
     if (error instanceof MagicLinkRateLimitError) {
       return NextResponse.json({
-        error: "Zu viele Magic-Link-Anfragen. Bitte später erneut versuchen.",
+        error: "Zu viele Anfragen. Bitte in ein paar Minuten erneut versuchen.",
         retryAfterSeconds: error.retryAfterSeconds
       }, {
         status: 429,
@@ -47,6 +47,6 @@ export async function POST(request: Request) {
       });
     }
     console.error("Magic link delivery failed", error);
-    return NextResponse.json({ error: "Anmeldelink konnte nicht versendet werden." }, { status: 502 });
+    return NextResponse.json({ error: "Code konnte nicht gesendet werden. Versuche es gleich noch einmal." }, { status: 502 });
   }
 }

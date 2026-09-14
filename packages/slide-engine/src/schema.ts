@@ -1,4 +1,7 @@
 import { z, type ZodIssue } from "zod";
+import { canvasSceneSchema } from "./excalidraw/canvas-schema";
+export { canvasSceneSchema, canvasElementSchema, canvasEmbedSchema } from "./excalidraw/canvas-schema";
+export type { CanvasScene, CanvasElement, CanvasEmbed } from "./excalidraw/canvas-schema";
 
 export const SLIDE_DOCUMENT_SCHEMA_VERSION = "learnordie.slide.v1" as const;
 
@@ -54,7 +57,18 @@ export const slideBlockTypeValues = [
   "code",
   "quote",
   "quizAnchor",
-  "spacer"
+  "spacer",
+  "scene3d"
+] as const;
+export const scene3dSceneIdValues = [
+  "modell.morph",
+  "modell.miniature",
+  "modell.law",
+  "modell.limits",
+  "modell.runtime",
+  "modell.learning",
+  "modell.language",
+  "modell.transfer"
 ] as const;
 export const slideAssetKindValues = [
   "text",
@@ -289,6 +303,21 @@ const spacerBlockSchema = blockBaseSchema
   })
   .strict();
 
+// Interaktive 3D-Szene aus der engine-eigenen Szenenbibliothek. Der Block traegt
+// nur eine Szenen-ID und Texte; ausfuehrbarer Code kommt nie aus dem Dokument.
+const scene3dBlockSchema = blockBaseSchema
+  .extend({
+    type: z.literal("scene3d"),
+    sceneId: z.enum(scene3dSceneIdValues),
+    altText: z.string().trim().min(1).max(320),
+    caption: z.string().trim().min(1).max(240).optional(),
+    accent: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color such as #8fcfc2.")
+      .optional()
+  })
+  .strict();
+
 export const slideBlockSchema = z.discriminatedUnion("type", [
   headingBlockSchema,
   paragraphBlockSchema,
@@ -305,7 +334,8 @@ export const slideBlockSchema = z.discriminatedUnion("type", [
   codeBlockSchema,
   quoteBlockSchema,
   quizAnchorBlockSchema,
-  spacerBlockSchema
+  spacerBlockSchema,
+  scene3dBlockSchema
 ]);
 
 export const speakerNoteSchema = z
@@ -333,6 +363,7 @@ export const slideNodeSchema = z
     layout: z.enum(slideLayoutIdValues),
     intent: z.enum(slideIntentValues),
     blocks: z.array(slideBlockSchema).min(1).max(24),
+    canvas: canvasSceneSchema.optional(),
     speakerNotes: z.array(speakerNoteSchema).max(12).optional(),
     quizAnchors: z.array(quizAnchorSchema).max(12).optional(),
     sourceRefs: z.array(sourceReferenceSchema).min(1).max(20)
@@ -374,6 +405,7 @@ export type SlideThemeId = (typeof slideThemeIdValues)[number];
 export type SlideLayoutId = (typeof slideLayoutIdValues)[number];
 export type SlideIntent = (typeof slideIntentValues)[number];
 export type SlideBlockType = (typeof slideBlockTypeValues)[number];
+export type Scene3DSceneId = (typeof scene3dSceneIdValues)[number];
 export type SlideAssetKind = (typeof slideAssetKindValues)[number];
 export type SourceReferenceType = (typeof sourceReferenceTypeValues)[number];
 export type QuestionLevel = (typeof questionLevelValues)[number];
@@ -448,12 +480,12 @@ export const slideLayoutBudgets: Record<SlideLayoutId, LayoutBudget> = {
   technical_figure_right: {
     maxBlocks: 8,
     maxTextChars: 900,
-    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "quizAnchor", "spacer"]
+    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "scene3d", "quizAnchor", "spacer"]
   },
   technical_figure_left: {
     maxBlocks: 8,
     maxTextChars: 900,
-    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "quizAnchor", "spacer"]
+    allowedBlockTypes: ["heading", "paragraph", "bulletList", "numberedList", "definition", "callout", "figure", "formula", "scene3d", "quizAnchor", "spacer"]
   },
   definition_with_example: {
     maxBlocks: 8,
@@ -929,6 +961,8 @@ function blockTextLength(block: SlideBlock): number {
       return block.anchorId.length + block.level.length + (block.prompt?.length ?? 0);
     case "spacer":
       return 0;
+    case "scene3d":
+      return block.altText.length + (block.caption?.length ?? 0);
   }
 }
 

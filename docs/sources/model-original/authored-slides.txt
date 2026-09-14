@@ -1,0 +1,82 @@
+[
+  {
+    nav:'Begriffsgang', kicker:'Die Leitfrage', title:'Ein Begriff.<br><em>Im Wandel.</em>',
+    lead:'Von der Gedankenminiatur zum LLM: Was verändert sich, wenn wir etwas ein <strong>Modell</strong> nennen?',
+    formula:'Abbild <span>→</span> Beziehung <span>→</span> Funktion',
+    takeaway:'Nicht nur unsere Werkzeuge verändern sich. Auch unsere Begriffe.',
+    question:'Eine Erweiterung des Modellbegriffs – keine Ablösungsgeschichte.',
+    scene:'morph', sceneTitle:'Fünf Lesarten eines Begriffs', sceneSub:'Visuelle Metapher · Form mit dem Regler wechseln', accent:'#e5c48c',
+    source:'Begriffsgang aus PDF und Gespräch',
+    notes:`<h3>Einstieg</h3><p>„Woran denken Sie, wenn Sie das Wort Modell hören?“ Antworten sammeln: ein kleiner Gegenstand, eine Gleichung, eine Simulation, ein Sprachmodell. Die Einführung verbindet diese Bedeutungen, statt KI-Anwendungen aufzuzählen.</p><h3>Argument</h3><p>Gedankenminiatur → Naturgesetz → Naturgesetz als Modell → ausführbares Modell → gelerntes Modell → LLM. „Ausführbar“ und „gelernt“ sind unterschiedliche Aspekte; ältere Modellformen bleiben verwendbar.</p><h3>Quellen und Abgrenzung</h3><p>Grundlage: PDF S. 3 und 6–12. Die Formulierung „Gedanken-Miniatur-Konstrukt … zu einem LLM“ stammt aus dem Gespräch. Die Punktformen sind visuelle Metaphern, keine wissenschaftshistorischen Belege.</p>`
+  },
+  {
+    nav:'Gedankenminiatur', kicker:'01 · Das Modell als Abbild', title:'Die Welt<br><em>im Kleinen.</em>',
+    lead:'Ein überschaubares Konstrukt macht Wirklichkeit vorstellbar. Wir wählen aus, vereinfachen und lassen weg.',
+    formula:'Wirklichkeit <span>→</span> gedanklicher Stellvertreter',
+    takeaway:'Das Modell steht für etwas anderes.',
+    question:'Was bleibt erhalten, wenn wir die Details entfernen?',
+    scene:'miniature', sceneTitle:'Vom Gegenstand zur Abstraktion', sceneSub:'Eigenes Lehrbeispiel · Feder-Masse-System', accent:'#e5c48c',
+    source:'PDF S. 7 · Ausgangsbegriff aus dem Gespräch',
+    notes:`<h3>Vortragen</h3><p>Mit „Miniatur“ ist nicht zwingend ein maßstäbliches Objekt gemeint, sondern ein geistig handhabbarer Stellvertreter. Der Regler entfernt das Gestell und die körperlichen Details; Masse, Feder und ihre Beziehung bleiben sichtbar.</p><h3>Interaktion</h3><p>Den Regler „Abstraktion“ langsam nach rechts bewegen. Fragen: Was haben wir weggelassen? Für welche Frage könnten diese Einzelheiten wichtig sein?</p><h3>Quellen und Abgrenzung</h3><p>Die PDF bezeichnet das Modell auf S. 7 als Abbild, Gedankenkonstrukt oder Simulation. Die Gedankenminiatur wurde im Gespräch als Ausgangsbild benannt. Das Feder-Masse-System ist eine eigene didaktische Visualisierung, nicht eine Abbildung aus der Vorlage.</p>`
+  },
+  {
+    nav:'Naturgesetz', kicker:'02 · Das Modell als Beziehung', title:'Nicht das Ding.<br><em>Die Beziehung.</em>',
+    lead:'Eine mathematische Beschreibung verknüpft Größen. Entscheidend ist nicht die anschauliche Ähnlichkeit, sondern der erfasste Zusammenhang.',
+    formula:'m · ẍ + k · x = 0',
+    takeaway:'Vom Vorstellen zum quantitativen Beschreiben.',
+    question:'Wie verändert sich die Bewegung, wenn sich k verändert?',
+    scene:'law', sceneTitle:'Eine Beziehung wird berechenbar', sceneSub:'Idealisierter linearer Oszillator · ohne Dämpfung', accent:'#8fcfc2',
+    source:'PDF S. 3 · Gleichung als eigenes Lehrbeispiel',
+    notes:`<h3>Argument</h3><p>Die Newton-Passage der Vorlage verbindet Gegenstände mit mathematischen Beziehungen und quantitativen Aussagen. Die Gleichung muss nicht so aussehen wie das Gerät, um dessen ausgewähltes Verhalten zu beschreiben.</p><h3>Interaktion</h3><p>Die Federsteifigkeit k verändern. Das Beispiel berechnet x(t) = A cos(√(k/m) · t). In der Darstellung ist m = 1 kg und A = 0,65 m. Bei einer Änderung des Reglers startet die Beispielbewegung neu; es wird kein physischer Eingriff in eine laufende Feder simuliert.</p><h3>Geltungsrahmen</h3><p>Eigene Idealisation: lineare Feder, konstante Masse, keine Reibung oder Dämpfung; x ist die Auslenkung um die Gleichgewichtslage. Der gezeichnete Kurvenzug zeigt eine vollständige Periode; Zahlen und Achsen sind beschriftet. Die Gleichung und das konkrete Demonstrationssystem sind Ergänzungen der HTML-Umsetzung.</p><h3>Quelle</h3><p>PDF S. 3, insbesondere die Verbindung von Objekten, Funktionen und quantitativen Aussagen. Keine zusätzliche historische Datierung oder Zuschreibung.</p>`
+  },
+  {
+    nav:'Modellgrenzen', kicker:'Das Scharnier · Naturgesetz als Modell', title:'Ein Geschehen.<br><em>Viele Modelle.</em>',
+    lead:'Die Beschreibung ist nicht die Wirklichkeit selbst. Unterschiedliche mathematische Zugänge können dasselbe Geschehen erfassen.',
+    formula:'Beschreibung <span>≠</span> vollständige Wirklichkeit',
+    takeaway:'Ein Modell trägt innerhalb seines Geltungsbereichs.',
+    question:'Was erklärt dieses Modell – und was bleibt außerhalb?',
+    scene:'limits', sceneTitle:'Die Bewegung bleibt. Der Blick wechselt.', sceneSub:'Zwei Beschreibungen derselben idealisierten Bewegung', accent:'#8fcfc2',
+    source:'PDF S. 6 · Hertz-Passage der Vorlage',
+    notes:`<h3>Argument aus der Vorlage</h3><p>Die Hertz-Passage auf S. 6 thematisiert verschiedene Beschreibungen der Mechanik, unvollständige Abbilder und zutreffende Prognosen in Grenzen. Hier wird diese argumentative Funktion aufgenommen, ohne die historischen Zuschreibungen als eigenständig geprüfte Wissenschaftsgeschichte auszugeben.</p><h3>Interaktion</h3><p>Zwischen „Kraftbilanz“ und „Energie“ wechseln. Die modellierte Bewegung bleibt dieselbe; sichtbar werden Kraft beziehungsweise die Aufteilung in Bewegungs- und Federenergie.</p><h3>Eigenes Lehrbeispiel</h3><p>Für m = 1, k = 4 und A = 0,65 zeigt die Demo F = −kx und E = ½mv² + ½kx². Es sind ergänzende Beschreibungen des idealisierten Oszillators. Die skalare Energiegleichung allein ersetzt keine vollständige Bewegungsgleichung mit Anfangsbedingungen. Die grafische Umschaltung ist deshalb kein Beweis für die vollständige Äquivalenz zweier Formalismen.</p>`
+  },
+  {
+    nav:'Ausführung', kicker:'03 · Das technisch wirksame Modell', title:'Vom Abbild<br><em>zur Wirkung.</em>',
+    lead:'In einer Laufzeitumgebung wird eine Funktion ausgeführt. Über Schnittstellen kann sie reale technische Vorgänge beeinflussen.',
+    formula:'x <span>→</span> f <span>→</span> y',
+    takeaway:'Vom Modell eines Systems zum Modell im System.',
+    question:'Die Ausführung einer Funktion ist noch kein Lernen.',
+    scene:'runtime', sceneTitle:'Eingang → Modell → Ausgang', sceneSub:'Schematische Laufzeitumgebung · simulierte Stellbewegung', accent:'#8eb9e9',
+    source:'PDF S. 7 und 9–11 · Funktion, Interface, Laufzeit',
+    notes:`<h3>Das zentrale Scharnier</h3><p>Seite 7 der PDF verschiebt den Modellbegriff vom bloßen Abbild zur technischen Wirksamkeit: Algorithmen werden in Hardware realisiert. Seiten 9–11 ergänzen Funktion, Topologie, Parameter, Interface und Laufzeitumgebung.</p><h3>Interaktion</h3><p>Den Eingang x verändern. Bei aktiver Ausführung wird die Ausgangsgröße y = 60° · x als Sollwinkel eines simulierten Zeigers verwendet. Dann die Ausführung anhalten und den Eingang erneut verändern: Die Sollwertausgabe und die Stellbewegung bleiben eingefroren. Beim Wiedereinschalten folgt die Darstellung dem neuen Eingang.</p><h3>Abgrenzung</h3><p>Die Grafik ist eine didaktische Simulation, keine Verbindung zu einer realen Maschine. Sie zeigt Ausführung, nicht Training. Dass ein Modell ausführbar ist, sagt noch nichts darüber aus, ob es gelernt wurde.</p>`
+  },
+  {
+    nav:'Lernen', kicker:'04 · Das gelernte Modell', title:'Die Funktion<br><em>entsteht.</em>',
+    lead:'Menschen legen Modellstruktur und Lernbedingungen fest. Ein Lernverfahren passt Parameter an Beispieldaten an.',
+    formula:'ŷ = a₀ + a₁x + a₂x²',
+    takeaway:'Nicht jede Beziehung wird vollständig von Hand ausformuliert.',
+    question:'Lernumgebung: Parameter anpassen. Laufzeit: Funktion nutzen.',
+    scene:'learning', sceneTitle:'Ein Polynom lernt aus Beispielen', sceneSub:'Echte lokale Parameteranpassung · synthetische Lehrdaten', accent:'#d5adf2',
+    source:'PDF S. 11–12 und 15 · Lernen und Polynomtopologie',
+    notes:`<h3>Argument</h3><p>Die Vorlage trennt Lern- und Laufzeitumgebung (S. 11) und verwendet Polynomfitting als einfachen Einstieg in das Lernen (S. 12). Auf S. 15 wird die Struktur eines Polynommodells sichtbar gemacht.</p><h3>Was die Demo tatsächlich berechnet</h3><p>21 feste synthetische Datenpunkte. Ein Polynom zweiten Grades mit drei Parametern wird per Gradientenabstieg an diese Daten angepasst. Optimiert wird der mittlere quadratische Trainingsfehler. Die Kurve und die Fehleranzeige stammen aus dieser Berechnung; es wird keine vorberechnete Lernanimation abgespielt.</p><h3>Interaktion</h3><p>„Lernen starten“ drücken, anschließend mit „Eingabe x“ die gelernte Funktion auswerten. Dieser Regler verändert keine Gewichte. Mit „Zurücksetzen“ werden nur die Parameter und der Trainingszähler zurückgesetzt.</p><h3>Grenzen</h3><p>Die Struktur wird in diesem Beispiel vorgegeben, nur die Parameter werden gelernt. Ein kleiner Trainingsfehler ist kein Nachweis für Generalisierung. Kein LLM-Training, keine Sicherheitsfreigabe. Die konkreten Daten und die Implementierung sind eigene Lehrbeispiele auf Basis des Polynomgedankens der Vorlage.</p>`
+  },
+  {
+    nav:'LLM', kicker:'05 · Das Modell als Sprachfunktion', title:'Das Modell<br><em>spricht.</em>',
+    lead:'Ein LLM verarbeitet sprachlichen Kontext und erzeugt Fortsetzungen. Gelernte Gewichte werden dabei ausgeführt, nicht als einzelne Sprachregeln ausformuliert.',
+    formula:'p<sub>θ</sub>(nächstes Token | Kontext)',
+    takeaway:'Training formt Gewichte. Ausführung verarbeitet Kontext.',
+    question:'Eine gelernte Sprachfunktion ist kein neues Naturgesetz.',
+    scene:'language', sceneTitle:'Vom Kontext zur Fortsetzung', sceneSub:'Schematisches Sprachmodell · kein LLM läuft im Browser', accent:'#d5adf2',
+    source:'Erweiterung aus dem Gespräch · Bengio 2003 / Vaswani 2017',
+    notes:`<h3>Anschluss an den Begriffsgang</h3><p>Die LLM-Stufe ist die im Gespräch gewünschte Fortführung; sie ist in den ursprünglichen Einführungsfolien nicht ausgearbeitet. Der Anschluss erfolgt über gelernte Parameter und die Trennung von Lernen und Ausführung.</p><h3>Grafik lesen</h3><p>Kontext → Repräsentationen → Attention und weitere Verarbeitung → Verteilung möglicher nächster Tokens → Auswahl. Die Blöcke stehen schematisch für Verarbeitungsschritte eines autoregressiven Transformer-Sprachmodells; sie bilden keine konkrete Modellarchitektur vollständig ab.</p><h3>Wichtige Grenze der Demonstration</h3><p>Es wird kein Sprachmodell geladen oder aufgerufen. Wortgruppen sind vereinfachte Token-Platzhalter. Verbindungen, Kandidaten und Prozentwerte sind didaktisch gesetzte Illustrationen, keine gemessenen Attention-Werte oder Modellwahrscheinlichkeiten. „Token ergänzen“ zeigt einen vorher festgelegten Beispielschritt; es ist keine freie Textgenerierung.</p><h3>Fachliche Ergänzung</h3><p>Bengio et al. (2003), <i>A Neural Probabilistic Language Model</i>: gelernte Repräsentationen und Wahrscheinlichkeiten von Wortfolgen. Vaswani et al. (2017), <i>Attention Is All You Need</i>: Transformer, Attention und Feedforward-Verarbeitung. Die Quellen sind über „Quellen“ erreichbar.</p>`
+  },
+  {
+    nav:'Produktentwicklung', kicker:'Die Konsequenz · KI als Methode', title:'Wir gestalten<br><em>das Lernen.</em>',
+    lead:'Zur Entwicklung einer Funktion kommt die Gestaltung ihrer Entstehung: Aufgabe, Daten, Modellstruktur, Lernverfahren und Prüfung.',
+    formula:'f formulieren <span>+</span> Entstehung von f gestalten',
+    takeaway:'KI ist hier nicht nur ein Werkzeug. Sie verändert die Entwicklungsaufgabe.',
+    question:'Was müssen wir beherrschen, wenn wir f nicht vollständig von Hand formulieren?',
+    scene:'transfer', sceneTitle:'Die Gestaltungsaufgabe erweitert sich', sceneSub:'Didaktische Ableitung für die Produktentwicklung', accent:'#e5c48c',
+    source:'Ableitung aus PDF S. 7 und 10–12 sowie dem Gespräch',
+    notes:`<h3>Rückbindung an die Produktentwicklung</h3><p>Der erste Teil soll nicht mit einer Liste beliebiger KI-Werkzeuge enden. Die Konsequenz des Begriffsgangs ist eine veränderte Gestaltungsaufgabe: Entwicklerinnen und Entwickler gestalten explizite Modelle und zusätzlich die Bedingungen, unter denen Modelle gelernt und eingesetzt werden.</p><h3>Diskussion</h3><p>Welche Aufgabe soll die Funktion erfüllen? Welche Daten braucht ihr? Was legt ihr an Struktur und Lernverfahren fest? Wie prüft ihr die Leistung? Wo und mit welchen Schnittstellen wird die Funktion ausgeführt?</p><h3>Abgrenzung</h3><p>Der Ablauf „Aufgabe → Daten → Lernen → Prüfen → Einsetzen“ ist eine didaktische Ableitung für diese HTML-Sequenz, kein aus der PDF übernommenes Prozessmodell oder verbindlicher Standard. Der technische Kern basiert auf S. 7 und 10–12; der ausdrückliche Produktentwicklungsbezug folgt aus dem Gespräch.</p>`
+  }
+]

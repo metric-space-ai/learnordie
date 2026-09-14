@@ -16,7 +16,7 @@ import {
 export type MaterialChunk = {
   sourceRef: string;
   content: string;
-  embedding: number[];
+  embedding: number[] | null;
 };
 
 export type ProcessedMaterial = {
@@ -465,7 +465,7 @@ export async function processMaterialContent(input: {
   const chunks = await Promise.all(chunkText(extracted).map(async (content, index) => ({
     sourceRef: `${input.material.originalName}#chunk-${index + 1}`,
     content,
-    embedding: await embeddingProvider.embedText(content)
+    embedding: embeddingProvider ? await embeddingProvider.embedText(content) : null
   })));
 
   return {

@@ -18,8 +18,8 @@ const demoLecture = {
   language: "de",
   status: "learn_active",
   liveAt: "2026-06-17T10:00:00.000Z",
-  examDate: "2026-07-24T00:00:00.000Z",
-  aiAccessUntil: "2026-07-24T21:59:59.999Z",
+  examDate: "2027-07-23T00:00:00.000Z",
+  aiAccessUntil: "2027-07-23T21:59:59.999Z",
   leaderboardEnabled: true,
   learnQuestionDensity: 4,
   evaluationConfig: {
@@ -70,24 +70,24 @@ const demoLecture = {
     {
       level: "4.0",
       points: 1,
-      text: "Welche Aussage beschreibt Mischreibung korrekt?",
-      explanation: "Mischreibung bedeutet, dass Schmierfilmanteile und direkter Festkörperkontakt gleichzeitig auftreten.",
+      text: "Was kennzeichnet Mischreibung?",
+      explanation: "Bei Mischreibung trägt ein Schmierfilm einen Teil der Last. Zugleich berühren sich die festen Oberflächen direkt.",
       answers: [
         { key: "A", text: "Der Schmierstoff hat keine Viskosität.", correct: false },
-        { key: "B", text: "Schmierfilm und Festkörperkontakt wirken gleichzeitig.", correct: true },
-        { key: "C", text: "Das Lager läuft vollständig flüssigkeitsgeschmiert.", correct: false },
+        { key: "B", text: "Schmierfilm und direkter Kontakt treten zugleich auf.", correct: true },
+        { key: "C", text: "Ein Schmierfilm trennt die Oberflächen vollständig.", correct: false },
         { key: "D", text: "Die Reibung ist unabhängig von Drehzahl und Last.", correct: false }
       ]
     },
     {
       level: "3.0",
       points: 2,
-      text: "Welche Änderung verschiebt ein Gleitlager am ehesten aus der Mischreibung in Richtung Flüssigkeitsreibung?",
-      explanation: "Eine höhere Relativgeschwindigkeit unterstützt den Aufbau des hydrodynamischen Schmierfilms.",
+      text: "Ein Gleitlager arbeitet in Mischreibung. Welche Änderung fördert am ehesten einen vollständig tragenden Schmierfilm?",
+      explanation: "Bei höherer Drehzahl bewegen sich die Lagerflächen schneller gegeneinander. Das unterstützt den Aufbau des tragenden Schmierfilms.",
       answers: [
         { key: "A", text: "Höhere Drehzahl bei sonst gleichen Bedingungen.", correct: true },
         { key: "B", text: "Höhere Last bei gleicher Drehzahl.", correct: false },
-        { key: "C", text: "Größerer Festkörperkontakt im Spalt.", correct: false },
+        { key: "C", text: "Mehr direkter Kontakt zwischen den Oberflächen.", correct: false },
         { key: "D", text: "Trockener Betrieb ohne Schmierstoff.", correct: false }
       ]
     },
@@ -95,10 +95,10 @@ const demoLecture = {
       level: "2.0",
       points: 3,
       text: "Warum ist Mischreibung bei einem Gleitlager besonders kritisch?",
-      explanation: "Direkter Kontakt erzeugt lokale Erwärmung und Verschleiß, obwohl gleichzeitig schon Schmierfilmanteile tragen.",
+      explanation: "Der Schmierfilm trägt bereits einen Teil der Last. Direkter Kontakt zwischen den Oberflächen führt zugleich zu Wärme und Verschleiß.",
       answers: [
-        { key: "A", text: "Der hydrodynamische Druck trägt die Last vollständig.", correct: false },
-        { key: "B", text: "Es treten gleichzeitig Schmierfilmanteile und direkter Kontakt auf.", correct: true },
+        { key: "A", text: "Der Druck im Schmierfilm trägt die gesamte Last.", correct: false },
+        { key: "B", text: "Ein Schmierfilm trägt teilweise; zugleich berühren sich die Oberflächen.", correct: true },
         { key: "C", text: "Die Drehzahl hat in diesem Bereich keinen Einfluss.", correct: false },
         { key: "D", text: "Die Reibung ist kleiner als bei Flüssigkeitsreibung.", correct: false }
       ]
@@ -106,12 +106,12 @@ const demoLecture = {
     {
       level: "1.0",
       points: 4,
-      text: "Eine schwer belastete Welle läuft häufig langsam an. Welche Maßnahme adressiert das eigentliche Gleitlagerproblem am besten?",
-      explanation: "Die Startphase ist kritisch, weil der hydrodynamische Film noch nicht stabil trägt.",
+      text: "Eine stark belastete Welle läuft häufig langsam an. Welche Maßnahme schützt das Gleitlager beim Start am besten?",
+      explanation: "Beim langsamen Anfahren trägt der Schmierfilm noch nicht stabil. Eine geringere Startlast oder zusätzliche Schmierfilmversorgung hilft in dieser Phase.",
       answers: [
-        { key: "A", text: "Startphase entlasten oder eine zusätzliche Schmierfilmversorgung vorsehen.", correct: true },
-        { key: "B", text: "Nur die Enddrehzahl erhöhen, ohne den Startvorgang zu verändern.", correct: false },
-        { key: "C", text: "Das Lagerspiel beliebig verkleinern, damit kein Schmierstoff entweicht.", correct: false },
+        { key: "A", text: "Die Startlast senken oder eine zusätzliche Schmierfilmversorgung vorsehen.", correct: true },
+        { key: "B", text: "Nur die Enddrehzahl erhöhen und den Start unverändert lassen.", correct: false },
+        { key: "C", text: "Das Lagerspiel beliebig verkleinern, um Schmierstoff zurückzuhalten.", correct: false },
         { key: "D", text: "Den Schmierstoff entfernen, um Mischreibung zu vermeiden.", correct: false }
       ]
     }
@@ -152,6 +152,7 @@ function printUsage() {
     "  npm run admin -- set-ai-budget --email email@example.test --questions 20 --tokens 12000",
     "  npm run admin -- retention-report [--years 5] [--lecture-token token]",
     "  npm run admin -- retention-cleanup [--years 5] [--lecture-token token] [--apply --confirm-retention-cleanup]",
+    "  npm run admin -- anonymize-enrollment --enrollment-id uuid",
     "  npm run admin -- worker-once --url http://localhost:3000 --secret secret [--limit 5]",
     "  npm run admin -- backup-sql --out backups/learnordie.sql",
     "  npm run admin -- restore-sql --file backups/learnordie.sql",
@@ -426,10 +427,6 @@ function selectedLecturerAssistantProvider() {
   return (envValue("LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER") || "local").toLowerCase();
 }
 
-function selectedChatModerationProvider() {
-  return (envValue("LEARNBUDDY_CHAT_MODERATION_PROVIDER") || "local").toLowerCase();
-}
-
 function selectedQuestionGenerator() {
   return (envValue("LEARNBUDDY_QUESTION_GENERATOR") || "local").toLowerCase();
 }
@@ -455,6 +452,10 @@ function secretIsSet(name) {
     && !value.includes("replace")
     && !value.includes("placeholder")
     && !value.includes("changeme");
+}
+
+function minimaxApiKeyIsSet() {
+  return secretIsSet("LEARNORDIE_MINIMAX_API_KEY") || secretIsSet("MINIMAX_API_KEY");
 }
 
 async function tableColumnExists(sql, tableName, columnName) {
@@ -549,6 +550,14 @@ async function runPreflight(sql) {
       ["magic_login_rate_limits", "attempt_count"],
       ["magic_login_rate_limits", "blocked_until"],
       ["lectures", "public_token"],
+      ["student_enrollments", "display_name"],
+      ["student_enrollments", "display_name_normalized"],
+      ["live_sessions", "session_id"],
+      ["live_sessions", "revision"],
+      ["live_sessions", "show_intro"],
+      ["live_sessions", "round"],
+      ["live_answers", "round_id"],
+      ["live_answers", "receipt"],
       ["asset_chunks", "embedding"],
       ["presentation_assets", "source_json"],
       ["material_processing_runs", "dead_letter_at"],
@@ -747,25 +756,10 @@ async function runPreflight(sql) {
     });
   }
 
-  const chatModerationProvider = selectedChatModerationProvider();
-  if (strict && ["", "local", "rubric", "deterministic"].includes(chatModerationProvider)) {
-    failCheck(checks, "chat_moderation_provider", "critical", "Production benötigt providerbasierte Chatfragenmoderation.", {
-      provider: chatModerationProvider || "local"
-    });
-  } else if (["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(chatModerationProvider)) {
-    passCheck(checks, "chat_moderation_provider", "Chatfragenmoderation nutzt den serverseitigen AIProvider.", {
-      provider: chatModerationProvider,
-      aiProvider
-    });
-  } else if (["", "local", "rubric", "deterministic"].includes(chatModerationProvider)) {
-    warnCheck(checks, "chat_moderation_provider", "Lokale Chatfragenmoderation ist nur ein Entwicklungsfallback.", {
-      provider: chatModerationProvider || "local"
-    });
-  } else {
-    failCheck(checks, "chat_moderation_provider", "critical", "Unbekannter ChatModerationProvider.", {
-      provider: chatModerationProvider
-    });
-  }
+  passCheck(checks, "chat_moderation_provider", "Kein separater Themenfilter: Quellenprüfung erfolgt bei der KI-Entwurfserstellung. Laufzeitabnahme bleibt erforderlich.", {
+    provider: "learnordie-admission",
+    externalRoundtrip: false
+  });
 
   const questionGenerator = selectedQuestionGenerator();
   if (strict && ["", "local", "deterministic", "demo"].includes(questionGenerator)) {
@@ -788,7 +782,9 @@ async function runPreflight(sql) {
   }
 
   const embeddingProvider = selectedEmbeddingProvider();
-  if (strict && ["", "learnbuddy-local-hash-v1", "local"].includes(embeddingProvider)) {
+  if (embeddingProvider === "disabled") {
+    passCheck(checks, "embedding_provider", "Embeddings sind deaktiviert; Materialien werden per Datenbank-Textsuche durchsucht.", { provider: "disabled", retrieval: "text" });
+  } else if (strict && ["", "learnbuddy-local-hash-v1", "local"].includes(embeddingProvider)) {
     failCheck(checks, "embedding_provider", "critical", "Production benötigt einen echten serverseitigen Embedding-Provider.", { provider: embeddingProvider });
   } else if (["openai-compatible", "http"].includes(embeddingProvider)) {
     const missing = [];
@@ -811,6 +807,19 @@ async function runPreflight(sql) {
   const ocrProvider = selectedOCRProvider();
   if (strict && ["", "disabled", "local", "none"].includes(ocrProvider)) {
     failCheck(checks, "ocr_provider", "critical", "Production benötigt einen externen OCR-/Vision-Provider für gescannte Materialien.", { provider: ocrProvider });
+  } else if (ocrProvider === "minimax") {
+    const configuredModel = envValue("LEARNBUDDY_OCR_MODEL");
+    if (configuredModel && configuredModel.toLowerCase() !== "minimax-m3") {
+      failCheck(checks, "ocr_provider", "critical", "MiniMax Vision OCR verwendet ausschließlich das Modell MiniMax-M3.", { provider: ocrProvider, model: configuredModel });
+    } else if (!minimaxApiKeyIsSet()) {
+      failCheck(checks, "ocr_provider", strict ? "critical" : "warning", "MiniMax Vision OCR benötigt LEARNORDIE_MINIMAX_API_KEY oder MINIMAX_API_KEY.", { provider: ocrProvider, missing: ["LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY"] });
+    } else {
+      passCheck(checks, "ocr_provider", "MiniMax M3 Vision OCR ist konfiguriert.", {
+        provider: ocrProvider,
+        model: "MiniMax-M3",
+        endpointHost: "api.minimax.io"
+      });
+    }
   } else if (["http", "external", "vision", "ocr"].includes(ocrProvider)) {
     const missing = [];
     if (!envValue("LEARNBUDDY_OCR_BASE_URL")) missing.push("LEARNBUDDY_OCR_BASE_URL");
@@ -826,6 +835,21 @@ async function runPreflight(sql) {
         model: envValue("LEARNBUDDY_OCR_MODEL") || "learnbuddy-ocr"
       });
     }
+  } else if (["openai-compatible", "openai-vision", "vision-chat"].includes(ocrProvider)) {
+    const missing = [];
+    if (!envValue("LEARNBUDDY_OCR_BASE_URL")) missing.push("LEARNBUDDY_OCR_BASE_URL");
+    if (!envValue("LEARNBUDDY_OCR_API_KEY")) missing.push("LEARNBUDDY_OCR_API_KEY");
+    const endpointError = deploymentEndpointError("LEARNBUDDY_OCR_BASE_URL", envValue("LEARNBUDDY_OCR_BASE_URL"), profile);
+    if (endpointError) {
+      failCheck(checks, "ocr_provider", "critical", endpointError, { provider: ocrProvider });
+    } else if (missing.length) {
+      failCheck(checks, "ocr_provider", strict ? "critical" : "warning", "OCR-/Vision-Provider ist unvollständig.", { missing, provider: ocrProvider });
+    } else {
+      passCheck(checks, "ocr_provider", "OpenAI-kompatibler OCR-/Vision-Provider ist konfiguriert.", {
+        provider: ocrProvider,
+        model: envValue("LEARNBUDDY_OCR_MODEL") || "gpt-4o-mini"
+      });
+    }
   } else if (["", "disabled", "local", "none"].includes(ocrProvider)) {
     warnCheck(checks, "ocr_provider", "OCR-/Vision-Provider ist deaktiviert; gescannte Materialien liefern nur Warnhinweise.", { provider: ocrProvider || "disabled" });
   } else {
@@ -835,6 +859,19 @@ async function runPreflight(sql) {
   const sttProvider = selectedSTTProvider();
   if (strict && ["", "local", "placeholder", "demo"].includes(sttProvider)) {
     failCheck(checks, "stt_provider", "critical", "Production benötigt einen externen STTProvider.", { provider: sttProvider });
+  } else if (sttProvider === "minimax") {
+    const configuredModel = envValue("LEARNBUDDY_STT_MODEL");
+    if (configuredModel && configuredModel.toLowerCase() !== "asr-1.0") {
+      failCheck(checks, "stt_provider", "critical", "MiniMax Speech-to-Text verwendet ausschließlich das Modell asr-1.0.", { provider: sttProvider, model: configuredModel });
+    } else if (!minimaxApiKeyIsSet()) {
+      failCheck(checks, "stt_provider", strict ? "critical" : "warning", "MiniMax ASR benötigt LEARNORDIE_MINIMAX_API_KEY oder MINIMAX_API_KEY.", { provider: sttProvider, missing: ["LEARNORDIE_MINIMAX_API_KEY or MINIMAX_API_KEY"] });
+    } else {
+      passCheck(checks, "stt_provider", "MiniMax ASR ist konfiguriert.", {
+        provider: sttProvider,
+        model: "asr-1.0",
+        endpointHost: "api.minimax.io"
+      });
+    }
   } else if (["mistral", "mistral-voxtral", "voxtral", "external"].includes(sttProvider)) {
     const endpointName = envValue("LEARNBUDDY_STT_BASE_URL")
       ? "LEARNBUDDY_STT_BASE_URL"
@@ -1192,6 +1229,24 @@ async function retentionReport(sql) {
   }, null, 2));
 }
 
+async function anonymizeEnrollment(sql) {
+  const enrollmentId = argValue("--enrollment-id", "").trim();
+  if (!enrollmentId) throw new Error("anonymize-enrollment requires --enrollment-id.");
+  const suffix = enrollmentId.replace(/[^a-zA-Z0-9]/g, "").slice(-3).toUpperCase() || "X";
+  const displayName = `Anonym · ${suffix}`.slice(0, 40);
+  const normalized = displayName.toLocaleLowerCase("de-DE");
+  const rows = await sql`
+    update student_enrollments
+    set status = 'anonymized',
+        display_name = ${displayName},
+        display_name_normalized = ${normalized}
+    where id = ${enrollmentId}::uuid
+    returning id, status, display_name
+  `;
+  if (rows.length === 0) throw new Error("Enrollment not found.");
+  console.log(JSON.stringify({ command: "anonymize-enrollment", enrollment: rows[0] }, null, 2));
+}
+
 async function retentionCleanup(sql) {
   const years = numericArg("--years", 5, 1, 50);
   const lectureToken = argValue("--lecture-token", "").trim();
@@ -1455,6 +1510,7 @@ async function main() {
     else if (command === "retention-cleanup") await retentionCleanup(sql);
     else if (command === "backup-sql") await backupSql();
     else if (command === "restore-sql") await restoreSql(sql);
+    else if (command === "anonymize-enrollment") await anonymizeEnrollment(sql);
     else if (command === "worker-once") await workerOnce();
     else if (command === "preflight") await runPreflight(sql);
     else if (command === "status") await status(sql);

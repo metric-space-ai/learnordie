@@ -1,0 +1,157 @@
+/* Only the synchronized classroom; does not change the independent learn mode. */
+.student-connection-notice {
+  position: fixed;
+  z-index: 35;
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 24px));
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-island);
+  overflow-wrap: anywhere;
+}
+.student-connection-notice a, .student-connection-notice button { margin-left: 12px; }
+.slide-screen[data-live-status] .slide-engine-nav {
+  top: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 12px;
+  transform: none;
+  z-index: 32;
+}
+.action-stack.live-controls {
+  top: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  right: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 224px);
+  overflow-x: auto;
+  padding: 4px;
+  z-index: 32;
+}
+.live-controls > * { flex-shrink: 0; }
+.action-stack.live-controls > .icon-action { width: 44px; flex: 0 0 44px; }
+.action-stack.live-controls > .action-text { width: auto; flex: 0 0 auto; padding: 0 14px; font-size: 14px; }
+.live-controls label { display: grid; gap: 2px; font-size: 12px; background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.live-controls select { font: inherit; font-size: 14px; min-height: 30px; max-width: 120px; background: var(--panel); color: var(--ink); }
+.live-identity-nudge {
+  top: auto;
+  bottom: 82px;
+  z-index: 15;
+  grid-template-columns: minmax(0, 1fr);
+  max-height: 45dvh;
+  overflow: auto;
+}
+.live-question-drawer { bottom: 82px; max-height: calc(100dvh - 150px); overflow-y: auto; }
+.live-question-drawer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.live-question-drawer .question-feedback { overflow-wrap: anywhere; }
+.live-question-drawer .answer { min-height: 44px; }
+.live-question-drawer .levels { display: flex; flex-wrap: wrap; gap: 4px; }
+.live-question-drawer .levels button { display: grid; gap: 2px; height: auto; padding: 6px 8px; font-size: 14px; }
+.live-question-drawer .levels small { font: 400 11px/1.2 var(--app-font), system-ui, sans-serif; }
+.live-difficulty-hint { margin: 8px 0; font-size: 13px; color: var(--muted); }
+@font-face {
+  font-family: "Virgil";
+  src: url("/vendor/excalidraw/fonts/Virgil/Virgil-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+.student-question-ticker {
+  --ticker-surface: var(--studio-surface, var(--app-surface, var(--panel)));
+  --ticker-paper: var(--studio-paper, var(--app-background, var(--slide)));
+  --ticker-ink: var(--studio-ink, var(--app-text, var(--ink)));
+  --ticker-muted: var(--studio-muted, var(--app-text-muted, var(--muted)));
+  --ticker-line: var(--studio-line, var(--app-border, var(--line)));
+  --ticker-accent: var(--studio-accent, var(--app-accent, var(--accent)));
+  position: fixed;
+  z-index: 40;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: visible;
+  color: var(--ticker-ink);
+  font: 500 15px/1.45 "Virgil", var(--app-font, sans-serif);
+  pointer-events: none;
+}
+.student-question-ticker[data-open="false"] { width: max-content; max-width: calc(100vw - 24px); }
+.student-question-ticker[data-placement="top-left"] { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); }
+.student-question-ticker[data-placement="top-right"] { top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+.student-question-ticker[data-placement="bottom-left"] { bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); }
+.student-question-ticker[data-placement="bottom-right"] { bottom: max(12px, env(safe-area-inset-bottom)); right: max(12px, env(safe-area-inset-right)); }
+.student-question-ticker[data-placement="host"] { position: relative; inset: auto; width: 100%; max-width: 360px; max-height: none; }
+.student-question-ticker__toggle,
+.student-question-ticker__actions button,
+.student-question-ticker__list button {
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid var(--ticker-line);
+  border-radius: var(--lb-radius-control, 8px);
+  background: var(--ticker-surface);
+  color: var(--ticker-ink);
+  font: inherit;
+  box-shadow: var(--studio-shadow, var(--app-shadow, var(--shadow-island)));
+  cursor: pointer;
+}
+.student-question-ticker__toggle { display: block; margin-left: auto; pointer-events: auto; }
+.student-question-ticker__toggle:hover,
+.student-question-ticker__actions button:hover,
+.student-question-ticker__list button:hover { background: var(--studio-selected, var(--app-surface-hover, var(--panel-soft))); }
+.student-question-ticker__toggle:focus-visible,
+.student-question-ticker__panel :is(button, summary):focus-visible { outline: 2px solid var(--ticker-accent); outline-offset: 2px; }
+.student-question-ticker__panel {
+  max-height: min(62vh, 520px);
+  margin-top: 8px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--ticker-line);
+  border-radius: var(--lb-radius-panel, 12px);
+  background: var(--ticker-surface);
+  color: var(--ticker-ink);
+  box-shadow: var(--studio-shadow, var(--app-shadow-panel, var(--shadow)));
+  pointer-events: auto;
+}
+.student-question-ticker__error,
+.student-question-ticker__empty,
+.student-question-ticker__item p { margin: 0; }
+.student-question-ticker__error { margin-bottom: 8px !important; color: var(--app-danger, var(--red)); }
+.student-question-ticker__empty { color: var(--ticker-muted); }
+.student-question-ticker__list { display: grid; gap: 10px; }
+.student-question-ticker__item { padding-top: 9px; border-top: 1px solid var(--ticker-line); }
+.student-question-ticker__meta { margin-bottom: 4px !important; color: var(--ticker-muted); font-size: 13px; }
+.student-question-ticker__question { margin-bottom: 7px !important; overflow-wrap: anywhere; }
+.student-question-ticker__draft-summary { color: var(--ticker-accent); cursor: pointer; }
+.student-question-ticker__core { margin: 7px 0 !important; color: var(--ticker-muted); }
+.student-question-ticker__variant {
+  margin: 8px 0;
+  padding: 9px;
+  border-left: 3px solid var(--ticker-accent);
+  border-radius: var(--lb-radius-control, 8px);
+  background: var(--studio-selected, var(--app-surface-muted, var(--panel-soft)));
+}
+.student-question-ticker__variant-text { margin: 4px 0 !important; }
+.student-question-ticker__answers { margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
+.student-question-ticker__answers [data-correct="true"] { color: var(--app-success, var(--green)); font-weight: 600; }
+.student-question-ticker__explanation { margin-top: 5px !important; color: var(--ticker-muted); }
+.student-question-ticker__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.student-question-ticker__actions button:disabled,
+.student-question-ticker__list button:disabled { opacity: .45; cursor: not-allowed; }
+.student-question-ticker__status { margin: 0 0 6px !important; color: var(--ticker-muted); }
+.student-question-ticker__hint { margin: 10px 0 0 !important; color: var(--ticker-muted); font-size: 13px; }
+@media (max-width: 700px) {
+  .slide-screen[data-live-status] .slide-engine-nav { bottom: 82px; }
+  .action-stack.live-controls { max-width: calc(100vw - 24px); }
+  .live-question-drawer { left: 50%; right: auto; width: calc(100vw - 16px); max-height: calc(100dvh - 156px); min-height: 0; }
+  .live-question-drawer .question-head { flex-wrap: wrap; gap: 8px; }
+  .live-question-drawer .drawer-main { min-width: 0; }
+  .live-question-drawer .question { font-size: clamp(17px, 4.6vw, 22px); }
+  .live-question-drawer .levels button { min-width: 44px; min-height: 44px; }
+  .student-question-ticker[data-placement="top-left"], .student-question-ticker[data-placement="top-right"] { top: max(8px, env(safe-area-inset-top)); }
+  .student-question-ticker[data-placement="bottom-left"], .student-question-ticker[data-placement="bottom-right"] { bottom: max(8px, env(safe-area-inset-bottom)); }
+  .student-question-ticker__panel { max-height: min(62vh, 480px); }
+}

@@ -33,6 +33,10 @@ export type AICompleteInput = {
   maxOutputTokens?: number;
   temperature?: number;
   responseFormat?: "json_object";
+  /** MiniMax M3: minimal enables adaptive thinking; none keeps fast direct replies. */
+  reasoningEffort?: "none" | "minimal";
+  /** Optionales Zeitlimit fuer diesen Aufruf (max. 60 s); sonst LEARNBUDDY_AI_TIMEOUT_MS. */
+  timeoutMs?: number;
 };
 
 export interface AIProvider {
@@ -122,6 +126,7 @@ type ProviderErrorResponse = {
 
 type OpenAICompatibleResponse = ProviderErrorResponse & {
   choices?: Array<{
+    finish_reason?: string;
     message?: {
       content?: unknown;
     };
@@ -153,7 +158,8 @@ function normalizeResponsesBaseUrl(value: string) {
   return endpoint;
 }
 
-function providerTimeoutMs() {
+function providerTimeoutMs(requested?: number) {
+  if (requested && Number.isFinite(requested) && requested > 0) return Math.min(60_000, Math.round(requested));
   const configured = Number(process.env.LEARNBUDDY_AI_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0 ? Math.min(60_000, Math.round(configured)) : 15_000;
 }
@@ -312,6 +318,15 @@ class OpenAICompatibleProvider implements AIProvider {
   private readonly endpoint: string;
   private readonly apiKey?: string;
 
+  private generationOptions(input: AICompleteInput) {
+    // Keep reasoning separate from the final JSON, including when explicitly
+    // enabled for exam authoring/review. Unrelated fast calls retain their default.
+    // https://platform.minimax.io/docs/api-reference/text-openai-api
+    return /^MiniMax-M3(?:$|[-/])/i.test(this.info.model)
+      ? { thinking: { type: input.reasoningEffort === "minimal" ? "adaptive" : "disabled" }, reasoning_split: true }
+      : {};
+  }
+
   constructor(input: { endpoint: string; apiKey?: string; model: string }) {
     this.endpoint = input.endpoint;
     this.apiKey = input.apiKey?.trim() || undefined;
@@ -323,7 +338,7 @@ class OpenAICompatibleProvider implements AIProvider {
 
   async complete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     try {
       const response = await fetch(this.endpoint, {
@@ -336,6 +351,7 @@ class OpenAICompatibleProvider implements AIProvider {
           model: this.info.model,
           temperature: input.temperature ?? 0.2,
           max_tokens: input.maxOutputTokens ?? 520,
+          ...this.generationOptions(input),
           ...(input.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
           messages: [
             {
@@ -357,6 +373,9 @@ class OpenAICompatibleProvider implements AIProvider {
         throw new Error(`AI provider request failed: ${message}`);
       }
 
+      if (payload?.choices?.[0]?.finish_reason === "length") {
+        throw new Error("AI provider answer exceeded its output limit. No incomplete answer was accepted.");
+      }
       const content = normalizeProviderContent(payload?.choices?.[0]?.message?.content ?? payload?.choices?.[0]?.text ?? payload?.output_text);
       if (!content) {
         throw new Error("AI provider returned no answer text.");
@@ -378,7 +397,7 @@ class OpenAICompatibleProvider implements AIProvider {
 
   async streamComplete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     const response = await fetch(this.endpoint, {
       method: "POST",
@@ -390,6 +409,7 @@ class OpenAICompatibleProvider implements AIProvider {
         model: this.info.model,
         temperature: input.temperature ?? 0.2,
         max_tokens: input.maxOutputTokens ?? 520,
+        ...this.generationOptions(input),
         stream: true,
         stream_options: { include_usage: true },
         ...(input.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
@@ -421,6 +441,9 @@ class OpenAICompatibleProvider implements AIProvider {
         for await (const data of stream) {
           if (data === "[DONE]") break;
           const payload = JSON.parse(data) as OpenAICompatibleResponse;
+          if (payload.choices?.[0]?.finish_reason === "length") {
+            throw new Error("AI provider answer exceeded its output limit. No incomplete answer was accepted.");
+          }
           usage = normalizeUsage(payload.usage) ?? usage;
           const token = chatCompletionStreamToken(payload);
           if (!token) continue;
@@ -463,6 +486,13 @@ class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
+export function responsesProxyMessages(input: Pick<AICompleteInput, "system" | "user">) {
+  return [
+    { type: "message", role: "system", content: [{ type: "input_text", text: input.system }] },
+    { type: "message", role: "user", content: [{ type: "input_text", text: input.user }] }
+  ];
+}
+
 class ResponsesProxyProvider implements AIProvider {
   readonly info: AIProviderInfo;
   private readonly endpoint: string;
@@ -479,7 +509,7 @@ class ResponsesProxyProvider implements AIProvider {
 
   async complete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     try {
       const response = await fetch(this.endpoint, {
@@ -490,9 +520,10 @@ class ResponsesProxyProvider implements AIProvider {
         },
         body: JSON.stringify({
           model: this.info.model,
-          input: `${input.system}\n\n${input.user}`,
+          input: responsesProxyMessages(input),
+          temperature: Math.max(0.01, Math.min(1, input.temperature ?? 0.2)),
           max_output_tokens: input.maxOutputTokens ?? 520,
-          reasoning: { effort: "none" },
+          reasoning: { effort: input.reasoningEffort ?? "none" },
           store: false
         }),
         signal: controller.signal
@@ -525,7 +556,7 @@ class ResponsesProxyProvider implements AIProvider {
 
   async streamComplete(input: AICompleteInput) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs(input.timeoutMs));
 
     const response = await fetch(this.endpoint, {
       method: "POST",
@@ -535,9 +566,10 @@ class ResponsesProxyProvider implements AIProvider {
       },
       body: JSON.stringify({
         model: this.info.model,
-        input: `${input.system}\n\n${input.user}`,
+        input: responsesProxyMessages(input),
+        temperature: Math.max(0.01, Math.min(1, input.temperature ?? 0.2)),
         max_output_tokens: input.maxOutputTokens ?? 520,
-        reasoning: { effort: "none" },
+        reasoning: { effort: input.reasoningEffort ?? "none" },
         stream: true,
         store: false
       }),

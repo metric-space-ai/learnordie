@@ -1,0 +1,296 @@
+/* Native workspace: one header, one tool row, canvas to the bottom. */
+.native-workspace {
+  --studio-surface: var(--app-surface); --studio-paper: var(--app-background); --studio-ink: var(--app-text);
+  --studio-muted: var(--app-text-muted); --studio-line: var(--app-border); --studio-accent: var(--app-accent);
+  --studio-selected: var(--app-surface-muted); --studio-shadow: var(--app-shadow);
+  background: var(--studio-paper); color: var(--studio-ink);
+  padding: 0; width: 100%; max-width: none; height: 100dvh; overflow: hidden;
+}
+.native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open {
+  grid-template: "header header" auto "film stage" minmax(0, 1fr) / 184px minmax(0, 1fr);
+  height: 100%; background: var(--studio-paper);
+}
+.native-workspace .lecturer-studio-empty { grid-template: "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+.native-workspace .studio-top-actions {
+  grid-area: header; position: relative; inset: auto; align-self: stretch; justify-self: stretch;
+  align-items: center; gap: 12px; min-width: 0; min-height: 64px; margin: 0; padding: 10px 16px;
+  background: var(--studio-surface); border-bottom: 1px solid var(--studio-line); z-index: 100;
+}
+.native-workspace-heading { order: 1; display: grid; gap: 2px; min-width: 0; margin-right: auto; }
+.native-workspace-heading span { font-size: 12px; color: var(--studio-muted); }
+.native-workspace-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; }
+.native-workspace .studio-top-actions > .theme-toggle { order: 2; flex-shrink: 0; }
+.native-workspace .studio-save-island { order: 3; flex-shrink: 0; padding: 0; gap: 8px; background: none; box-shadow: none; border: 0; }
+.native-workspace .studio-save-status { font-size: 12px; font-weight: 500; }
+.native-workspace .studio-save-status.is-unsaved { color: var(--studio-muted); }
+.native-workspace .studio-command-menu { order: 0; position: relative; inset: auto; margin: 0; align-self: center; flex-shrink: 0; }
+.native-workspace .studio-top-actions > .studio-present-link { order: 4; flex-shrink: 0; }
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar) :is(button, summary, a) {
+  width: auto; min-width: 0; min-height: 38px; height: auto; padding: 8px 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--studio-line); border-radius: 8px;
+  background: var(--studio-surface); color: var(--studio-ink);
+  font: inherit; font-size: 14px; font-weight: 500; line-height: 1.25; white-space: nowrap;
+  text-decoration: none; box-shadow: none; animation: none; transform: none; cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar) :is(button, summary, a):hover { background: var(--studio-selected); }
+.native-workspace .studio-top-actions .studio-present-link { background: var(--app-primary); color: var(--app-primary-text); border-color: var(--app-primary); }
+.native-workspace .studio-top-actions .studio-present-link:hover { background: var(--app-primary-hover); border-color: var(--app-primary-hover); }
+.native-workspace :is(button, summary, a):focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 3px; }
+.native-workspace button:disabled { opacity: .4; cursor: not-allowed; }
+.native-workspace .studio-top-actions .studio-command-popover {
+  position: absolute; top: calc(100% + 10px); left: 0; right: auto;
+  width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 90px);
+  padding: 16px; gap: 16px; background: var(--studio-surface); color: var(--studio-ink);
+  border: 1px solid var(--studio-line); border-radius: 12px; box-shadow: var(--studio-shadow);
+  animation: canvas-panel-in 140ms ease-out; transform: none;
+}
+.native-workspace .studio-command-popover :is(button, a) { display: flex; justify-content: flex-start; width: 100%; white-space: normal; text-align: left; font-size: 14px; }
+.native-workspace .studio-top-actions :is(.studio-command-popover, .studio-view-popover) :is(button, a, summary) { border-color: transparent; background: transparent; }
+.native-workspace .studio-command-popover .studio-deck-card { display: grid; justify-content: stretch; }
+.native-workspace .studio-menu-heading strong { color: var(--studio-muted); font-size: 12px; font-weight: 600; }
+.native-workspace .studio-menu-section { animation: none; }
+.native-workspace .studio-deck-card.active { background: var(--studio-selected); border-color: var(--studio-accent); }
+.native-workspace .studio-filmstrip-rail {
+  display: grid; position: relative; inset: auto; width: auto; padding: 16px 12px;
+  background: var(--studio-surface); color: var(--studio-ink); border: 0;
+  border-right: 1px solid var(--studio-line); box-shadow: none; border-radius: 0; overflow: auto;
+}
+.native-workspace .studio-filmstrip-head { color: var(--studio-muted); padding: 0 4px 12px; border: 0; }
+.native-workspace .studio-filmstrip-head strong { font-size: 12px; font-weight: 500; line-height: 1.4; }
+.native-workspace .studio-account-mini { border-color: var(--studio-line); }
+.native-workspace .studio-account-mini strong { color: var(--studio-muted); font-size: 12px; font-weight: 500; line-height: 1.4; }
+.native-workspace .studio-filmstrip-list { display: flex; flex-direction: column; gap: 10px; }
+.native-workspace .studio-filmstrip-list button { flex: 0 0 auto; aspect-ratio: auto; min-height: 84px; padding: 12px; background: var(--studio-paper); color: var(--studio-ink); border: 1px solid var(--studio-line); border-radius: 8px; box-shadow: none; animation: none; }
+.native-workspace .studio-filmstrip-list button:is(.active, [aria-current="true"], [aria-pressed="true"]) { background: var(--studio-selected); border-color: var(--studio-accent); }
+.native-workspace .studio-filmstrip-list strong { font-size: 12px; line-height: 1.35; font-weight: 500; }
+.native-workspace .studio-slide-stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; background: var(--studio-paper); overflow: visible; min-height: 0; }
+.native-workspace .studio-slide-shell { position: relative; inset: auto; grid-row: 1; min-width: 0; min-height: 0; padding: 0; align-items: stretch; }
+.native-workspace .studio-editor-frame.native-studio-frame { width: 100%; height: 100%; max-height: none; min-height: 0; aspect-ratio: auto; align-self: stretch; padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
+.native-workspace .studio-bottom-bar, .native-workspace .lecturer-studio.tool-open .studio-bottom-bar {
+  position: relative; inset: auto; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: flex-end; gap: 8px; width: 100%; max-width: none; min-width: 0; margin: 0;
+  padding: 8px 14px; border: 0; border-top: 1px solid var(--studio-line); border-radius: 0;
+  background: var(--studio-surface); color: var(--studio-ink); transform: none; animation: none; box-shadow: none;
+}
+.native-workspace .studio-bottom-bar > * { grid-area: auto; flex-shrink: 0; }
+.native-workspace .studio-bottom-bar > .studio-tool-menu { width: auto; }
+.native-workspace .studio-bottom-bar .studio-stepper { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.native-workspace .studio-stepper span { white-space: nowrap; min-width: 50px; text-align: center; font-size: 13px; }
+.native-workspace .studio-bottom-bar .studio-stepper button { width: 38px; height: 38px; padding: 0; font-size: 22px; }
+.native-workspace .studio-bottom-bar .studio-engine-toggle { display: inline-flex; }
+.native-workspace .studio-plan-summary-button { flex: 0 0 auto; width: auto; max-width: none; }
+.native-workspace .studio-plan-summary-button strong { font-size: 13px; font-weight: 500; }
+.native-workspace :is(.studio-tool-popover, .studio-plan-editor, .studio-slide-tool-overlay, .studio-slide-source-overlay) { background: var(--studio-surface); color: var(--studio-ink); border-color: var(--studio-line); box-shadow: var(--studio-shadow); }
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar, .studio-filmstrip-rail, .studio-slide-stage, .studio-tool-popover)::before,
+.native-workspace :is(.studio-top-actions, .studio-bottom-bar, .studio-filmstrip-rail, .studio-slide-stage)::after { content: none; }
+.native-workspace .deck-error { width: 100%; margin: 0; }
+.native-studio-editor { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--studio-surface, #fff); color: var(--studio-ink, #1b1b1f); }
+.native-studio-tools { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; min-height: 44px; padding: 4px 12px; overflow-x: auto; border-bottom: 1px solid var(--studio-line, #e6e6ec); background: var(--studio-surface, #fff); }
+.native-studio-tools > * { flex-shrink: 0; }
+.native-studio-title { padding-right: 8px; font-size: 12px; color: var(--studio-muted); }
+.native-studio-tools button { min-height: 36px; padding: 6px 12px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; transition: background-color 120ms ease; }
+.native-studio-tools button:hover, .native-studio-tools button[aria-expanded="true"] { background: var(--studio-selected, #eeedfc); }
+.native-studio-tools button:disabled { opacity: .4; cursor: not-allowed; }
+.native-canvas { position: relative; width: 100%; flex: 1 1 auto; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
+.native-canvas-host { position: absolute; inset: 0; width: 100%; height: 100%; }
+.native-canvas-host > div { width: 100%; height: 100%; }
+.native-canvas-reader-zoom { position: absolute; top: 56px; right: 8px; z-index: 4; display: flex; gap: 2px; border-radius: 9px 11px 8px 10px; background: var(--app-background); color: var(--app-text); }
+.native-canvas-reader-zoom button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: inherit; font: 26px "Learnordie Sketch", sans-serif; }
+.native-canvas-reader-zoom button:hover { color: var(--app-accent); }
+.native-canvas-reader-zoom button:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; }
+/* The presenter keeps a clean projected slide; reader controls do not become
+   another lecture toolbar. Student live and self-study share .learn-shell. */
+.slide-screen:not(.learn-shell) .native-canvas-reader-zoom { display: none; }
+.native-canvas .excalidraw .HintViewer { display: none; }
+.native-canvas-view .excalidraw :is(.layer-ui__wrapper, .App-bottom-bar, .FixedSideContainer) { display: none; }
+/* Presentations do not need the editor's first-click-to-activate embed gate. */
+.native-canvas-view .excalidraw__embeddable-container__inner:has(.learnordie-canvas-embed-host) { pointer-events: all !important; }
+.native-canvas .excalidraw-hyperlinkContainer:has(a[href^="https://learnordie.invalid/embed/"]) { display: none; }
+/* Excalidraw inverts its drawing canvas, but three.js renders its own colors. */
+.native-canvas .excalidraw.theme--dark .learnordie-canvas-scene canvas { filter: none; }
+.learnordie-canvas-scene .lb-scene3d {
+  height: 100%; min-height: 0; border: 0; border-radius: 0; font-size: 24px;
+  --lb-scene-panel: var(--app-surface); --lb-scene-ink: var(--app-text); --lb-scene-muted: var(--app-text-muted);
+  --lb-scene-line: var(--app-border); --lb-scene-accent: var(--app-accent);
+}
+.learnordie-canvas-scene .lb-scene3d-stage { flex: 1 1 0; min-height: 80px; aspect-ratio: auto; }
+.learnordie-canvas-scene .lb-scene3d-controls { --lb-scene-accent: var(--app-accent); flex: 0 0 auto; max-height: 58%; overflow: auto; padding: 12px 16px; font-size: 22px; }
+.learnordie-canvas-scene .lb-scene3d-tools { --lb-scene-accent: var(--app-accent); }
+.learnordie-canvas-scene .lb-scene3d-range input[type="range"] { background: var(--app-border); }
+.learnordie-canvas-scene .lb-scene3d-range input[type="range"]::-webkit-slider-thumb { border-color: var(--app-surface); }
+.learnordie-canvas-scene .lb-scene3d-tool { min-height: 36px; padding: 6px 4px; background: transparent; color: inherit; font-size: 22px; }
+.native-canvas .excalidraw__embeddable-container__inner:has(.learnordie-canvas-scene) { background: transparent !important; }
+.native-canvas-transcript { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.native-canvas-mobile {
+  overflow-y: auto; overscroll-behavior: contain; padding: 20px 20px 32px;
+  background: var(--app-background); color: var(--app-text);
+  font: 22px/1.45 "Learnordie Sketch", sans-serif; text-align: left;
+}
+.native-canvas-mobile > :is(h2, p) { margin: 0 0 22px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.native-canvas-mobile > h2 { font-size: 34px; line-height: 1.18; }
+.native-canvas-mobile > p:empty { display: none; }
+.native-canvas-mobile .mobile-slide-embed { height: 460px; width: 100%; min-width: 0; margin-block: 18px 28px; }
+.native-canvas-mobile .learnordie-canvas-scene .lb-scene3d-controls { font-size: 18px; padding: 8px; max-height: 45%; }
+.native-canvas-mobile .lb-scene3d-steps button { font-size: inherit; }
+.native-canvas-mobile .lb-scene3d { font-size: 18px; }
+.native-canvas-mobile .lb-scene3d-stage { min-height: 240px; }
+.native-canvas-mobile .lb-scene3d-tool { min-width: 44px; min-height: 44px; }
+.native-canvas-mobile:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; }
+/* Reader reflow scrolls between the quiet participation link and the existing
+   compact controls; fullscreen canvas rules must not put text underneath them. */
+.learn-shell.slide-screen .slide-engine-stage:has(> .native-canvas.native-canvas-mobile) { padding: 48px 0 84px; }
+.native-canvas-notice { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; margin: 0; padding: 24px; background: var(--studio-surface, var(--panel, #fff)); color: var(--studio-ink, var(--ink, #1b1b1f)); font-size: 15px; text-align: center; }
+.native-canvas-notice button { padding: 10px 16px; border-radius: 8px; border: 1px solid #6965db; background: transparent; color: inherit; cursor: pointer; }
+.native-insert-panel { position: absolute; z-index: 25; right: 12px; top: 52px; width: min(400px, calc(100% - 24px)); max-height: calc(100% - 64px); overflow: auto; padding: 20px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-surface); box-shadow: var(--studio-shadow); animation: canvas-panel-in 140ms ease-out; }
+.native-insert-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.native-insert-heading h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.native-insert-heading button { border: 0; background: none; color: inherit; font-size: 24px; min-width: 36px; min-height: 36px; cursor: pointer; }
+.native-insert-panel label { display: grid; gap: 8px; font-size: 13px; font-weight: 500; }
+.native-insert-panel textarea { width: 100%; resize: vertical; min-height: 160px; font: 12px/1.5 ui-monospace, monospace; }
+.native-insert-panel select { width: 100%; min-height: 44px; }
+.native-workspace :is(.native-insert-panel, .studio-plan-popover, .studio-tool-popover, .studio-slide-tool-overlay, .studio-slide-source-overlay, .new-lecture-composer) :is(input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  min-width: 0; padding: 10px 12px; border: 1px solid var(--app-input-border); border-radius: 8px;
+  background: var(--app-surface); color: var(--app-text); caret-color: var(--app-accent); font-size: 14px;
+}
+.native-workspace :is(.native-insert-panel, .studio-plan-popover, .studio-tool-popover, .studio-slide-tool-overlay, .studio-slide-source-overlay, .new-lecture-composer) :is(input, textarea, select):focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.native-workspace .primary-button:not(:where(.excalidraw *)) { border: 1px solid var(--app-primary); border-radius: 8px; background: var(--app-primary); color: var(--app-primary-text); font-weight: 600; box-shadow: none; }
+.native-workspace .primary-button:hover:not(:disabled):not(:where(.excalidraw *)) { border-color: var(--app-primary-hover); background: var(--app-primary-hover); color: var(--app-primary-text); }
+.native-insert-panel p { font-size: 13px; line-height: 1.5; color: var(--studio-muted); }
+.native-editor-status, .native-asset-warning { position: absolute; z-index: 30; bottom: 56px; left: 12px; right: 12px; padding: 12px 16px; background: var(--studio-surface, #fff); color: var(--studio-ink, #1b1b1f); border: 1px solid var(--studio-line, #ddd); border-radius: 8px; font-size: 13px; }
+.slide-engine-stage:has(> .native-canvas) { padding: 78px 0 88px; }
+.slide-engine-stage > .native-canvas { border: 0; box-shadow: none; }
+@keyframes canvas-panel-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 1000px) {
+  .native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { grid-template-columns: 140px minmax(0, 1fr); }
+.native-workspace .studio-top-actions .studio-save-status { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (max-width: 700px) {
+  .native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { grid-template: "header" auto "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+  .native-workspace .studio-filmstrip-rail { display: none; }
+  .native-workspace .studio-top-actions { flex-wrap: wrap; gap: 8px; padding: 8px; }
+  .native-workspace-heading { order: -1; flex-basis: 100%; display: flex; gap: 8px; align-items: baseline; }
+  .native-workspace-heading strong { font-size: 13px; }
+  .native-workspace .studio-command-menu { margin-right: auto; }
+  .native-workspace .studio-top-actions :is(button, summary, a) { font-size: 12px; padding: 8px; min-height: 40px; }
+  .native-workspace .studio-bottom-bar { padding: 6px 8px; gap: 6px; }
+  .native-workspace .studio-bottom-bar :is(button, summary, a) { font-size: 12px; padding: 6px 8px; }
+  .native-workspace .studio-bottom-bar .studio-stepper { gap: 4px; }
+  .native-workspace .studio-stepper span { min-width: 36px; }
+  .native-studio-title { display: none; }
+  .native-studio-tools { padding-inline: 8px; }
+  .native-studio-tools button { min-height: 40px; padding-inline: 10px; }
+  .slide-engine-stage:has(> .native-canvas) { padding: 86px 0 146px; }
+}
+@media (prefers-reduced-motion: reduce) { .native-workspace *, .native-insert-panel { animation: none !important; transition: none !important; } }
+
+/* Studio chrome has a fixed budget, including at the native mobile breakpoint.
+   Keep the native actions, but dock them ABOVE the canvas, never in a footer. */
+.native-workspace .studio-top-actions {
+  display: flex; flex-wrap: nowrap; height: 48px; min-height: 48px;
+  gap: 6px; padding: 5px 8px;
+}
+.native-workspace-heading { order: 1; flex: 1 1 0; flex-basis: 0; display: block; margin: 0; overflow: hidden; }
+.native-workspace-heading span { display: none; }
+.native-workspace-heading strong { display: block; font-size: 13px; }
+.native-workspace .studio-top-actions > .studio-stepper { order: 2; display: flex; align-items: center; gap: 0; flex: 0 0 auto; }
+.native-workspace .studio-top-actions > .theme-toggle { order: 3; }
+.native-workspace .studio-save-island { order: 4; }
+.native-workspace .studio-view-menu { order: 5; position: relative; flex: 0 0 auto; }
+.native-workspace .studio-top-actions > .studio-present-link { order: 6; }
+.native-workspace .studio-command-menu { margin: 0; }
+.native-workspace .studio-top-actions :is(button, summary, a) { min-height: 36px; padding: 6px 9px; font-size: 13px; }
+.native-workspace .studio-top-actions > .theme-toggle,
+.native-workspace .studio-command-menu > summary,
+.native-workspace .studio-view-menu > summary { width: 36px; height: 36px; padding: 0; }
+.native-workspace .studio-top-actions > .theme-toggle span { display: none; }
+.native-workspace .studio-stepper button { width: 28px; padding: 0; font-size: 22px; border-color: transparent; }
+.native-workspace .studio-stepper select { width: 68px; height: 36px; min-height: 36px; padding: 4px; border: 0; border-radius: 6px; color: var(--studio-ink); background: var(--studio-surface); font-family: inherit; font-size: 12px; line-height: 1.2; cursor: pointer; }
+.native-workspace .studio-stepper select:focus-visible { outline: 2px solid var(--studio-accent); }
+.native-workspace .studio-top-actions .studio-save-status { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.native-workspace .studio-save-inline { position: relative; }
+.native-workspace .studio-save-island:has(.is-unsaved) .studio-save-inline::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--studio-accent); }
+.native-workspace .studio-view-popover { position: absolute; top: 42px; right: 0; width: 220px; max-height: calc(100dvh - 64px); overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
+.native-workspace .studio-view-popover > * { grid-area: auto; flex: 0 0 auto; }
+.native-workspace .studio-tool-menu[data-open="true"] .studio-tool-trigger { color: var(--studio-ink); background: var(--studio-selected); border-color: var(--studio-line); }
+.native-workspace .studio-view-popover :is(button, .studio-tool-menu) { width: 100%; }
+.native-workspace .studio-view-popover .studio-engine-toggle { display: flex; }
+.native-workspace .studio-view-popover .studio-tool-popover { position: static; width: 100%; padding: 4px 0 0; border: 0; box-shadow: none; transform: none; }
+.native-workspace .studio-plan-popover { position: fixed; top: 54px; bottom: auto; right: 8px; left: auto; width: min(480px, calc(100vw - 16px)); max-height: calc(100dvh - 64px); overflow: auto; background: var(--studio-surface); color: var(--studio-ink); border-color: var(--studio-line); transform: none; z-index: 110; }
+.native-workspace .studio-header-error { position: absolute; top: 48px; right: 8px; width: min(440px, calc(100vw - 16px)); padding: 12px; background: var(--studio-surface); border: 1px solid var(--studio-line); border-radius: 8px; }
+.native-workspace .studio-slide-stage { grid-template-rows: minmax(0, 1fr); }
+.native-workspace .studio-account-mini { display: none; }
+.native-workspace .studio-filmstrip-rail { padding: 10px 8px; }
+
+.native-studio-editor:has(.native-canvas-edit) { padding-top: 48px; }
+.native-studio-tools { position: absolute; top: 0; left: 4px; z-index: 8; height: 48px; min-height: 48px; width: 168px; padding: 4px 0; gap: 0; overflow: visible; border: 0; }
+.native-studio-tools button, .native-studio-tools summary { min-height: 36px; padding: 6px 8px; font-size: 12px; }
+.native-insert-menu { position: relative; }
+.native-insert-menu summary { display: flex; align-items: center; cursor: pointer; list-style: none; border-radius: 6px; white-space: nowrap; }
+.native-insert-menu summary::-webkit-details-marker { display: none; }
+.native-insert-menu summary:hover { background: var(--studio-selected); }
+.native-insert-options { position: absolute; top: 40px; left: 0; width: 170px; display: grid; padding: 6px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--studio-surface); box-shadow: var(--studio-shadow); }
+.native-insert-options button { text-align: left; }
+.native-insert-panel { top: 52px; max-height: calc(100% - 60px); z-index: 30; }
+.native-canvas-edit, .native-canvas-edit .excalidraw, .native-canvas-edit .layer-ui__wrapper { overflow: visible; }
+.native-studio-editor:has(.native-canvas-edit)::before { content: ""; position: absolute; inset: 0 0 auto; height: 48px; background: var(--studio-surface); border-bottom: 1px solid var(--studio-line); }
+.native-canvas-edit .excalidraw { --editor-container-padding: 4px; }
+.native-canvas-edit .excalidraw .FixedSideContainer_side_top { top: -44px; left: 176px; right: 4px; bottom: 4px; }
+.native-canvas-edit .excalidraw .App-toolbar { box-shadow: none; }
+.native-canvas-edit .excalidraw .App-menu_top { grid-gap: 4px; }
+.native-canvas-edit .excalidraw .App-menu_top__left .selected-shape-actions { position: absolute; top: 48px; left: -172px; margin: 0; }
+.native-canvas-edit .excalidraw .selected-shape-actions .Island { max-height: calc(100dvh - 108px); }
+.native-canvas-edit .excalidraw .App-menu_bottom { top: 4px; bottom: auto; left: 4px; right: 4px; width: auto; height: 40px; padding: 4px; background: var(--studio-surface); border-radius: 8px; }
+.native-canvas-edit .excalidraw .App-bottom-bar { inset: 4px 4px auto; height: 40px; padding: 4px; margin: 0 !important; align-items: flex-start; }
+.native-studio-editor[data-actions-open="false"] .excalidraw :is(.App-menu_bottom, .App-bottom-bar) { display: none; }
+.native-canvas-edit .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; min-width: 0; max-height: calc(100dvh - 100px); box-shadow: none; }
+.native-canvas-edit .excalidraw .App-toolbar-content { padding: 0; justify-content: flex-end; gap: 2px; }
+.native-canvas-edit .excalidraw .App-toolbar-content .dropdown-menu--mobile { top: 40px; bottom: auto; }
+.native-canvas-edit .excalidraw .App-bottom-bar .App-mobile-menu { position: absolute; top: 40px; right: 0; width: min(280px, calc(100vw - 16px)); max-height: calc(100dvh - 144px); overflow-y: auto; }
+.native-canvas-edit .excalidraw .App-bottom-bar .panelColumn { width: 100%; background: var(--studio-surface); border: 1px solid var(--studio-line); border-radius: 8px; }
+.native-canvas-edit .excalidraw .App-top-bar .Stack_vertical { gap: 0; }
+.native-canvas-edit .excalidraw .App-toolbar--mobile { padding: 0; }
+.native-canvas-edit .excalidraw .mobile-misc-tools-container { position: static; display: flex; flex-direction: row; }
+.native-canvas-edit .excalidraw .App-top-bar .App-toolbar-container { justify-content: center; gap: 4px; }
+.native-canvas-edit .excalidraw :is(.ToolIcon__icon, .dropdown-menu-button, .sidebar-trigger) { height: 36px; min-height: 36px; }
+.native-canvas-edit .excalidraw .App-toolbar-content .ToolIcon__icon { width: 32px; height: 36px; }
+.native-canvas-edit .excalidraw .App-toolbar-content .dropdown-menu-button { width: 32px; }
+@media (max-width: 1000px) {
+  .native-workspace .studio-save-inline > span, .native-workspace .studio-present-link > span { display: none; }
+  .native-workspace .studio-save-inline, .native-workspace .studio-top-actions > .studio-present-link { width: 36px; height: 36px; padding: 0; }
+}
+@media (max-width: 700px) {
+  .native-workspace .studio-top-actions { gap: 3px; padding-inline: 4px; }
+  .native-canvas-edit .excalidraw .App-toolbar-container .ToolIcon__icon,
+  .native-canvas-edit .excalidraw .App-toolbar-container .dropdown-menu-button,
+  .native-canvas-edit .excalidraw .mobile-misc-tools-container .sidebar-trigger { width: 28px; min-width: 28px; }
+  .native-canvas-edit .excalidraw .App-toolbar-container .Stack_horizontal { gap: 0; }
+  .native-canvas-edit .excalidraw .App-top-bar .App-toolbar-container { justify-content: flex-start; overflow-x: auto; max-width: 100%; }
+  .native-canvas-edit .excalidraw .App-top-bar > section { min-width: 0; width: 100%; }
+  .native-canvas-edit .excalidraw .App-top-bar .App-toolbar { flex-shrink: 0; }
+  /* A fixed popover escapes the horizontal tool scroller without clipping. */
+  .native-canvas-edit .excalidraw .App-toolbar__extra-tools-dropdown { position: fixed; top: 100px; left: 8px; right: auto; bottom: auto; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 108px); overflow-y: auto; }
+}
+
+/* A closed rail consumes no canvas width. On small screens it is a drawer. */
+.native-workspace .lecturer-studio, .native-workspace .lecturer-studio.tool-open { position: relative; grid-template: "header" 48px "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+.native-workspace .studio-filmstrip-rail { display: none; }
+.native-workspace[data-filmstrip-open="true"] .studio-filmstrip-rail { display: block; }
+.native-workspace .studio-top-actions > .studio-filmstrip-toggle { order: 0; flex: 0 0 32px; width: 32px; padding: 0; }
+.native-workspace .studio-filmstrip-list { gap: 4px; }
+.native-workspace .studio-filmstrip-list button { display: flex; align-items: center; gap: 8px; min-height: 48px; width: 100%; padding: 8px; text-align: left; }
+.native-workspace .studio-filmstrip-list button span { flex: 0 0 24px; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; font-size: 11px; }
+.native-workspace .studio-filmstrip-list strong { min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 1101px) {
+  .native-workspace[data-filmstrip-open="true"] .lecturer-studio { grid-template: "header header" 48px "film stage" minmax(0, 1fr) / 180px minmax(0, 1fr); }
+}
+@media (max-width: 1100px) {
+  .native-workspace[data-filmstrip-open="true"] .studio-filmstrip-rail { position: absolute; top: 48px; bottom: 0; left: 0; z-index: 50; width: min(260px, 80vw); box-shadow: var(--studio-shadow); }
+}
+.native-canvas-edit .excalidraw .App-menu_top { grid-template-columns: 36px minmax(0, 1fr) auto; }
+.native-canvas-edit .excalidraw .App-menu_top > section { min-width: 0; max-width: 100%; overflow-x: auto; }
+.native-canvas-edit .excalidraw .layer-ui__wrapper__top-right { width: auto; min-width: 0; }
+.native-canvas-edit .excalidraw .sidebar-trigger__label { display: none; }
+.native-canvas-edit .excalidraw .App-toolbar__extra-tools-dropdown { position: fixed; top: 100px; left: 8px; right: auto; bottom: auto; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 108px); overflow-y: auto; }
+.native-canvas-edit .excalidraw .App-top-bar { width: auto; min-width: 0; }

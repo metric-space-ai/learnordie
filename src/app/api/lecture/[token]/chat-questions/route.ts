@@ -1,17 +1,25 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { seriesIdForLecture } from "@/lib/series";
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
+import { generateStudentQuestionExamDraft } from "@/server/student-exam-drafts";
+import { studentDraftDiagnostic } from "@/server/student-draft-error";
+import { studentDraftDeadline, STUDENT_DRAFT_STALE_MS } from "@/server/student-draft-limits";
+import { getStudentRepository } from "@/server/student-repository";
+import { getCurrentStudentProfile } from "@/server/student-session";
+import { acceptedTranscriptContext } from "@/server/question-generation";
+import { liveLecture, readLiveSession } from "@/server/live-session-repository";
+
+export const maxDuration = 120;
 
 const MAX_CHAT_QUESTION_BYTES = 4096;
 const CHAT_QUESTION_WINDOW_MS = 15 * 60 * 1000;
 const DEFAULT_CHAT_QUESTION_LIMIT = 5;
 
 const chatQuestionSchema = z.object({
-  text: z.string().trim().min(4).max(600),
-  pseudonym: z.string().trim().max(80).optional(),
-  anonymousKey: z.string().trim().min(8).max(160)
+  text: z.string().trim().min(4).max(600)
 });
 
 function configuredChatQuestionLimit() {
@@ -46,18 +54,34 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
   }
 
-  const repository = getLectureRepository();
-  const recentCount = await repository.countRecentStudentChatQuestions({
-    lectureToken: token,
-    anonymousKey: parsed.data.anonymousKey,
-    since: new Date(Date.now() - CHAT_QUESTION_WINDOW_MS)
-  });
+  const profile = await getCurrentStudentProfile();
+  if (!profile) {
+    return NextResponse.json({ error: "Bitte zuerst ein Pseudonym wählen.", code: "claim_required" }, { status: 401 });
+  }
 
-  if (recentCount === null) {
+  const repository = getLectureRepository();
+  const lecture = await repository.getLectureByToken(token);
+  if (!lecture) {
     return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
   }
 
-  if (recentCount >= configuredChatQuestionLimit()) {
+  const enrollment = await getStudentRepository().getActiveClaim(profile.id, seriesIdForLecture(lecture));
+  if (!enrollment) {
+    return NextResponse.json({ error: "Bitte zuerst an dieser Vorlesung teilnehmen.", code: "enrollment_required" }, { status: 403 });
+  }
+
+  const now = new Date();
+  const admission = await repository.reserveStudentChatQuestionAttempt({
+    lectureToken: token,
+    studentProfileId: profile.id,
+    now,
+    since: new Date(now.getTime() - CHAT_QUESTION_WINDOW_MS),
+    maxAttempts: configuredChatQuestionLimit()
+  });
+  if (admission === null) {
+    return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
+  }
+  if (admission === "rate_limited") {
     return NextResponse.json(
       { error: "Zu viele Chatfragen. Bitte später erneut versuchen." },
       {
@@ -69,19 +93,101 @@ export async function POST(request: Request, context: { params: Promise<unknown>
     );
   }
 
+  const live = await readLiveSession(await liveLecture(token), null, false);
+  const currentTranscript = live.status === "active" ? acceptedTranscriptContext(lecture, live.sessionStartedAt).accumulated : "";
   const chatQuestion = await repository.submitStudentChatQuestion({
     lectureToken: token,
     text: parsed.data.text,
-    pseudonym: parsed.data.pseudonym ?? "Pseudonym",
-    anonymousKey: parsed.data.anonymousKey
+    pseudonym: enrollment.displayName?.trim() || profile.pseudonym,
+    anonymousKey: profile.anonymousKey,
+    currentTranscript
   });
 
   if (!chatQuestion) {
     return NextResponse.json({ error: "Vorlesung nicht gefunden." }, { status: 404 });
   }
 
+  let examDraftStatus = chatQuestion.examDraftStatus ?? "not_applicable";
+  if (chatQuestion.status === "accepted") {
+    try {
+      const attemptNow = new Date();
+      const attempt = await repository.beginStudentExamDraftAttempt({
+        lectureId: chatQuestion.lectureId,
+        chatQuestionId: chatQuestion.id,
+        now: attemptNow,
+        since: new Date(attemptNow.getTime() - CHAT_QUESTION_WINDOW_MS),
+        cooldownMs: 30_000,
+        staleGenerationMs: STUDENT_DRAFT_STALE_MS,
+        maxAttempts: 12,
+        initial: true
+      });
+      if (attempt.status === "started") {
+        examDraftStatus = "generating";
+        after(async () => {
+          try {
+            const currentLecture = await repository.getLectureByToken(token);
+            if (!currentLecture) throw new Error("Lecture no longer exists.");
+            const generated = await generateStudentQuestionExamDraft(currentLecture, chatQuestion, {
+              deadlineAt: studentDraftDeadline(attemptNow.getTime())
+            });
+            if (!generated.supported) {
+              await repository.updateStudentExamDraftStatus({
+                lectureId: chatQuestion.lectureId,
+                chatQuestionId: chatQuestion.id,
+                attemptId: attempt.attemptId,
+                status: "unsupported",
+                error: "Die Frage ließ sich aus dem aktuellen Vorlesungskontext nicht ableiten."
+              });
+            } else {
+              await repository.saveStudentExamDraft({
+                lectureId: chatQuestion.lectureId,
+                chatQuestionId: chatQuestion.id,
+                attemptId: attempt.attemptId,
+                variants: generated.variants
+              });
+            }
+          } catch (error) {
+            console.warn("student exam draft generation failed", studentDraftDiagnostic(error));
+            try {
+              await repository.updateStudentExamDraftStatus({
+                lectureId: chatQuestion.lectureId,
+                chatQuestionId: chatQuestion.id,
+                attemptId: attempt.attemptId,
+                status: "failed",
+                error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
+              });
+            } catch {
+              console.warn("student exam draft failure status could not be saved");
+            }
+          }
+        });
+      } else if (attempt.status === "rate_limited") {
+        examDraftStatus = "failed";
+        await repository.updateStudentExamDraftStatus({
+          lectureId: chatQuestion.lectureId,
+          chatQuestionId: chatQuestion.id,
+          status: "failed",
+          error: "Der Entwurf konnte nicht erstellt werden. Bitte später erneut versuchen."
+        });
+      } else {
+        examDraftStatus = attempt.status === "draft" ? "draft" : chatQuestion.examDraftStatus ?? "pending";
+      }
+    } catch {
+      console.warn("student exam draft scheduling failed");
+      examDraftStatus = "pending";
+    }
+  }
+
   return NextResponse.json({
-    chatQuestion,
+    chatQuestion: {
+      id: chatQuestion.id,
+      lectureId: chatQuestion.lectureId,
+      pseudonym: chatQuestion.pseudonym,
+      text: chatQuestion.text,
+      status: chatQuestion.status,
+      createdAt: chatQuestion.createdAt,
+      examDraftStatus
+    },
     accepted: chatQuestion.status === "accepted",
     message: chatQuestion.status === "accepted"
       ? "Frage wurde an den Referenten weitergeleitet."

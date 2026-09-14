@@ -108,6 +108,12 @@ export type QuestionQualityDecision = {
 
 export type QuestionVariant = {
   level: QuestionLevel;
+  /** Folie, zu der die Variante gehoert; ohne Angabe gilt sie fuer die ganze Vorlesung. */
+  slideId?: string;
+  /** Fragenfamilie: dieselbe Frage in allen vier Niveaus. */
+  familyId?: string;
+  /** Herkunft der Familie, z. B. "prepared" oder "live_transcript". */
+  familySource?: string;
   points: number;
   text: string;
   answers: AnswerOption[];
@@ -208,6 +214,7 @@ export type MaterialProcessingRun = {
 };
 
 export type StudentChatQuestionStatus = "accepted" | "ignored";
+export type StudentExamDraftStatus = "pending" | "generating" | "draft" | "failed" | "unsupported" | "rejected" | "published" | "not_applicable";
 
 export type StudentChatQuestion = {
   id: string;
@@ -222,6 +229,11 @@ export type StudentChatQuestion = {
   moderationModel?: string;
   moderationConfidence?: number;
   moderationSignals?: string[];
+  examDraftStatus?: StudentExamDraftStatus;
+  examDraftError?: string;
+  examDraftRoundId?: string;
+  examDraftAttemptAt?: string;
+  examDraftAttemptId?: string;
   createdAt: string;
 };
 
@@ -384,6 +396,7 @@ export type QuestionReviewItem = {
   id: string;
   lectureId: string;
   sourceMaterialId?: string;
+  sourceStudentQuestionId?: string;
   sourceTitle: string;
   status: QuestionReviewStatus;
   variants: QuestionVariant[];
@@ -394,8 +407,12 @@ export type QuestionReviewItem = {
 export type Lecture = {
   id: string;
   publicToken: string;
+  /** Public, enabled participation path resolved from the configured join code. */
+  participationPath?: string;
   ownerEmail?: string;
   title: string;
+  /** Canonical lecture_series UUID in Postgres; absent in legacy local data. */
+  seriesId?: string;
   seriesTitle: string;
   language: "de";
   status: LectureStatus;
@@ -719,7 +736,7 @@ export type EnrollmentSource =
   | "direct_learn_link"
   | "lecturer_invite";
 
-export type EnrollmentStatus = "active" | "removed";
+export type EnrollmentStatus = "active" | "removed" | "anonymized";
 
 export type StudentEnrollment = {
   id: string;
@@ -730,6 +747,8 @@ export type StudentEnrollment = {
   joinCodeId?: string;
   source: EnrollmentSource;
   status: EnrollmentStatus;
+  displayName?: string;
+  displayNameNormalized?: string;
   addedAt: string;
   lastOpenedAt?: string;
 };
@@ -755,6 +774,7 @@ export type StudentDashboardSeries = {
   enrollmentId: string;
   seriesId: string;
   seriesTitle: string;
+  displayName?: string;
   language: string;
   examDate?: string;
   joinCode?: string;

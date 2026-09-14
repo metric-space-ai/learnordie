@@ -39,6 +39,7 @@ export type {
   SlideTransition,
   SourceReference,
   SpeakerNote,
+  Scene3DBlock,
   SpacerBlock,
   SupportedSlideBlock,
   SupportedSlideBlockType,
