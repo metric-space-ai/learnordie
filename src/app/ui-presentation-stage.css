@@ -22,10 +22,30 @@ body:has(.presentation-screen) .excalidraw-tooltip { display: none; }
 .presentation-control-panel .live-controls :is(.icon-action, .live-back-link) { min-width: 36px; min-height: 36px; height: 36px; width: auto; padding: 6px 10px; font-size: 13px; }
 .presentation-connection-notice { display: grid; gap: 8px; margin-bottom: 12px; font-size: 13px; }
 .presentation-controls :focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
-.presenter-round-status { position: absolute; right: 12px; bottom: 58px; z-index: 24; display: grid; justify-items: end; gap: 6px; max-width: min(300px, calc(100% - 24px)); pointer-events: none; color: var(--ink); font: 13px/1.35 var(--app-font), system-ui, sans-serif; }
+.presenter-round-status { position: absolute; left: 12px; bottom: 72px; z-index: 46; display: grid; justify-items: start; gap: 6px; max-width: min(300px, calc(100% - 24px)); pointer-events: none; color: var(--ink); font: 13px/1.35 var(--app-font), system-ui, sans-serif; }
 .presenter-round-chip, .presenter-round-toast:not(:empty) { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--app-shadow); }
 .presenter-round-chip { display: flex; align-items: center; gap: 8px; }
 .presenter-round-chip strong { font-variant-numeric: tabular-nums; font-size: inherit; }
+.presenter-round-preview-toggle { pointer-events: auto; cursor: pointer; color: inherit; font: inherit; }
+.presenter-round-preview-toggle:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+.presenter-round-preview-toggle[aria-expanded="true"] { border-color: var(--app-accent); }
+.presenter-round-status:has([aria-expanded="true"]) .presenter-round-toast { display: none; }
+.presentation-screen .presenter-question-preview .question-drawer {
+  z-index: 45; bottom: 116px; width: min(1080px, calc(100vw - 32px));
+  height: auto; min-height: 0; max-height: calc(100dvh - 156px);
+  background: var(--app-surface); color: var(--app-text);
+  font-family: "Learnordie Sketch", cursive;
+}
+.presenter-question-preview .question { font: 400 clamp(20px, 2vw, 28px)/1.4 "Learnordie Sketch", cursive; }
+.presenter-question-preview .answer { font: 400 clamp(16px, 1.5vw, 21px)/1.4 "Learnordie Sketch", cursive; }
+.presenter-question-preview .question-head button { font: 400 18px/1.3 "Learnordie Sketch", cursive; }
+.presenter-question-preview .live-difficulty-hint,
+.presenter-question-preview .levels small,
+.presenter-question-preview .timer > span { display: none; }
+@media (max-width: 640px) {
+  .presentation-screen .presenter-question-preview .question-drawer { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .presenter-question-preview .answers { grid-template-columns: minmax(0, 1fr); }
+}
 .presenter-round-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .presenter-round-toast:empty { display: none; }
 .presenter-round-toast:not(:empty) { animation: app-panel-enter 160ms ease-out both; }

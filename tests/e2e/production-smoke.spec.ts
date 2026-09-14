@@ -3709,11 +3709,10 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page).toHaveURL(/\/lecturer\/login$/);
   await page.goto("/l/gleitlagerung-demo");
   await expect(page).toHaveURL(/\/l\/gleitlagerung-demo$/);
-  // The retired mandatory gate has no animation anymore: the actual join slide
-  // is immediately available and the live canvas keeps its entry motion.
+  // No running session: the shared student entry opens the learning canvas.
   await expect(page.locator(".student-gate-screen")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
-  await expect(page.locator(".lecture-join-qr canvas")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Lernsteuerung", exact: true })).toBeVisible();
   await expect(page.locator(".slide-lecture-link")).toHaveAttribute("href", /\/l\/ME1-GL-2026$/);
   const liveEntry = await page.locator('[data-slide-engine="v1"]').evaluate((element) => ({
     animation: getComputedStyle(element).animationName, motionRoot: Boolean(element.closest(".lb-motion-root"))
@@ -3724,7 +3723,7 @@ test("Motion-System folgt der learnordie.app-Spec in Learn- und Studio-Kernflows
   await expect(page.getByLabel("Quizfrage")).toHaveCount(0);
 
   await page.goto("/learn/gleitlagerung-demo");
-  await expect(page).toHaveURL(/\/learn\/gleitlagerung-demo$/);
+  await expect(page).toHaveURL(/\/l\/gleitlagerung-demo$/);
   await expectNativeCanvas(page);
 
   await page.getByLabel("Fragen-Spots auf der Folie", { exact: true }).getByRole("button").first().click();

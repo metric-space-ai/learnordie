@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { StudentLiveExperience } from "@/components/StudentLiveExperience";
+import { StudentLectureExperience } from "@/components/StudentLectureExperience";
 import { SeriesClaimGate } from "@/components/student/SeriesClaimGate";
 import { isValidPublicLectureToken } from "@/server/public-params";
 import { getLectureRepository } from "@/server/repository";
@@ -32,7 +32,7 @@ export default async function StudentLivePage({ params }: { params: Promise<{ to
 
   return (
     <SeriesClaimGate lecture={publicLecture} source="direct_live_link">
-      <StudentLiveExperience lecture={publicLecture} />
+      <StudentLectureExperience lecture={publicLecture} />
     </SeriesClaimGate>
   );
 }

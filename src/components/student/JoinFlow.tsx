@@ -19,10 +19,7 @@ type JoinFlowProps = {
 
 function redirectAfterJoin(target: ResolvedJoinTarget): string {
   if (target.scope === "lecture" && target.lectureToken) {
-    if (target.lectureStatus === "live") return `/l/${encodeURIComponent(target.lectureToken)}`;
-    if (target.lectureStatus === "learn_active" || target.lectureStatus === "archived") {
-      return `/learn/${encodeURIComponent(target.lectureToken)}`;
-    }
+    return `/l/${encodeURIComponent(target.lectureToken)}`;
   }
   return `/student?series=${encodeURIComponent(target.seriesId)}`;
 }

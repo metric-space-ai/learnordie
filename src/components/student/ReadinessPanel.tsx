@@ -62,7 +62,7 @@ export function ReadinessPanel({ readiness }: { readiness?: ReadinessSnapshot })
         <ul className="readiness-actions">
           {linkedActions.map((action) => (
             <li key={action.id} className="readiness-action">
-              <a href={action.kind === "live" ? `/l/${action.lectureToken}` : `/learn/${action.lectureToken}`}>
+              <a href={`/l/${action.lectureToken}`}>
                 <span className="readiness-action-title">{action.title}</span>
               </a>
             </li>
