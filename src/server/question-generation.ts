@@ -6,7 +6,7 @@ import type { MaterialChunk } from "./material-pipeline";
 import { generateReviewVariants, levelPoints, withVariantMetadata } from "./lecture-factory";
 import { getAIProvider } from "./providers/ai";
 import type { AIProvider } from "./providers/ai";
-import { reviewQuestionGrounding } from "./question-grounding-review";
+import { GroundingReviewError, reviewQuestionGrounding } from "./question-grounding-review";
 import { StudentDraftError } from "./student-draft-error";
 import { QUESTION_LEVEL_GUIDANCE } from "./question-level-guidance";
 
@@ -510,6 +510,8 @@ export async function generateLiveQuestionFamily(input: {
       previousCandidate = result.answer.slice(0, 18_000);
       // A length/JSON correction must not consume the independent opportunity
       // to fix factual feedback first discovered on a structurally valid draft.
+      if (validationStage === "grounding" && !(error instanceof GroundingReviewError
+        && (error.code === "factual-review" || error.code === "distractor-quality"))) throw error;
       if (repairs[validationStage] >= 1 || attempt === 2) throw error;
       repairs[validationStage]++;
     }
@@ -804,7 +806,10 @@ export async function generateStudentExamDraft(input: {
     } catch (error) {
       lastValidationError = error;
       previousCandidate = result.answer.slice(0, 18_000);
-      if (attempt === 1) throw new StudentDraftError(validationStage, attempt + 1, error);
+      if (attempt === 1 || (validationStage === "grounding" && !(error instanceof GroundingReviewError
+        && (error.code === "factual-review" || error.code === "distractor-quality")))) {
+        throw new StudentDraftError(validationStage, attempt + 1, error);
+      }
     }
   }
   throw new Error("Student exam draft generation failed.");

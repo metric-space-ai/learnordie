@@ -174,7 +174,9 @@ export async function reviewQuestionGrounding(provider: AIProvider, variants: Qu
   for (let attempt = 0; attempt < 2; attempt++) {
     const timeoutMs = Math.min(40_000, deadlineAt - Date.now() - 1_000);
     if (timeoutMs <= 0) throw new GroundingReviewError("timeout", "Fachprüfung: Zeitlimit erreicht.");
-    const result = await provider.complete({
+    let result;
+    try {
+      result = await provider.complete({
       system: system + (formatCorrection ? " Die letzte Prüfantwort war formal ungültig. Prüfe dieselben unveränderten Kandidaten erneut. Jeder reviews-Eintrag muss vier answerChecks mit key/reason/verdict enthalten; fehlende Einzelurteile selbst bestimmen, nicht pauschal correct annehmen. Verwende sourceIds mit exakten IDs aus sources, keine Auslassungszeichen und keine neu geschriebenen Zitate. Fachlich nicht belegbare Kandidaten weiterhin mit approved=false ablehnen." : ""),
       user: JSON.stringify({ sources: groundingSourcePassages(blocks), candidates, ...(formatCorrection ? { formatCorrection } : {}) }),
       temperature: 0,
@@ -182,7 +184,14 @@ export async function reviewQuestionGrounding(provider: AIProvider, variants: Qu
       maxOutputTokens: 8192,
       responseFormat: "json_object",
       timeoutMs
-    });
+      });
+    } catch (error) {
+      // A transport timeout says nothing about the candidate's correctness.
+      // Retry the same review once within the shared generation deadline.
+      const timedOut = error instanceof Error && /timed out|timeout|abort/i.test(error.message);
+      if (attempt === 0 && timedOut && deadlineAt - Date.now() > 2_000) continue;
+      throw error;
+    }
     try { parseQuestionGroundingReview(result.answer, blocks, variants); return; }
     catch (error) {
       // Repair only the review envelope/citation, never a negative factual verdict.

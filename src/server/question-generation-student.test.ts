@@ -444,6 +444,34 @@ test("a live schema correction does not consume the later factual correction", a
   assert.equal(rejected.reviews.length, 2);
 });
 
+test("a reviewer timeout retries the same candidate, never reauthors a question", async (t) => {
+  restoreGeneratorEnvironment(t);
+  process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
+  process.env.LEARNBUDDY_AI_BASE_URL = "https://api.minimax.io";
+  for (const failEveryReview of [false, true]) {
+    const fixture = makeProvider([JSON.stringify(validLivePayload())]);
+    const complete = fixture.provider.complete.bind(fixture.provider);
+    const reviewInputs: AICompleteInput[] = [];
+    fixture.provider.complete = async request => {
+      if (request.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
+        reviewInputs.push(request);
+        if (failEveryReview || reviewInputs.length === 1) throw new Error("Responses proxy request timed out.");
+      }
+      return complete(request);
+    };
+    const result = generateLiveQuestionFamily({
+      lecture: demoLecture, slide: { title: "Randbedingungen", lines: ["Randbedingung ψ(0)=0."] },
+      transcript: "Die Randbedingung legt die zulässige Lösung fest.", existingQuestionTexts: [],
+      contextSource: "transcript", transcriptOnly: true
+    }, fixture.provider);
+    if (failEveryReview) await assert.rejects(result, /timed out/);
+    else assert.equal((await result).length, 4);
+    assert.equal(fixture.requests.length, 1, "transport failure is not author feedback");
+    assert.equal(reviewInputs.length, 2, "bounded to one retry of the same review");
+    assert.equal(reviewInputs[0].user, reviewInputs[1].user);
+  }
+});
+
 test("live creation budgets a reviewed correction independently of the student answer clock", async (t) => {
   restoreGeneratorEnvironment(t);
   process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
@@ -481,7 +509,7 @@ test("live creation budgets a reviewed correction independently of the student a
     lecture: demoLecture, slide: { title: "Randbedingungen", lines: ["ψ(0)=0"] },
     transcript: "Die aktuelle Randbedingung bestimmt die zulässige Lösung.",
     existingQuestionTexts: [], contextSource: "transcript", transcriptOnly: true
-  }, overdue.provider), /timed out/);
+  }, overdue.provider), /Zeitlimit erreicht/);
   assert.equal(overdue.requests.length, 1);
   assert.equal(overdue.reviews.length, 0, "no further model calls or approval after the attempt deadline");
 });
