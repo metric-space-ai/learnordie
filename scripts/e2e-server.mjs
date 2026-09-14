@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
+import { providerFixturePrompt, fixtureGroundingReview } from "./lib/e2e-provider-fixture.mjs";
 
 const DEFAULT_DATABASE_URL = "postgres://michaelwelsch@127.0.0.1:55432/learnordie_e2e_smoke";
 const databaseUrl = process.env.E2E_DATABASE_URL || DEFAULT_DATABASE_URL;
@@ -91,9 +92,13 @@ function e2eEnv(extra = {}) {
     LEARNBUDDY_AUTO_SEED: "0",
     LEARNBUDDY_MAIL_PROVIDER: "console",
     LEARNBUDDY_AI_PROVIDER: useResponsesMock ? "learnordie-responses" : "openai-compatible",
-    LEARNBUDDY_AI_BASE_URL: useResponsesMock ? `http://${host}:${aiMockPort}/v1/responses` : `http://${host}:${aiMockPort}`,
+    LEARNBUDDY_AI_BASE_URL: useResponsesMock ? "https://llm.learnordie.app/v1/responses" : "https://api.minimax.io",
+    LEARNORDIE_LLM_PROXY_BASE_URL: "https://llm.learnordie.app/v1/responses",
+    LEARNORDIE_LLM_PROXY_API_KEY: "e2e-ai-token",
+    E2E_PROVIDER_TRANSPORT_ORIGIN: `http://${host}:${aiMockPort}`,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${path.join(rootDir, "scripts/lib/e2e-provider-transport.mjs")}`.trim(),
     LEARNBUDDY_AI_API_KEY: "e2e-ai-token",
-    LEARNBUDDY_AI_MODEL: useResponsesMock ? "MiniMax-M3" : "mock-e2e-chat",
+    LEARNBUDDY_AI_MODEL: "MiniMax-M3",
     LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER: "ai",
     LEARNBUDDY_QUESTION_GENERATOR: "ai",
     LEARNBUDDY_CHAT_QUESTION_LIMIT_PER_WINDOW: "3",
@@ -396,9 +401,11 @@ function startAIProviderMock() {
     if (request.method === "POST" && request.url?.endsWith("/v1/responses")) {
       const body = await readRequestBody(request);
       const payload = JSON.parse(body || "{}");
-      const prompt = typeof payload.input === "string" ? payload.input : "";
+      const prompt = providerFixturePrompt(payload);
       let output;
-      if (prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")) {
+      if (prompt.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
+        output = fixtureGroundingReview(prompt, [JSON.parse(mockStudentExamDraftAnswer())]);
+      } else if (prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")) {
         aiMockStats.moderationRequests += 1;
         output = mockModerationAnswer(prompt);
       } else if (prompt.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")) {
@@ -449,12 +456,11 @@ function startAIProviderMock() {
 
     const body = await readRequestBody(request);
     const payload = JSON.parse(body || "{}");
-    const messages = Array.isArray(payload.messages) ? payload.messages : [];
-    const prompt = messages
-      .map((message) => typeof message?.content === "string" ? message.content : "")
-      .join("\n");
+    const prompt = providerFixturePrompt(payload);
     let content;
-    if (prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")) {
+    if (prompt.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
+      content = fixtureGroundingReview(prompt, [JSON.parse(mockStudentExamDraftAnswer())]);
+    } else if (prompt.includes("LEARNBUDDY_CHAT_QUESTION_MODERATION_V1")) {
       aiMockStats.moderationRequests += 1;
       content = mockModerationAnswer(prompt);
     } else if (prompt.includes("LEARNBUDDY_STUDENT_EXAM_DRAFT_V1")) {

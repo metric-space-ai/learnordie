@@ -64,6 +64,9 @@ jobs:
       - name: Continuous audio capture contracts
         run: node --experimental-strip-types --import ./scripts/alias-register.mjs --test --test-concurrency=2 src/lib/audio-capture.test.ts src/lib/live-operation-scope.test.ts src/server/lecture-script-context.test.ts src/lib/learning-score.test.ts
 
+      - name: Synthetic provider transport contracts
+        run: node --test --test-concurrency=2 scripts/lib/e2e-provider-fixture.test.mjs
+
       - name: Lint
         run: npm run lint
 
