@@ -1583,12 +1583,15 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
   });
   expect(learnordieResponsesMockSmoke.ok).toBe(true);
   expect(learnordieResponsesMockSmoke.blockers).toEqual([]);
-  for (const checkId of ["ai", "lecturer_assistant", "chat_moderation", "question_generator"]) {
+  for (const checkId of ["ai", "lecturer_assistant", "question_generator"]) {
     const check = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === checkId);
     expect(check?.status, checkId).toBe("pass");
     expect(check?.details?.provider, checkId).toBe("learnordie-responses");
   }
   const learnordieAiCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "ai");
+  const admissionCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "chat_moderation");
+  expect(admissionCheck?.status).toBe("warn");
+  expect(admissionCheck?.details?.externalRoundtrip).toBe(false);
   expect((learnordieAiCheck?.details?.stream as { provider?: string } | undefined)?.provider).toBe("learnordie-responses");
   const learnordieLecturerAssistantCheck = learnordieResponsesMockSmoke.checks?.find((candidate) => candidate.id === "lecturer_assistant");
   expect((learnordieLecturerAssistantCheck?.details?.toolPlan as { actions?: string[] } | undefined)?.actions).toContain("evaluation_focus");
@@ -1770,7 +1773,6 @@ test("Referenten-Login, Single-Use-Magic-Link, Reload und Logout-Schutz", async 
     "LEARNBUDDY_JOB_PROVIDER",
     "LEARNBUDDY_AI_PROVIDER",
     "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-    "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
     "LEARNBUDDY_QUESTION_GENERATOR",
     "LEARNBUDDY_EMBEDDING_PROVIDER",
     "LEARNBUDDY_OCR_PROVIDER",

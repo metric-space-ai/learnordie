@@ -2,16 +2,16 @@
 // Explicit, additive maintenance; never part of the normal application build.
 import { createHash } from "node:crypto";
 import postgres from "postgres";
-import { createOriginalModelDocument } from "@/lib/model-original-template";
 import { attachLectureScript, LectureScriptMaintenanceError } from "./lib/attach-lecture-script.mjs";
 import { savePrivateScriptBackup } from "./lib/private-wording-backup.mjs";
 
 const args = process.argv.slice(2);
-if (args.includes("--help")) {
+if (args.includes("--help") || args.includes("-h")) {
   console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/attach-model-manuscript.mjs --lecture-id UUID --public-token TOKEN --owner-email OWNER [--apply --confirm-script-sha256 HASH --backup-blob maintenance/lecture-script/UNIQUE.json]\nDefault: owner-scoped, locked dry-run. Application only inside Vercel production, after ending the session; exact manuscript hash and a private read-back-verified backup required. Slides, questions, grading and lecture metadata are preserved.");
 } else {
   let sql;
   try {
+    const { createOriginalModelDocument } = await import("@/lib/model-original-template");
     const values = {};
     for (let i = 0; i < args.length; i++) {
       const flag = args[i];

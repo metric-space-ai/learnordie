@@ -512,10 +512,6 @@ function selectedLecturerAssistantProvider() {
   return envValue("LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER").toLowerCase() || "local";
 }
 
-function selectedChatModerationProvider() {
-  return envValue("LEARNBUDDY_CHAT_MODERATION_PROVIDER").toLowerCase() || "local";
-}
-
 function selectedQuestionGenerator() {
   return envValue("LEARNBUDDY_QUESTION_GENERATOR").toLowerCase() || "local";
 }
@@ -785,35 +781,10 @@ async function smokeAI() {
 
 async function smokeChatModeration() {
   if (!shouldRun("chat_moderation")) return;
-  const provider = selectedChatModerationProvider();
-  if (!["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(provider)) {
-    const message = "Chat moderation is not configured for provider-backed decisions.";
-    if (productionLike) fail("chat_moderation", message, { provider });
-    else warn("chat_moderation", message, { provider });
-    return;
-  }
-
-  try {
-    const result = await completeAI({
-      system: "LEARNBUDDY_CHAT_QUESTION_MODERATION_V1 Return JSON only.",
-      user: "Vorlesung: Gleitlagerung. Frage: Wie verändert Viskosität die Stribeck-Kurve? Antworte mit {\"status\":\"accepted\",\"reason\":\"...\",\"sourceTopic\":\"Gleitlagerung\",\"confidence\":94,\"signals\":[\"Stribeck\"]}.",
-      maxOutputTokens: 120,
-      responseFormat: "json_object"
-    });
-    const parsed = JSON.parse(result.answer);
-    const status = String(parsed.status ?? "").toLowerCase();
-    if (status !== "accepted" && status !== "ignored") {
-      throw new Error("Chat moderation provider returned no accepted|ignored status.");
-    }
-    pass("chat_moderation", "Chat moderation provider returned a parseable decision.", {
-      provider: result.provider,
-      model: result.model,
-      status,
-      confidence: Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : undefined
-    });
-  } catch (error) {
-    fail("chat_moderation", error);
-  }
+  warn("chat_moderation", "Separate topic classifier retired. Verify admission, source-grounded draft generation and teacher publication in browser acceptance.", {
+    provider: "learnordie-admission",
+    externalRoundtrip: false
+  });
 }
 
 function validateQuestionGeneratorPayload(answer) {
@@ -1884,7 +1855,6 @@ async function startMockServer() {
   process.env.LEARNBUDDY_LLM_PROXY_API_KEY = "provider-smoke-mock-token";
   process.env.LEARNBUDDY_AI_MODEL = "mock-provider-smoke";
   process.env.LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER = "ai";
-  process.env.LEARNBUDDY_CHAT_MODERATION_PROVIDER = "ai";
   process.env.LEARNBUDDY_QUESTION_GENERATOR = "ai";
   process.env.LEARNBUDDY_EMBEDDING_PROVIDER = "openai-compatible";
   process.env.LEARNBUDDY_EMBEDDING_BASE_URL = baseUrl;

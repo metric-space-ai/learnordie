@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
-if (process.argv.includes("--help")) {
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log("Usage: audio-transcription-probe.mjs --validate-fixture | --run\nTests a pinned synthetic German WAV through the configured MiniMax ASR adapter, then the transcript-only question generator. No database writes. This is not a microphone/browser acceptance test.");
   process.exit(0);
 }

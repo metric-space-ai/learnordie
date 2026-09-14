@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 // Known synthetic cases only. No database writes and no credential output.
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/question-grounding-probe.mjs --run\nRuns actual MiniMax source and answer review on public synthetic fixtures inside Vercel production. No database writes; not a browser acceptance test.");
+  process.exit(0);
+}
 if (!process.argv.includes("--run") || process.env.VERCEL_ENV !== "production") {
   console.error("Run explicitly with --run inside Vercel production; not a browser acceptance test.");
   process.exit(1);

@@ -19,7 +19,6 @@ const REQUIRED_ENV = [
   "CRON_SECRET",
   "LEARNBUDDY_AI_PROVIDER",
   "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-  "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
   "LEARNBUDDY_QUESTION_GENERATOR",
   "LEARNBUDDY_EMBEDDING_PROVIDER",
   "LEARNBUDDY_EMBEDDING_BASE_URL",
@@ -129,10 +128,6 @@ const REQUIRED_ENV_GUIDANCE = {
     provider: "ai",
     purpose: "Set to ai for provider-backed lecturer assistant."
   },
-  LEARNBUDDY_CHAT_MODERATION_PROVIDER: {
-    provider: "ai",
-    purpose: "Set to ai for provider-backed student-question moderation."
-  },
   LEARNBUDDY_QUESTION_GENERATOR: {
     provider: "ai",
     purpose: "Set to ai so material-review questions are synthesized through the server-side AI provider."
@@ -231,7 +226,6 @@ const DEPLOYMENT_PROVIDER_MODE_ENV = [
   "LEARNBUDDY_JOB_PROVIDER",
   "LEARNBUDDY_AI_PROVIDER",
   "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-  "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
   "LEARNBUDDY_QUESTION_GENERATOR",
   "LEARNBUDDY_EMBEDDING_PROVIDER",
   "LEARNBUDDY_OCR_PROVIDER",
@@ -1048,11 +1042,6 @@ function providerModeRules() {
       name: "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
       allowed: ["ai"],
       reason: "Lecturer assistant must use the server-side AI provider."
-    },
-    {
-      name: "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
-      allowed: ["ai"],
-      reason: "Student chat moderation must use the server-side AI provider."
     },
     {
       name: "LEARNBUDDY_QUESTION_GENERATOR",

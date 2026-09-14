@@ -427,10 +427,6 @@ function selectedLecturerAssistantProvider() {
   return (envValue("LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER") || "local").toLowerCase();
 }
 
-function selectedChatModerationProvider() {
-  return (envValue("LEARNBUDDY_CHAT_MODERATION_PROVIDER") || "local").toLowerCase();
-}
-
 function selectedQuestionGenerator() {
   return (envValue("LEARNBUDDY_QUESTION_GENERATOR") || "local").toLowerCase();
 }
@@ -760,25 +756,10 @@ async function runPreflight(sql) {
     });
   }
 
-  const chatModerationProvider = selectedChatModerationProvider();
-  if (strict && ["", "local", "rubric", "deterministic"].includes(chatModerationProvider)) {
-    failCheck(checks, "chat_moderation_provider", "critical", "Production benötigt providerbasierte Chatfragenmoderation.", {
-      provider: chatModerationProvider || "local"
-    });
-  } else if (["ai", "llm", "external", "provider", "learnordie", "learnordie-responses", "ctox", "ctox-responses", "openai-compatible", "http"].includes(chatModerationProvider)) {
-    passCheck(checks, "chat_moderation_provider", "Chatfragenmoderation nutzt den serverseitigen AIProvider.", {
-      provider: chatModerationProvider,
-      aiProvider
-    });
-  } else if (["", "local", "rubric", "deterministic"].includes(chatModerationProvider)) {
-    warnCheck(checks, "chat_moderation_provider", "Lokale Chatfragenmoderation ist nur ein Entwicklungsfallback.", {
-      provider: chatModerationProvider || "local"
-    });
-  } else {
-    failCheck(checks, "chat_moderation_provider", "critical", "Unbekannter ChatModerationProvider.", {
-      provider: chatModerationProvider
-    });
-  }
+  passCheck(checks, "chat_moderation_provider", "Kein separater Themenfilter: Quellenprüfung erfolgt bei der KI-Entwurfserstellung. Laufzeitabnahme bleibt erforderlich.", {
+    provider: "learnordie-admission",
+    externalRoundtrip: false
+  });
 
   const questionGenerator = selectedQuestionGenerator();
   if (strict && ["", "local", "deterministic", "demo"].includes(questionGenerator)) {

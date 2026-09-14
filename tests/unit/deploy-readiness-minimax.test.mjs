@@ -24,7 +24,6 @@ function runReadiness({ minimaxKey, mistralKey } = {}) {
     "CRON_SECRET",
     "LEARNBUDDY_AI_PROVIDER",
     "LEARNBUDDY_LECTURER_ASSISTANT_PROVIDER",
-    "LEARNBUDDY_CHAT_MODERATION_PROVIDER",
     "LEARNBUDDY_QUESTION_GENERATOR",
     "LEARNBUDDY_STORAGE_PROVIDER"
   ].map((name) => [name, "contract-test-value"]));
