@@ -146,6 +146,7 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.match(requests[0].system, /einzeln verständlich/);
   assert.match(requests[0].system, /Nutze dein Fachwissen/);
   assert.ok(requests[0].system.length < 2200, "author instructions remain compact");
+  assert.doesNotMatch(requests[0].system, /supported.false|keine verlässliche Aufgabe/);
   assert.doesNotMatch(requests[0].system, /Naturgesetze|Sommerfeld|Drehzahl|einzige fachliche Autorität/);
   assert.match(reviews[0].system, /didaktische Brauchbarkeit/);
   assert.ok(requests[0].user.includes(JSON.stringify(input().studentQuestion)));
