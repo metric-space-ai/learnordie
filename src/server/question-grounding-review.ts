@@ -4,6 +4,12 @@ import { QUESTION_CONTEXT_GUIDANCE, QUESTION_LEVEL_GUIDANCE } from "./question-l
 
 const LEVELS = ["4.0", "3.0", "2.0", "1.0"];
 type AnswerCheck = { key: string; verdict: "correct" | "incorrect" | "unsupported" | "contradictory"; reason: string };
+/** Preserve identifiable factual refusals even when the review envelope is malformed. */
+function recognizableAnswerChecks(value: unknown, keys: readonly string[]): Array<Omit<AnswerCheck, "reason"> & { reason?: unknown }> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(check => check && typeof check === "object" && keys.includes(check.key)
+    && ["correct", "incorrect", "unsupported", "contradictory"].includes(check.verdict));
+}
 function completeAnswerChecks(value: unknown, keys: readonly string[]): value is AnswerCheck[] {
   return Array.isArray(value) && value.length === 4 && keys.length === 4
     && new Set(value.map(check => check?.key)).size === 4
@@ -78,13 +84,14 @@ export function parseQuestionGroundingReview(answer: string, sources: string | r
     for (const entry of parsed.reviews) {
       const variant = variants.find(variant => variant.level === entry.level);
       const checks: unknown = entry.answerChecks;
-      if (variant && completeAnswerChecks(checks, variant.answers.map(answer => answer.key))) {
-        const chosen = checks.filter(check => check.verdict === "correct");
+      if (variant) {
+        const keys = variant.answers.map(answer => answer.key);
+        const recognizable = recognizableAnswerChecks(checks, keys);
         const expected = variant.answers.filter(answer => answer.correct);
-        if (checks.some(check => check.verdict === "unsupported" || check.verdict === "contradictory")
-          || chosen.length !== 1 || expected.length !== 1 || chosen[0].key !== expected[0].key) {
+        const refusal = recognizable.some(check => check.verdict !== (variant.answers.find(answer => answer.key === check.key)?.correct ? "correct" : "incorrect"));
+        if (refusal || (completeAnswerChecks(checks, keys) && expected.length !== 1)) {
           factualRefusal = true;
-          failures.push(`Fachprüfung ${entry.level}: Unabhängige Antwortprüfung widerspricht der eindeutigen Autorenlösung (${checks.map(check => `${check.key} ${JSON.stringify(variant.answers.find(answer => answer.key === check.key)?.text ?? "")}=${check.verdict}: ${check.reason}`).join("; ")}).`);
+          failures.push(`Fachprüfung ${entry.level}: Unabhängige Antwortprüfung widerspricht der eindeutigen Autorenlösung (${recognizable.map(check => `${check.key} ${JSON.stringify(variant.answers.find(answer => answer.key === check.key)?.text ?? "")}=${check.verdict}: ${typeof check.reason === "string" ? check.reason.slice(0, 300) : "Begründung fehlt"}`).join("; ")}).`);
         }
       }
       if (Array.isArray(entry.distractors)) {

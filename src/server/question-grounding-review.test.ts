@@ -175,3 +175,30 @@ test("repair feedback identifies reviewed answer text after keys have been shuff
     return true;
   });
 });
+
+test("malformed per-answer reasons or envelopes cannot repair an identifiable factual refusal into approval", async () => {
+  const candidates = (["4.0", "3.0", "2.0", "1.0"] as const).map(level => ({ level, answers:
+    (["A", "B", "C", "D"] as const).map(key => ({ key, text: key, correct: key === "A" })) }));
+  const reviews = candidates.map(candidate => ({ level: candidate.level, approved: true, sourceIds: ["S1.1"],
+    answerChecks: candidate.answers.map(answer => ({ key: answer.key, verdict: answer.correct ? "correct" : "incorrect", reason: "Fixture verdict" })),
+    distractors: ["B", "C", "D"].map(key => ({ key, kind: "misconception" })) }));
+  for (const finding of [{ key: "A", verdict: "incorrect" }, ...["correct", "unsupported", "contradictory"].map(verdict => ({ key: "B", verdict }))]) {
+    for (const reason of [undefined, "", "x".repeat(301)]) {
+      const negative = { ...finding, reason };
+      for (const checks of [
+        reviews[0].answerChecks.map(check => check.key === negative.key ? negative : check),
+        [negative],
+        [...reviews[0].answerChecks, negative]
+      ]) {
+        const payload = { reviews: reviews.map((review, index) => index === 0 ? { ...review, answerChecks: checks } : review) };
+        let calls = 0;
+        const provider = { complete: async () => {
+          calls++;
+          return { answer: JSON.stringify(calls === 1 ? payload : { reviews }) };
+        } } as unknown as AIProvider;
+        await assert.rejects(reviewQuestionGrounding(provider, candidates as Parameters<typeof reviewQuestionGrounding>[1], sources, Date.now() + 25_000), /Unabhängige Antwortprüfung/);
+        assert.equal(calls, 1, "A factual refusal must not invoke a format repair, even with malformed reasons or missing/duplicate keys");
+      }
+    }
+  }
+});

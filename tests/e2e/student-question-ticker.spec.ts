@@ -43,7 +43,12 @@ test("student question becomes a reviewed live round while presenter and three s
     await students[2].setViewportSize({ width: 390, height: 844 });
     await Promise.all(students.map(student => student.goto(`/l/${lecture.publicToken}`)));
     const slide = (page: Page) => page.locator("[data-slide-id]").first();
-    for (const student of students) await expect(slide(student)).toHaveAttribute("data-slide-id", lecture.slides[0].id);
+    const participationUrl = new URL(lecture.participationPath ?? `/l/${lecture.publicToken}`, teacher.url()).href;
+    for (const student of students) {
+      await expect(slide(student)).toHaveAttribute("data-slide-id", lecture.slides[0].id);
+      await expect(student.locator(".slide-lecture-link")).toHaveText(participationUrl);
+      await expect(student.locator(".slide-lecture-link")).toHaveAttribute("href", participationUrl);
+    }
     const ticker = teacher.getByRole("complementary", { name: "Eingehende Studierendenfragen" });
     const toggle = ticker.locator(".student-question-ticker__toggle");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");

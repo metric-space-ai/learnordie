@@ -35,6 +35,9 @@ jobs:
     env:
       CI: "true"
       E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/learnordie_e2e_smoke
+      # Public client configuration is frozen at build time. Match the E2E
+      # server origin from the first build, not only when starting Next.js.
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3070"
 
     steps:
       - name: Checkout
