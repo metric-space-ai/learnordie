@@ -146,6 +146,12 @@ test("student exam draft is grounded in script/transcript and strictly returns f
   assert.match(requests[0].system, /einzeln verständlich/);
   assert.match(requests[0].system, /Nutze dein Fachwissen/);
   assert.ok(requests[0].system.length < 2200, "author instructions remain compact");
+  const outputExample = JSON.parse(requests[0].system.slice(requests[0].system.indexOf('{"supported":')));
+  assert.match(outputExample.topic, /max\. 80 Zeichen/);
+  assert.match(outputExample.coreStatement, /max\. 240 Zeichen/);
+  assert.match(outputExample.variants[0].text, /max\. 240 Zeichen/);
+  assert.ok(outputExample.variants[0].answers.every((answer: { text: string }) => /max\. 400 Zeichen/.test(answer.text)));
+  assert.match(outputExample.variants[0].explanation, /max\. 480 Zeichen/);
   assert.doesNotMatch(requests[0].system, /supported.false|keine verlässliche Aufgabe/);
   assert.doesNotMatch(requests[0].system, /Naturgesetze|Sommerfeld|Drehzahl|einzige fachliche Autorität/);
   assert.match(reviews[0].system, /didaktische Brauchbarkeit/);
@@ -316,8 +322,8 @@ test("student draft length constraints are explicit and repair can rewrite an ov
   assert.equal(generated.coreStatement, validPayload().coreStatement, "use the complete regenerated statement, never a clipped version");
   assert.equal(requests.length, 2);
   assert.equal(reviews.length, 1, "invalid structure must not reach independent factual review");
-  assert.match(requests[0].system, /"coreStatement":"Gemeinsames Lernziel"/);
-  assert.match(requests[0].system, /"topic":"Thema"/);
+  assert.match(requests[0].system, /"coreStatement":"Gemeinsames Lernziel \(max\. 240 Zeichen\)"/);
+  assert.match(requests[0].system, /"topic":"Thema \(max\. 80 Zeichen\)"/);
   assert.match(requests[1].user, /core statement: 241 characters; expected 8 to 240/);
   assert.match(requests[1].user, /Formuliere überlange Felder als vollständige kürzere Aussagen/);
   assert.doesNotMatch(requests[1].user, /Kürze keine Felder/);

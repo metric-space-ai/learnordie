@@ -156,7 +156,11 @@ test("student question becomes a reviewed live round while presenter and three s
     // the quiz must dismiss More so it cannot cover answers on a phone.
     await learner.setViewportSize({ width: 390, height: 844 });
     await learner.getByRole("button", { name: "Rangliste schließen", exact: true }).click();
-    await learner.locator(".learn-more summary").click();
+    // Closing the ranking may retain its launcher menu. Do not toggle an
+    // already open menu shut before exercising More → Quiz.
+    if (await learner.locator(".learn-more").getAttribute("open") === null) {
+      await learner.locator(".learn-more summary").click();
+    }
     await expect(learner.getByRole("slider", { name: "Fragedichte", exact: true })).toBeVisible();
     await learner.getByRole("button", { name: "Quiz (Leertaste)", exact: true }).click();
     await expect(learner.locator(".learn-more")).not.toHaveAttribute("open", "");
