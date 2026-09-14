@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { currentSessionTranscript } from "@/lib/session-transcript";
 import type { Lecture, LectureMaterial, QuestionLevel, QuestionVariant, AnswerOption } from "@/lib/types";
 import type { MaterialChunk } from "./material-pipeline";
 import { generateReviewVariants, levelPoints, withVariantMetadata } from "./lecture-factory";
@@ -309,14 +310,8 @@ export function liveQuestionSlideContext(lecture: Lecture, slideId: string): Liv
 
 export function acceptedTranscriptContext(lecture: Lecture, sessionStartedAt: number | null) {
   if (sessionStartedAt === null || !Number.isFinite(sessionStartedAt)) return { accumulated: "", latest: "", recentWindow: "", latestAt: null as number | null, segmentCount: 0 };
-  const captureStart = (segment: NonNullable<Lecture["transcriptSegments"]>[number]) => Date.parse(segment.startedAt ?? segment.createdAt);
   const captureEnd = (segment: NonNullable<Lecture["transcriptSegments"]>[number]) => Date.parse(segment.endedAt ?? segment.createdAt);
-  const segments = (lecture.transcriptSegments ?? [])
-    .filter((segment) => segment.status === "accepted"
-      && Date.parse(segment.createdAt) >= sessionStartedAt
-      && captureStart(segment) >= sessionStartedAt
-      && captureEnd(segment) >= sessionStartedAt)
-    .sort((left, right) => captureEnd(left) - captureEnd(right));
+  const segments = currentSessionTranscript(lecture.transcriptSegments ?? [], sessionStartedAt);
   const accumulated = segments.map((segment) => segment.text.replace(/\s+/g, " ").trim()).filter(Boolean).join(" ").slice(-7200);
   const freshSegments = segments.filter((segment) => captureEnd(segment) >= Date.now() - 120_000);
   const recentParts: string[] = [];

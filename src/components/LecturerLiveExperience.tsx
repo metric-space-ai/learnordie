@@ -9,6 +9,7 @@ import type { RecordedPassage } from "@/lib/audio-capture";
 import { transcriptRecordingStatus, type TranscriptionPhase } from "@/lib/transcript-recording-status";
 import { LiveOperationScope, type LiveOperation } from "@/lib/live-operation-scope";
 import { presenterQuestionShortcut } from "@/lib/presenter-question-shortcut";
+import { currentSessionTranscript } from "@/lib/session-transcript";
 import type { Lecture, TranscriptSegment } from "@/lib/types";
 import { useLiveSession } from "@/lib/use-live-session";
 import { LeaderboardModal } from "./LeaderboardModal";
@@ -87,6 +88,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
   const generationAbortRef = useRef<AbortController | null>(null);
   const sessionScopeRef = useRef(new LiveOperationScope());
   const activeSessionId = liveStatus === "active" ? live.state?.sessionId ?? null : null;
+  const visibleTranscript = currentSessionTranscript(transcriptSegments, activeSessionId ? live.state?.sessionStartedAt ?? null : null).slice(-3).reverse();
   const [roundMessage, setRoundMessage] = useState("");
 
   useEffect(() => {
@@ -589,9 +591,9 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
             </div>
           )}
           {transcriptMessage && <p className="form-note lb-enter-row" style={{ "--lb-i": 3 } as MotionStyle}>{transcriptMessage}</p>}
-          {transcriptSegments.length > 0 && (
-            <div className="transcript-mini-list" aria-label="Übernommenes Transkript">
-              {transcriptSegments.slice(0, 3).map((segment, index) => (
+          {visibleTranscript.length > 0 ? (
+            <div className="transcript-mini-list" aria-label="Bestätigtes Transkript dieser Sitzung">
+              {visibleTranscript.map((segment, index) => (
                 <span
                   className={`${segment.status} lb-enter-row`}
                   key={segment.id}
@@ -601,7 +603,7 @@ export function LecturerLiveExperience({ lecture, csrfToken }: { lecture: Lectur
                 </span>
               ))}
             </div>
-          )}
+          ) : <p>Noch kein bestätigtes Transkript in dieser Sitzung.</p>}
           <div className="transcript-actions lb-enter-row" style={{ "--lb-i": 7 } as MotionStyle}>
             <button className="plain-button" type="button" disabled={sttStatus !== "requesting" && !listening && transcriptPending > 0} onClick={listening || sttStatus === "requesting" ? stopListening : startListening}>
               {sttStatus === "requesting" ? "Freigabe abbrechen" : listening ? "Mikrofon aus" : "Mikrofon an"}
