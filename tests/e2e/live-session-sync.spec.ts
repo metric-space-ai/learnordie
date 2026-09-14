@@ -86,14 +86,20 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     const state = async (page = teacher) => (await (await page.request.get(apiUrl)).json()) as LiveSessionView;
 
     const first = await open(); const second = await open();
-    await Promise.all([first.goto(liveUrl), second.goto(liveUrl)]);
+    // A legacy learning bookmark and the join link must choose the SAME mode.
+    await Promise.all([first.goto(`/learn/${lecture.publicToken}`), second.goto(liveUrl)]);
     for (const page of [first, second]) {
-      await expect(page.getByLabel("Vorlesung beitreten", { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/l/${lecture.publicToken}$`));
+      await expect(page.getByRole("group", { name: "Lernsteuerung", exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Teilnehmen", exact: true })).toHaveCount(0);
       await expect(page.getByLabel("Quizfrage", { exact: true })).toHaveCount(0);
     }
     await teacher.goto(`/lecturer/live/${lecture.publicToken}`);
     await expect(teacher.locator("main")).toHaveAttribute("data-live-status", "active");
+    for (const page of [first, second]) {
+      await expect(page.getByRole("group", { name: "Live-Steuerung", exact: true })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Lernsteuerung", exact: true })).toHaveCount(0);
+    }
     await expect(teacher.locator(".slide-lecture-link")).toHaveAttribute("href", new RegExp(`/l/${lecture.publicToken}$`));
     await teacher.getByRole("button", { name: "Präsentation starten", exact: true }).click();
     for (const page of [teacher, first, second]) await expect(page.locator("[data-slide-id]").first()).toHaveAttribute("data-slide-id", lecture.slides[0].id);
@@ -129,13 +135,36 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     const initial = await state();
     expect(initial.round).not.toBeNull();
     const roundId = initial.round!.id;
+    // The presenter can inspect the exact broadcast family without answering,
+    // closing the round, changing its deadline or revealing a solution.
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
+    const previewToggle = teacher.getByRole("button", { name: "Abgefeuerte Frage anzeigen", exact: true });
+    const preview = teacher.locator("#presenter-question-preview");
+    await previewToggle.click();
+    await expect(preview.getByLabel("Quizfrage", { exact: true })).toBeVisible();
+    for (const question of initial.round!.questions) {
+      await preview.getByRole("button", { name: question.level, exact: true }).click();
+      await expect(preview.locator(".question")).toHaveText(question.text);
+      await expect(preview.locator(".answers .answer")).toHaveCount(4);
+      await expect(preview.locator(".answers .answer").first()).toBeDisabled();
+    }
+    await test.info().attach("presenter-read-only-question-preview", { body: await teacher.screenshot(), contentType: "image/png" });
+    await previewToggle.click();
+    await expect(preview).toHaveCount(0);
+    await previewToggle.click();
+    await teacher.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+    await expect(previewToggle).toBeFocused();
+    expect((await state()).round).toEqual(initial.round);
+    await teacher.getByLabel("Präsentationssteuerung", { exact: true }).click();
     for (const question of initial.round!.questions) {
       expect(question).not.toHaveProperty("explanation");
       expect(question.answers.every((option) => !("correct" in option))).toBe(true);
     }
     const third = await open();
     await third.setViewportSize({ width: 390, height: 844 });
-    await third.goto(liveUrl);
+    await third.goto(`/learn/${lecture.publicToken}`);
+    await expect(third.getByRole("group", { name: "Lernsteuerung", exact: true })).toHaveCount(0);
     await expect(third.getByLabel("Quizfrage", { exact: true })).toBeVisible();
     const drawerBox = await third.getByLabel("Quizfrage", { exact: true }).boundingBox();
     expect(drawerBox!.x).toBeGreaterThanOrEqual(0);
@@ -193,8 +222,12 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     await second.locator(".answers .answer").filter({ has: second.locator(".letter", { hasText: correctKey }) }).click();
     await expect(teacher.locator(".leader-row strong").first()).toHaveText(String(chosen.points * 2));
     const secondRound = await state();
+    await teacher.getByRole("button", { name: "Rangliste schließen", exact: true }).click();
+    await previewToggle.click();
+    await expect(preview.getByLabel("Quizfrage", { exact: true })).toBeVisible();
     await third.context().setOffline(true);
     await expect(third.getByLabel("Quizfrage", { exact: true })).toHaveCount(0, { timeout: 18000 });
+    await expect(third.getByRole("group", { name: "Lernsteuerung", exact: true })).toHaveCount(0);
     await third.context().setOffline(false);
     await expect(third.locator("main")).toHaveAttribute("data-live-status", "active");
     for (const page of [first, second, third, teacher]) await expect(page.getByLabel("Quizfrage", { exact: true })).toHaveCount(0, { timeout: 18000 });
@@ -209,10 +242,14 @@ test("Live classroom: presenter, three students, late join, receipts, scoreboard
     expect(studentRejected.status()).toBe(401);
     const stale = await teacher.request.post(commandUrl, { headers: { "x-learnbuddy-csrf": csrf }, data: { action: "end", revision: 0 } });
     expect(stale.status()).toBe(409);
-    await teacher.getByRole("button", { name: "Rangliste schließen", exact: true }).click();
     await teacher.getByRole("button", { name: "Beenden", exact: true }).click();
     await expect(teacher).toHaveURL(/\/lecturer$/);
-    for (const page of [first, second, third]) await expect(page.getByText("Die Live-Sitzung ist beendet.", { exact: false })).toBeVisible();
+    for (const page of [first, second, third]) {
+      await expect(page.getByRole("group", { name: "Lernsteuerung", exact: true })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Live-Steuerung", exact: true })).toHaveCount(0);
+    }
+    await third.reload();
+    await expect(third.getByRole("group", { name: "Lernsteuerung", exact: true })).toBeVisible();
     await teacher.goto(`/lecturer/live/${lecture.publicToken}`);
     await expect(teacher.locator("main")).toHaveAttribute("data-live-status", "ended");
     // An ended session must offer an obvious next action on the QR slide,

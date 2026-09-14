@@ -27,7 +27,7 @@ function continueHref(series: StudentDashboardSeries) {
   const live = series.liveNow[0];
   if (live) return `/l/${live.publicToken}`;
   const learn = series.learn[0];
-  if (learn) return `/learn/${learn.publicToken}`;
+  if (learn) return `/l/${learn.publicToken}`;
   return `/student?series=${encodeURIComponent(series.seriesId)}`;
 }
 
@@ -144,7 +144,7 @@ function SeriesCard({
             {series.learn.map((event) => (
               <li key={event.lectureId} className="student-event">
                 <span className="student-event-title">{event.title}</span>
-                <a className="plain-button small" href={`/learn/${event.publicToken}`}>Lernmodus öffnen</a>
+                <a className="plain-button small" href={`/l/${event.publicToken}`}>Vorlesung öffnen</a>
               </li>
             ))}
           </ul>

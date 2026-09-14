@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 
-import { lectureStudentView } from "@/lib/lecture-status";
 import { getLectureRepository } from "@/server/repository";
 import { getCurrentStudentProfile } from "@/server/student-session";
 
@@ -21,7 +20,6 @@ export default async function StudentEventPage({ params }: { params: Promise<{ l
   const lecture = lectures.find((item) => item.id === decodeURIComponent(lectureId));
   if (!lecture) redirect("/student");
 
-  const view = lectureStudentView(lecture);
 
   return (
     <main className="student-app lb-motion-root" aria-label={`Termin ${lecture.title}`}>
@@ -45,17 +43,9 @@ export default async function StudentEventPage({ params }: { params: Promise<{ l
           </div>
         </header>
 
-        {view.bucket === "live" && (
-          <section className="student-block live">
-            <a className="primary-button" href={`/l/${lecture.publicToken}`}>Live teilnehmen</a>
-          </section>
-        )}
-
-        {view.bucket === "learn" && (
-          <section className="student-block">
-            <a className="primary-button" href={`/learn/${lecture.publicToken}`}>Lernmodus öffnen</a>
-          </section>
-        )}
+        <section className="student-block">
+          <a className="primary-button" href={`/l/${lecture.publicToken}`}>Vorlesung öffnen</a>
+        </section>
       </article>
     </main>
   );

@@ -15,7 +15,7 @@ import "./learner-workspace.css";
 
 const followPresenter = () => undefined;
 
-export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
+export function StudentLiveExperience({ lecture, live }: { lecture: Lecture; live: ReturnType<typeof useLiveSession> }) {
   const [pseudonym, setPseudonym] = useState("");
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -26,7 +26,6 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
   const [identitySaved, setIdentitySaved] = useState(false);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityMessage, setIdentityMessage] = useState("");
-  const live = useLiveSession(lecture.publicToken, leaderboardOpen);
   const seriesId = seriesIdForLecture(lecture);
   const round = live.connected ? live.state?.round : null;
   const enrollment = () => ensureStudentEnrollment({ seriesId: seriesIdForLecture(lecture), seriesTitle: lecture.seriesTitle, lectureId: lecture.id, source: "direct_live_link" });
@@ -132,7 +131,6 @@ export function StudentLiveExperience({ lecture }: { lecture: Lecture }) {
       showNavigation={false} onNext={followPresenter} onPrevious={followPresenter} slideDocument={lecture.slideDocument} slides={lecture.slides} />
     {(!live.connected || live.state?.status !== "active") && <aside className="student-connection-notice" role="status">
       {!live.connected ? (live.error || "Live-Verbindung wird hergestellt …") : live.state?.status === "ended" ? "Die Live-Sitzung ist beendet." : "Warte auf den Start durch die Lehrperson."}
-      {live.state?.status === "ended" && <a href={`/learn/${lecture.publicToken}`}>Jetzt selbstständig lernen</a>}
       {!live.connected && <button type="button" onClick={live.refresh}>Erneut verbinden</button>}
     </aside>}
     <div className="learner-workspace-toolbar learner-workspace-toolbar--live lb-enter-control" role="group" aria-label="Live-Steuerung">
