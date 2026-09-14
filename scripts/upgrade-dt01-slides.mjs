@@ -2,10 +2,12 @@
 import postgres from "postgres";
 import { upgradeOriginalSlides } from "./lib/upgrade-original-slides.mjs";
 import { savePrivateScriptBackup } from "./lib/private-wording-backup.mjs";
-import { planOriginalModelUpgrade } from "@/lib/model-original-template";
-import { slideDocumentToLegacySlides } from "../packages/slide-engine/src/legacy.ts";
 
 const args = process.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  console.log("Usage: node --experimental-strip-types --import ./scripts/alias-register.mjs scripts/upgrade-dt01-slides.mjs --run [--apply --digest=INSPECTED_SHA256 --backup=maintenance/lecture-script/UNIQUE.json]\nProduction-only DT-01 layout maintenance. Default is a locked dry run; application requires a verified private backup and unchanged inspected digest. Preserves all question and slide identities.");
+  process.exit(0);
+}
 const apply = args.includes("--apply");
 const expectedDigest = args.find(value => value.startsWith("--digest="))?.slice(9);
 const backupPath = args.find(value => value.startsWith("--backup="))?.slice(9);
@@ -17,6 +19,8 @@ if (!args.includes("--run") || process.env.VERCEL_ENV !== "production" || !proce
 const sql = postgres(process.env.DATABASE_URL, {max:1, prepare:false, connect_timeout:8, idle_timeout:5});
 let backupReceipt;
 try {
+  const { planOriginalModelUpgrade } = await import("@/lib/model-original-template");
+  const { slideDocumentToLegacySlides } = await import("../packages/slide-engine/src/legacy.ts");
   const result = await upgradeOriginalSlides(sql, {
     lectureId:"f331d389-7e6e-4b82-b144-db7764fe7084",
     publicToken:"der-modellbegriff-im-wandel-08a40b",
