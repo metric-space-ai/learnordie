@@ -173,7 +173,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     setQuestionOpen(false);
     setPeekingSlide(false);
     setSlide((current) => (current + lecture.slides.length - 1) % lecture.slides.length);
-  }, [lecture.slides.length]);
+  }, [lecture.slides.length, setSelectedFamilyIndex, setActiveHotspotIndex, setQuestionOpen, setPeekingSlide]);
 
   const next = useCallback(() => {
     setSelectedFamilyIndex(null);
@@ -181,7 +181,7 @@ export function LearnExperience({ lecture }: { lecture: Lecture }) {
     setQuestionOpen(false);
     setPeekingSlide(false);
     setSlide((current) => (current + 1) % lecture.slides.length);
-  }, [lecture.slides.length]);
+  }, [lecture.slides.length, setSelectedFamilyIndex, setActiveHotspotIndex, setQuestionOpen, setPeekingSlide]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
