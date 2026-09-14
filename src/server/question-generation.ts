@@ -385,28 +385,37 @@ function parseStrictLiveVariants(answer: string): QuestionVariant[] {
   }
   if (expectedLevels.some((level) => !rawByLevel.has(level))) throw new Error("Live question generator omitted a difficulty level.");
 
-  const variants = expectedLevels.map((level) => {
-    const raw = rawByLevel.get(level)!;
-    if (!Array.isArray(raw.answers) || raw.answers.length !== 4) throw new Error(`Live question generator must return exactly four answers for level ${level}.`);
-    const answers = raw.answers.map((item, index) => {
-      const answerRecord = draftObject(item, ["text", "correct"], `live answer ${index + 1} for ${level}`);
-      if (typeof answerRecord.correct !== "boolean") throw new Error(`Live question generator returned an invalid correct flag for ${level}.`);
-      return {
-        key: ANSWER_KEYS[index],
-        text: strictDraftString(answerRecord.text, `live answer text for ${level}`, 400),
-        correct: answerRecord.correct
-      } satisfies AnswerOption;
-    });
-    if (answers.filter((item) => item.correct).length !== 1) throw new Error(`Live question generator must return exactly one correct answer for level ${level}.`);
-    if (new Set(answers.map((item) => questionFingerprint(item.text))).size !== 4) throw new Error(`Live question generator returned duplicate answer text for level ${level}.`);
-    return {
-      level,
-      points: levelPoints(level),
-      text: selfContainedQuestionText(raw.text, `live question text for ${level}`),
-      explanation: selfContainedExplanation(raw.explanation, `live explanation for ${level}`),
-      answers
-    } satisfies QuestionVariant;
-  });
+  const variants: QuestionVariant[] = [];
+  const validationErrors: string[] = [];
+  for (const level of expectedLevels) {
+    try {
+      const raw = rawByLevel.get(level)!;
+      if (!Array.isArray(raw.answers) || raw.answers.length !== 4) throw new Error(`Live question generator must return exactly four answers for level ${level}.`);
+      const answers = raw.answers.map((item, index) => {
+        const answerRecord = draftObject(item, ["text", "correct"], `live answer ${index + 1} for ${level}`);
+        if (typeof answerRecord.correct !== "boolean") throw new Error(`Live question generator returned an invalid correct flag for ${level}.`);
+        return {
+          key: ANSWER_KEYS[index],
+          text: strictDraftString(answerRecord.text, `live answer text for ${level}`, 400),
+          correct: answerRecord.correct
+        } satisfies AnswerOption;
+      });
+      if (answers.filter((item) => item.correct).length !== 1) throw new Error(`Live question generator must return exactly one correct answer for level ${level}.`);
+      if (new Set(answers.map((item) => questionFingerprint(item.text))).size !== 4) throw new Error(`Live question generator returned duplicate answer text for ${level}.`);
+      variants.push({
+        level,
+        points: levelPoints(level),
+        text: selfContainedQuestionText(raw.text, `live question text for ${level}`),
+        explanation: selfContainedExplanation(raw.explanation, `live explanation for ${level}`),
+        answers
+      });
+    } catch (error) {
+      validationErrors.push(error instanceof Error ? error.message : `Invalid live variant for ${level}.`);
+    }
+  }
+  // The single bounded schema repair must see all affected levels at once.
+  // Never return a partially valid family or skip its subsequent factual review.
+  if (validationErrors.length) throw new Error(validationErrors.join("\n"));
   if (new Set(variants.map((variant) => questionFingerprint(variant.text))).size !== 4) {
     throw new Error("Live question generator returned duplicate question texts.");
   }
@@ -467,14 +476,16 @@ export async function generateLiveQuestionFamily(input: {
   for (let attempt = 0; attempt < 3; attempt++) {
     let result;
     try {
-      const remainingMs = Math.min(25_000, deadlineAt - Date.now() - 2_000);
+      const remainingMs = Math.min(45_000, deadlineAt - Date.now() - 2_000);
       if (remainingMs <= 0) throw new Error("Question generator request timed out.");
       result = await provider.complete({
         system: liveQuestionSystemPrompt(input.contextSource) + (attempt === 0 ? "" : `\n\n${QUESTION_REPAIR_TASK}`),
         user: attempt === 0
           ? liveQuestionUserPrompt(input)
           : questionRepairUserPrompt(liveQuestionUserPrompt(input), validationError, previousCandidate),
-        maxOutputTokens: 2600,
+        // Reasoning and final JSON share the provider's bounded output budget.
+        reasoningEffort: "minimal",
+        maxOutputTokens: 8192,
         temperature: attempt === 0 ? 0.3 : 0.2,
         responseFormat: "json_object",
         timeoutMs: remainingMs
@@ -754,13 +765,14 @@ export async function generateStudentExamDraft(input: {
   let previousCandidate = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     let result;
-    const remainingMs = Math.min(25_000, deadlineAt - Date.now() - 2_000);
+    const remainingMs = Math.min(45_000, deadlineAt - Date.now() - 2_000);
     if (remainingMs <= 0) throw new StudentDraftError("provider", attempt + 1, new Error("Student exam draft generation timed out."));
     try {
       result = await provider.complete({
         system: studentExamDraftSystemPrompt() + (attempt === 0 ? "" : `\n\n${QUESTION_REPAIR_TASK}`),
         user: attempt === 0 ? prompt : questionRepairUserPrompt(prompt, lastValidationError, previousCandidate),
-        maxOutputTokens: 4200,
+        reasoningEffort: "minimal",
+        maxOutputTokens: 8192,
         temperature: 0.2,
         responseFormat: "json_object",
         timeoutMs: remainingMs

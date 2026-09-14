@@ -31,6 +31,10 @@ test("bounded M3 generation separates reasoning and rejects truncated answers", 
   assert.deepEqual(body.thinking, { type: "disabled" });
   assert.equal(body.reasoning_split, true);
   assert.equal(body.max_tokens, 2600);
+  assert.equal((await getAIProvider().complete({ ...input, reasoningEffort: "minimal", maxOutputTokens: 8192 })).answer, '{"variants":[]}');
+  assert.deepEqual(body.thinking, { type: "adaptive" });
+  assert.equal(body.reasoning_split, true);
+  assert.equal(body.max_tokens, 8192);
   finishReason = "length";
   await assert.rejects(getAIProvider().complete(input), /output limit/);
   finishReason = "stop";

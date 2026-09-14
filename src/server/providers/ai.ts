@@ -33,6 +33,8 @@ export type AICompleteInput = {
   maxOutputTokens?: number;
   temperature?: number;
   responseFormat?: "json_object";
+  /** MiniMax M3: minimal enables adaptive thinking; none keeps fast direct replies. */
+  reasoningEffort?: "none" | "minimal";
   /** Optionales Zeitlimit fuer diesen Aufruf (max. 60 s); sonst LEARNBUDDY_AI_TIMEOUT_MS. */
   timeoutMs?: number;
 };
@@ -316,12 +318,12 @@ class OpenAICompatibleProvider implements AIProvider {
   private readonly endpoint: string;
   private readonly apiKey?: string;
 
-  private generationOptions() {
-    // M3 defaults to thinking, which otherwise consumes the live question's
-    // bounded output budget and puts <think> text in the answer channel.
+  private generationOptions(input: AICompleteInput) {
+    // Keep reasoning separate from the final JSON, including when explicitly
+    // enabled for exam authoring/review. Unrelated fast calls retain their default.
     // https://platform.minimax.io/docs/api-reference/text-openai-api
     return /^MiniMax-M3(?:$|[-/])/i.test(this.info.model)
-      ? { thinking: { type: "disabled" }, reasoning_split: true }
+      ? { thinking: { type: input.reasoningEffort === "minimal" ? "adaptive" : "disabled" }, reasoning_split: true }
       : {};
   }
 
@@ -349,7 +351,7 @@ class OpenAICompatibleProvider implements AIProvider {
           model: this.info.model,
           temperature: input.temperature ?? 0.2,
           max_tokens: input.maxOutputTokens ?? 520,
-          ...this.generationOptions(),
+          ...this.generationOptions(input),
           ...(input.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
           messages: [
             {
@@ -407,7 +409,7 @@ class OpenAICompatibleProvider implements AIProvider {
         model: this.info.model,
         temperature: input.temperature ?? 0.2,
         max_tokens: input.maxOutputTokens ?? 520,
-        ...this.generationOptions(),
+        ...this.generationOptions(input),
         stream: true,
         stream_options: { include_usage: true },
         ...(input.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
@@ -521,7 +523,7 @@ class ResponsesProxyProvider implements AIProvider {
           input: responsesProxyMessages(input),
           temperature: Math.max(0.01, Math.min(1, input.temperature ?? 0.2)),
           max_output_tokens: input.maxOutputTokens ?? 520,
-          reasoning: { effort: "none" },
+          reasoning: { effort: input.reasoningEffort ?? "none" },
           store: false
         }),
         signal: controller.signal
@@ -567,7 +569,7 @@ class ResponsesProxyProvider implements AIProvider {
         input: responsesProxyMessages(input),
         temperature: Math.max(0.01, Math.min(1, input.temperature ?? 0.2)),
         max_output_tokens: input.maxOutputTokens ?? 520,
-        reasoning: { effort: "none" },
+        reasoning: { effort: input.reasoningEffort ?? "none" },
         stream: true,
         store: false
       }),

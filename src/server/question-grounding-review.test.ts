@@ -54,11 +54,11 @@ test("the larger structured-review allowance never extends the caller's total de
   assert.ok(timeout > 0 && timeout <= 2000, "reserve one second within the existing caller budget");
 });
 
-test("reasoned option review has a 30-second cap even when the caller has more time", async () => {
+test("adaptive option review has a 40-second cap even when the caller has more time", async () => {
   let timeout = 0;
   const provider = { complete: async (input: {timeoutMs:number}) => { timeout=input.timeoutMs; return {answer:JSON.stringify(valid())}; } } as unknown as AIProvider;
   await reviewQuestionGrounding(provider, [], sources, Date.now()+90_000);
-  assert.equal(timeout, 30_000);
+  assert.equal(timeout, 40_000);
 });
 
 test("citation formatting gets one bounded repair, but a factual refusal is never repaired into approval", async () => {

@@ -4,7 +4,7 @@ import test from "node:test";
 import type { Lecture, QuestionLevel } from "@/lib/types";
 import { demoLecture } from "@/lib/demo-data";
 import { acceptedTranscriptContext, generateLiveQuestionFamily, generateStudentExamDraft, liveQuestionContextSource, liveQuestionSlideContext, parseStudentExamDraft } from "./question-generation";
-import type { AIProvider } from "./providers/ai";
+import type { AICompleteInput, AIProvider } from "./providers/ai";
 import { StudentDraftError, studentDraftDiagnostic } from "./student-draft-error";
 import { GroundingReviewError, parseQuestionGroundingReview } from "./question-grounding-review";
 import { QUESTION_LEVEL_GUIDANCE } from "./question-level-guidance";
@@ -79,7 +79,9 @@ function makeProvider(answers: string[], reviewAnswers: string[] = []) {
   let authored: ReturnType<typeof validPayload> | undefined;
   const provider = {
     info: { provider: "openai-compatible", model: "MiniMax-M3" },
-    complete: async (input: { system: string; user: string }) => {
+    complete: async (input: AICompleteInput) => {
+      assert.equal(input.reasoningEffort, "minimal", "exam authors and reviewers use adaptive reasoning");
+      assert.equal(input.maxOutputTokens, 8192, "reasoning and final JSON have a bounded shared allowance");
       if (input.system.includes("LEARNORDIE_QUESTION_GROUNDING_REVIEW_V1")) {
         assert.ok(input.system.includes(QUESTION_LEVEL_GUIDANCE), "independent review uses the same cognitive contract as the author");
         reviews.push(input);
@@ -397,6 +399,9 @@ test("transcript shortcut generation is MiniMax-only and retries strict grounded
   assert.match(requests[0].system, /Nutze dein Fachwissen/);
   assert.match(requests[0].system, /zuletzt Gesprochene im neuesten Sprechabschnitt/);
   assert.match(requests[1].user, /OUTPUT VALIDATION RETRY/);
+  assert.match(requests[1].user, /unavailable context/);
+  assert.match(requests[1].user, /invalid correct flag for 3\.0/,
+    "one bounded repair receives errors from every difficulty, not only the first");
   assert.ok(generated.every((variant) => variant.text.length <= 240 && variant.explanation.length <= 480));
   assert.ok(generated.every((variant) => variant.answers.every((answer) => answer.text.length <= 400)));
 

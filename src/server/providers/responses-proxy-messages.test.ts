@@ -1,7 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { responsesProxyMessages } from "./ai";
+import { getAIProvider, responsesProxyMessages } from "./ai";
 import { LearnordieLlmProxyError, prepareLearnordieResponsesRequest } from "../llm-proxy";
+
+test("Responses exam requests enable adaptive reasoning without exposing it as answer text", async (t) => {
+  const env = {
+    LEARNBUDDY_AI_PROVIDER: "learnordie-responses",
+    LEARNORDIE_LLM_PROXY_BASE_URL: "https://llm.learnordie.app",
+    LEARNORDIE_LLM_PROXY_API_KEY: "synthetic-test-token",
+    LEARNBUDDY_AI_MODEL: "MiniMax-M3"
+  };
+  const previous = Object.keys(env).map(key => [key, process.env[key]] as const);
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  Object.assign(process.env, env);
+  let body: Record<string, unknown> = {};
+  globalThis.fetch = async (_url, init) => {
+    body = JSON.parse(String(init?.body));
+    return Response.json({ status: "completed", output: [
+      { type: "reasoning", summary: [{ type: "summary_text", text: "Not final answer" }] },
+      { type: "message", content: [{ type: "output_text", text: '{"variants":[]}' }] }
+    ] });
+  };
+  const provider = getAIProvider();
+  const input = { system: "Synthetic question task", user: "Synthetic context" };
+  assert.equal((await provider.complete({ ...input, reasoningEffort: "minimal", maxOutputTokens: 8192 })).answer, '{"variants":[]}');
+  assert.deepEqual(body.reasoning, { effort: "minimal" });
+  assert.equal(body.max_output_tokens, 8192);
+  assert.deepEqual(prepareLearnordieResponsesRequest(body).reasoning, { effort: "minimal" });
+  await provider.complete(input);
+  assert.deepEqual(body.reasoning, { effort: "none" }, "unrelated fast requests retain their behavior");
+});
 
 test("Responses proxy retains system authority separately from untrusted lecture input", () => {
   const system = "Review all four levels; reject unsupported claims.";
