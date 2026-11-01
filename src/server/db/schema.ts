@@ -109,6 +109,7 @@ export const lectureAssets = pgTable("lecture_assets", {
   storageKey: text("storage_key").notNull(),
   sizeBytes: integer("size_bytes"),
   status: text("status").notNull().default("uploaded"),
+  slideRangeJson: jsonb("slide_range_json").$type<{ from: number; to: number }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 

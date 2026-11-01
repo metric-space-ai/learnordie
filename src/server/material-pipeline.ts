@@ -12,6 +12,11 @@ import {
   type PptxTableStructure,
   type StoredUploadArtifact
 } from "@/server/upload-extraction";
+import {
+  filterPptxSlideStructuresByRange,
+  filterUploadArtifactsBySlideRange,
+  pptxSlideStructuresToText
+} from "@/server/pptx-slide-range";
 
 export type MaterialChunk = {
   sourceRef: string;
@@ -436,15 +441,24 @@ export async function processMaterialContent(input: {
     ? await fetchUrlText(storedText || input.material.originalName)
     : "";
   const rawExtracted = cleanText(fetchedUrlText || storedText);
-  const artifacts = input.material.source === "upload"
+  const parsedArtifacts = input.material.source === "upload"
     ? parseUploadArtifactManifest(rawExtracted)
     : [];
-  const slideStructures = input.material.source === "upload"
+  const parsedSlideStructures = input.material.source === "upload"
     ? parseUploadSlideStructures(rawExtracted)
     : [];
-  const extracted = input.material.source === "upload"
-    ? stripUploadArtifactManifest(uploadExtractedSection(rawExtracted))
-    : rawExtracted;
+  const useSlideRange = input.material.kind === "pptx" && Boolean(input.material.slideRange);
+  const artifacts = useSlideRange
+    ? filterUploadArtifactsBySlideRange(parsedArtifacts, input.material.slideRange)
+    : parsedArtifacts;
+  const slideStructures = useSlideRange
+    ? filterPptxSlideStructuresByRange(parsedSlideStructures, input.material.slideRange)
+    : parsedSlideStructures;
+  const extracted = useSlideRange
+    ? pptxSlideStructuresToText(slideStructures)
+    : input.material.source === "upload"
+      ? stripUploadArtifactManifest(uploadExtractedSection(rawExtracted))
+      : rawExtracted;
   const warnings = extractionWarnings(extracted);
 
   if (!hasUsableContent(extracted)) {

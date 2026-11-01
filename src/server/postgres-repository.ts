@@ -954,6 +954,19 @@ export class PostgresLectureRepository implements LectureRepository {
     return this.runMaterialProcessingInline(lecture, ownerEmail, [materialId]);
   }
 
+  async updateMaterialSlideRange(lectureId: string, materialId: string, slideRange: { from: number; to: number } | null, ownerEmail?: string) {
+    await this.ensureSeeded();
+    const lecture = await this.getLectureById(lectureId, ownerEmail);
+    if (!lecture) return null;
+    const [material] = await this.db
+      .update(lectureAssets)
+      .set({ slideRangeJson: slideRange, status: "uploaded" })
+      .where(and(eq(lectureAssets.id, materialId), eq(lectureAssets.lectureId, lectureId), eq(lectureAssets.kind, "pptx")))
+      .returning({ id: lectureAssets.id });
+    if (!material) return null;
+    return this.getLectureById(lectureId, ownerEmail);
+  }
+
   async deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
     await this.ensureSeeded();
     const lecture = await this.getLectureById(lectureId, ownerEmail);
@@ -2510,6 +2523,7 @@ export class PostgresLectureRepository implements LectureRepository {
       chunkCount: orderedChunks.length || undefined,
       extractedTextPreview: preview || undefined,
       sourceRefs: orderedChunks.length > 0 ? orderedChunks.map((chunk) => chunk.sourceRef) : undefined,
+      slideRange: row.slideRangeJson ?? undefined,
       createdAt: row.createdAt.toISOString()
     };
   }
