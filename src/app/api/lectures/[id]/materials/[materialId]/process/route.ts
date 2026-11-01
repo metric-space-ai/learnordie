@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getLecturerSession, isValidLecturerCsrfRequest } from "@/server/auth";
 import { clientSafeProcessingError, sanitizeProcessingRuns } from "@/server/processing-errors";
+import { parsePptxSlideRangeInput } from "@/server/pptx-slide-range";
 import { getLectureRepository } from "@/server/repository";
 import { isValidRouteEntityId } from "@/server/route-params";
 
@@ -18,18 +19,26 @@ export async function POST(request: Request, context: { params: Promise<unknown>
   }
 
   const repository = getLectureRepository();
-  let lecture;
   try {
-    lecture = await repository.processMaterial(id, materialId, session.email);
+    const body = await request.json().catch(() => ({})) as { slideRange?: unknown };
+    const slideRange = parsePptxSlideRangeInput(body.slideRange);
+    if (slideRange !== undefined) {
+      const updated = await repository.updateMaterialSlideRange(id, materialId, slideRange, session.email);
+      if (!updated) return NextResponse.json({ error: "PPTX-Material nicht gefunden." }, { status: 404 });
+    }
+
+    const lecture = await repository.processMaterial(id, materialId, session.email);
+    if (!lecture) return NextResponse.json({ error: "Material nicht gefunden." }, { status: 404 });
+    const lectures = await repository.listLectures(session.email);
+    return NextResponse.json({ lecture, lectures });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Folienbereich ist ungültig")) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const lectures = await repository.listLectures(session.email);
     return NextResponse.json({
       error: clientSafeProcessingError(error),
       lectures: lectures.map(sanitizeProcessingRuns)
     }, { status: 500 });
   }
-  if (!lecture) return NextResponse.json({ error: "Material nicht gefunden." }, { status: 404 });
-
-  const lectures = await repository.listLectures(session.email);
-  return NextResponse.json({ lecture, lectures });
 }

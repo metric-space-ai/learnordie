@@ -1085,13 +1085,18 @@ export function LecturerDashboard({
     setMaterialMessage("Quelle gelöscht.");
   }
 
-  async function reprocessMaterial(materialId: string) {
+  async function reprocessMaterial(materialId: string, slideRange?: { from: number; to: number } | null) {
     if (!selected) return;
     setMaterialActionId(materialId);
-    setMaterialMessage("Quelle wird erneut verarbeitet.");
+    setMaterialMessage(slideRange === undefined
+      ? "Quelle wird erneut verarbeitet."
+      : slideRange
+        ? `Kapitel ${slideRange.from}–${slideRange.to} wird importiert.`
+        : "Gesamtes Deck wird importiert.");
     const response = await fetch(`/api/lectures/${selected.id}/materials/${materialId}/process`, {
       method: "POST",
-      headers: csrfHeaders
+      headers: slideRange === undefined ? csrfHeaders : csrfJsonHeaders,
+      ...(slideRange === undefined ? {} : { body: JSON.stringify({ slideRange }) })
     });
     const payload = (await response.json()) as { lectures?: Lecture[]; error?: string };
     setMaterialActionId("");
@@ -1101,7 +1106,7 @@ export function LecturerDashboard({
       setMaterialMessage(payload.error ?? "Verarbeitung fehlgeschlagen.");
       return;
     }
-    setMaterialMessage("Quelle erneut verarbeitet.");
+    setMaterialMessage(slideRange ? `Kapitel ${slideRange.from}–${slideRange.to} importiert.` : "Quelle erneut verarbeitet.");
   }
 
   async function reviewAsset(assetId: string, review: "confirmed" | "discarded") {
@@ -2248,6 +2253,51 @@ export function LecturerDashboard({
                     </button>
                   ))}
                 </div>
+              </section>
+            )}
+
+            {material.kind === "pptx" && (
+              <section className="studio-material-range">
+                <strong>Kapitel-Import</strong>
+                <p className="muted">
+                  {selected.slideDocument?.slides.length
+                    ? `Aktuell importiert: ${selected.slideDocument.slides.length} Folien. `
+                    : "Noch kein Deck importiert. "}
+                  Von und Bis beziehen sich auf die Originalfolien der PPTX.
+                </p>
+                <form
+                  key={`${material.id}-${material.slideRange?.from ?? "all"}-${material.slideRange?.to ?? "all"}`}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const data = new FormData(event.currentTarget);
+                    void reprocessMaterial(material.id, {
+                      from: Number(data.get("from")),
+                      to: Number(data.get("to"))
+                    });
+                  }}
+                >
+                  <label>
+                    <span>Von</span>
+                    <input name="from" type="number" min="1" step="1" required defaultValue={material.slideRange?.from ?? 1} />
+                  </label>
+                  <label>
+                    <span>Bis</span>
+                    <input name="to" type="number" min="1" step="1" required defaultValue={material.slideRange?.to ?? selected.slideDocument?.slides.length ?? 1} />
+                  </label>
+                  <button className="primary-button" type="submit" disabled={materialActionId === material.id || runActive}>
+                    {materialActionId === material.id ? "Import läuft" : "Bereich importieren"}
+                  </button>
+                </form>
+                {material.slideRange ? (
+                  <button
+                    className="plain-button small"
+                    type="button"
+                    disabled={materialActionId === material.id || runActive}
+                    onClick={() => reprocessMaterial(material.id, null)}
+                  >
+                    Gesamtes Deck importieren
+                  </button>
+                ) : null}
               </section>
             )}
 

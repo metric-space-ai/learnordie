@@ -476,6 +476,20 @@ export class LocalLectureStore {
     return this.runMaterialProcessing(lectureId, ownerEmail, materialId);
   }
 
+  async updateMaterialSlideRange(lectureId: string, materialId: string, slideRange: { from: number; to: number } | null, ownerEmail?: string) {
+    const store = await readStore();
+    const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));
+    if (!lecture) return null;
+    const material = (lecture.materials ?? []).find((item) => item.id === materialId && item.kind === "pptx");
+    if (!material) return null;
+
+    if (slideRange) material.slideRange = slideRange;
+    else delete material.slideRange;
+    material.status = "uploaded";
+    await writeStore(store);
+    return lecture;
+  }
+
   async deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
     const store = await readStore();
     const lecture = store.lectures.find((item) => item.id === lectureId && canAccessLecture(item, ownerEmail));

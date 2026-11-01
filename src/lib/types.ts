@@ -143,6 +143,7 @@ export type LectureMaterial = {
   chunkCount?: number;
   extractedTextPreview?: string;
   sourceRefs?: string[];
+  slideRange?: { from: number; to: number };
   createdAt: string;
 };
 

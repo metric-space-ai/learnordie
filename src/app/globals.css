@@ -10873,6 +10873,37 @@ textarea.review-live-explanation {
   overflow: auto;
 }
 
+.studio-material-range form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.studio-material-range form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.studio-material-range input {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--lb-radius-control);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.studio-material-range form button {
+  grid-column: 1 / -1;
+}
+
+.studio-material-range > .plain-button {
+  justify-self: start;
+}
+
 .studio-material-assets {
   display: grid;
   gap: 5px;

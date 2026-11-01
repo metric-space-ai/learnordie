@@ -169,6 +169,7 @@ export interface LectureRepository {
   updateLecture(id: string, input: UpdateLectureInput, ownerEmail?: string): Promise<Lecture | null>;
   addMaterial(lectureId: string, input: AddMaterialInput, ownerEmail?: string): Promise<LectureMaterial | null>;
   deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string): Promise<Lecture | null>;
+  updateMaterialSlideRange(lectureId: string, materialId: string, slideRange: { from: number; to: number } | null, ownerEmail?: string): Promise<Lecture | null>;
   processMaterial(lectureId: string, materialId: string, ownerEmail?: string): Promise<Lecture | null>;
   processMaterials(lectureId: string, ownerEmail?: string): Promise<Lecture | null>;
   reviewPresentationAsset(lectureId: string, assetId: string, decision: "confirmed" | "discarded", ownerEmail?: string): Promise<Lecture | null>;
@@ -219,6 +220,10 @@ class LocalJsonLectureRepository implements LectureRepository {
 
   async deleteMaterial(lectureId: string, materialId: string, ownerEmail?: string) {
     return this.store.deleteMaterial(lectureId, materialId, ownerEmail);
+  }
+
+  async updateMaterialSlideRange(lectureId: string, materialId: string, slideRange: { from: number; to: number } | null, ownerEmail?: string) {
+    return this.store.updateMaterialSlideRange(lectureId, materialId, slideRange, ownerEmail);
   }
 
   async processMaterial(lectureId: string, materialId: string, ownerEmail?: string) {

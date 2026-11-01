@@ -19,6 +19,7 @@ import type {
   StoredUploadArtifact
 } from "@/server/upload-extraction";
 import type { ProcessedMaterial } from "./material-pipeline";
+import { filterPptxSlideStructuresByRange, filterUploadArtifactsBySlideRange } from "./pptx-slide-range";
 
 const MAX_SLIDE_TEXT_BOXES = 5;
 const MAX_SLIDE_IMAGES = 3;
@@ -26,7 +27,7 @@ const MAX_TEXT_BLOCK_CHARS = 900;
 
 type PptxImportInput = {
   lecture: Pick<Lecture, "id" | "title" | "seriesTitle" | "language">;
-  material: Pick<LectureMaterial, "id" | "kind" | "originalName">;
+  material: Pick<LectureMaterial, "id" | "kind" | "originalName" | "slideRange">;
   processed: Pick<ProcessedMaterial, "artifacts" | "slideStructures">;
 };
 
@@ -34,7 +35,9 @@ export function createPptxImportSlideDocument(input: PptxImportInput): SlideDocu
   if (input.material.kind !== "pptx" || input.processed.slideStructures.length === 0) return null;
 
   const sourceBaseId = stableId(`pptx-${input.material.id}`);
-  const assets = createPptxImportAssets(input.processed.artifacts, input.material, sourceBaseId);
+  const slideStructures = filterPptxSlideStructuresByRange(input.processed.slideStructures, input.material.slideRange);
+  const artifacts = filterUploadArtifactsBySlideRange(input.processed.artifacts, input.material.slideRange);
+  const assets = createPptxImportAssets(artifacts, input.material, sourceBaseId);
   const document: SlideDocument = {
     schemaVersion: SLIDE_DOCUMENT_SCHEMA_VERSION,
     id: stableId(`deck-${input.lecture.id}-${input.material.id}`, "pptx-import-deck"),
@@ -48,7 +51,7 @@ export function createPptxImportSlideDocument(input: PptxImportInput): SlideDocu
       allowFragments: false,
       mobileMode: "hybrid"
     },
-    slides: input.processed.slideStructures
+    slides: slideStructures
       .sort((left, right) => left.slide - right.slide)
       .map((structure, index) => pptxStructureToSlideNode({
         structure,
